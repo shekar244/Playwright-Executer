@@ -389,13 +389,36 @@
 
     <!-- Report -->
     <div>
-      <div class="section-title">Report</div>
-      <div class="report-box" style="margin-top:10px;">
-        <div class="report-path" id="reportPath">No report yet — run tests first</div>
-        <div style="display:flex;gap:8px;">
-          <button class="btn btn-sm" id="openReportBtn" onclick="openReport()" disabled>Open Latest Report</button>
-          <button class="btn btn-sm" onclick="refreshReport()">Refresh</button>
+      <div class="section-title">Reports</div>
+      <div style="display:flex;flex-direction:column;gap:8px;margin-top:10px;">
+
+        <!-- Individual -->
+        <div class="report-box">
+          <div style="font-size:10px;font-weight:700;text-transform:uppercase;
+                      letter-spacing:0.06em;color:var(--text-dim);margin-bottom:6px;">
+            Individual Run
+          </div>
+          <div class="report-path" id="reportIndividualPath">No report found</div>
+          <div style="display:flex;gap:8px;margin-top:6px;">
+            <button class="btn btn-sm" id="openIndividualBtn"
+                    onclick="openReport('individual')" disabled>Open Latest</button>
+          </div>
         </div>
+
+        <!-- Consolidated -->
+        <div class="report-box">
+          <div style="font-size:10px;font-weight:700;text-transform:uppercase;
+                      letter-spacing:0.06em;color:var(--text-dim);margin-bottom:6px;">
+            Consolidated
+          </div>
+          <div class="report-path" id="reportConsolidatedPath">No report found</div>
+          <div style="display:flex;gap:8px;margin-top:6px;">
+            <button class="btn btn-sm" id="openConsolidatedBtn"
+                    onclick="openReport('consolidated')" disabled>Open Latest</button>
+          </div>
+        </div>
+
+        <button class="btn btn-sm" onclick="refreshReport()">↻ Refresh Reports</button>
       </div>
     </div>
 
@@ -585,7 +608,7 @@ function connectStream() {
 
   eventSource.addEventListener('done', e => {
     refreshReport();
-    if (document.getElementById('auto_open').checked && lastReport) openReport();
+    if (document.getElementById('auto_open').checked) openReport('individual');
   });
 
   eventSource.onerror = () => setTimeout(connectStream, 3000);
@@ -751,33 +774,44 @@ function setRunning(running) {
 }
 
 // ── Report ────────────────────────────────────────────────────────────────────
+let _reports = { individual: null, consolidated: null };
+
 async function refreshReport() {
   const repo = document.getElementById('repo').value.trim();
   if (!repo) return;
   const data = await fetch(`/api/report?repo=${encodeURIComponent(repo)}`).then(r => r.json());
-  const pathEl = document.getElementById('reportPath');
-  const btn = document.getElementById('openReportBtn');
-  if (data.path) {
-    lastReport = data.path;
-    const rel = data.path.replace(repo + '/', '');
+  _reports = { individual: data.individual || null, consolidated: data.consolidated || null };
+
+  _updateReportCard('individual',   _reports.individual,   repo);
+  _updateReportCard('consolidated', _reports.consolidated, repo);
+}
+
+function _updateReportCard(type, path, repo) {
+  const pathEl = document.getElementById(`report${_cap(type)}Path`);
+  const btn    = document.getElementById(`open${_cap(type)}Btn`);
+  if (path) {
+    const rel = path.replace(repo.replace(/\\/g, '/') + '/', '').replace(/\\/g, '/');
     pathEl.textContent = '✓  ' + rel;
     pathEl.className = 'report-path found';
     btn.disabled = false;
   } else {
-    lastReport = null;
-    pathEl.textContent = 'No report found — run tests first';
+    pathEl.textContent = 'No report found';
     pathEl.className = 'report-path';
     btn.disabled = true;
   }
 }
 
-async function openReport() {
-  if (!lastReport) { await refreshReport(); }
-  if (!lastReport) { alert('No report found. Run tests first.'); return; }
+function _cap(s) { return s.charAt(0).toUpperCase() + s.slice(1); }
+
+async function openReport(type) {
+  const path = _reports[type];
+  if (!path) { await refreshReport(); }
+  const p = _reports[type];
+  if (!p) { alert('No ' + type + ' report found.'); return; }
   const res = await fetch('/api/report/open', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ path: lastReport }),
+    body: JSON.stringify({ path: p }),
   });
   if (!res.ok) {
     const err = await res.json();

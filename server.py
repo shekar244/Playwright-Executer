@@ -396,11 +396,14 @@ def stream():
 def get_report():
     repo = request.args.get("repo", "").strip()
     if not repo:
-        return jsonify({"path": None})
+        return jsonify({"individual": None, "consolidated": None})
     cfg = ConfigReader().load()
     resolver = ReportResolver(repo, cfg.get("report_paths", []))
-    path = resolver.find_latest()
-    return jsonify({"path": path})
+
+    individual   = resolver.find_latest_in_dir(cfg.get("report_individual_dir", "allure/reports"))
+    consolidated = resolver.find_latest_in_dir(cfg.get("report_consolidated_dir", ""))
+
+    return jsonify({"individual": individual, "consolidated": consolidated})
 
 
 @app.route("/api/report/open", methods=["POST"])

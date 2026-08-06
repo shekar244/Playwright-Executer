@@ -7,6 +7,8 @@
     "allure/reports/latest/index.html",
     "allure/reports/html/index.html"
   ],
+  "report_individual_dir": "allure/reports",
+  "report_consolidated_dir": "allure/reports/history",
   "default_workers": 1,
   "auto_open_report": false,
   "extra_options": [

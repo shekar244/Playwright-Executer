@@ -24,7 +24,7 @@ class ReportResolver:
 
     def __init__(self, repo_root: str, configured_paths: List[str]):
         self.repo_root = Path(repo_root)
-        self.configured_paths = configured_paths  # relative paths from config.json
+        self.configured_paths = configured_paths
 
     # ── Public API ────────────────────────────────────────────────────────────
 
@@ -36,18 +36,43 @@ class ReportResolver:
         """
         candidates: list[tuple[float, str]] = []
 
-        # Explicitly configured paths
         for rel in self.configured_paths:
             full = self.repo_root / rel
             if full.exists() and full.is_file():
                 candidates.append((full.stat().st_mtime, str(full)))
 
-        # Broad scan of common output directories
         for rel_dir in _FALLBACK_SCAN_DIRS:
             scan_dir = self.repo_root / rel_dir
             if scan_dir.exists():
                 for item in scan_dir.rglob("*.html"):
                     candidates.append((item.stat().st_mtime, str(item)))
+
+        if not candidates:
+            return None
+        candidates.sort(reverse=True)
+        return candidates[0][1]
+
+    def find_latest_in_dir(self, rel_dir: str) -> Optional[str]:
+        """
+        Find the most recently modified HTML file anywhere under rel_dir.
+        Prioritises index.html files at the root of the most recently
+        modified subdirectory (typical allure layout), then falls back to
+        any *.html file by mtime.
+        """
+        if not rel_dir:
+            return None
+
+        scan_dir = self.repo_root / rel_dir
+        if not scan_dir.exists():
+            return None
+
+        # Collect all HTML files with their mtime
+        candidates: list[tuple[float, str]] = []
+        for item in scan_dir.rglob("*.html"):
+            try:
+                candidates.append((item.stat().st_mtime, str(item)))
+            except OSError:
+                pass
 
         if not candidates:
             return None
