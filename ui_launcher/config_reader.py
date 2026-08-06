@@ -7,27 +7,37 @@ import json
 import os
 from pathlib import Path
 
-# Defaults applied when config.json is missing or a key is absent.
+# Minimal defaults — no hardcoded project names, paths, or markers.
+# Markers are discovered at runtime from the selected repo's conftest.py.
+# Report paths use only generic allure output locations.
 _DEFAULTS: dict = {
     "repo_root": "",
     "browsers": ["chromium", "firefox", "webkit"],
     "default_browser": "chromium",
-    "markers": [
-        "smoke", "slow", "nbo", "nbc", "api", "web",
-        "content", "data_driven", "trace", "skip_ci",
-    ],
+    "markers": [],
     "report_paths": [
-        "allure/reports/P13n-Marketing-Experiences-QA-Automation-Report.html",
         "allure/reports/latest/index.html",
         "allure/reports/html/index.html",
     ],
     "default_workers": 1,
     "auto_open_report": False,
-    "window_geometry": "1250x820",
+    # Each entry: {"label", "flag", "type": "dropdown"|"checkbox",
+    #              "values": [...],   # dropdown only
+    #              "default": ""|false}
+    "extra_options": [],
 }
 
 # Location of config.json — always in the project root (parent of this package).
 _CONFIG_FILE = Path(__file__).parent.parent / "config.json"
+
+# Directories to scan when auto-detecting a repo (no specific names assumed).
+_SCAN_DIRS = [
+    Path(__file__).parent.parent.parent,   # sibling of Playwright-Executer
+    Path.home() / "Documents" / "GitHub",
+    Path.home() / "GitHub",
+    Path.home() / "Projects",
+    Path.home() / "Desktop",
+]
 
 
 class ConfigReader:
@@ -43,7 +53,7 @@ class ConfigReader:
             except (json.JSONDecodeError, OSError):
                 pass
 
-        if not config["repo_root"]:
+        if not config.get("repo_root"):
             config["repo_root"] = self._detect_repo_root()
 
         return config
@@ -53,14 +63,35 @@ class ConfigReader:
             json.dump(config, fh, indent=2)
 
     @staticmethod
-    def _detect_repo_root() -> str:
-        """Heuristic: look for the p13n framework alongside this project."""
-        candidates = [
-            Path(__file__).parent.parent.parent / "p13n-marketing-experiences-qa-automation",
-            Path.home() / "Documents" / "GitHub" / "p13n-marketing-experiences-qa-automation",
-            Path.home() / "projects" / "p13n-marketing-experiences-qa-automation",
+    def _looks_like_playwright_repo(path: Path) -> bool:
+        """Generic heuristic: has tests/ dir and at least one pytest config file."""
+        if not (path / "tests").is_dir():
+            return False
+        config_markers = [
+            path / "pytest.ini",
+            path / "pyproject.toml",
+            path / "setup.cfg",
+            path / "requirements.txt",
+            path / "config" / "pytest.ini",
         ]
-        for path in candidates:
-            if path.exists() and (path / "tests").exists():
-                return str(path)
+        return any(m.exists() for m in config_markers)
+
+    @classmethod
+    def _detect_repo_root(cls) -> str:
+        """
+        Scan common locations for a Playwright/pytest repo.
+        Returns the first match found; empty string if nothing is found.
+        """
+        seen: set[str] = set()
+        for scan_dir in _SCAN_DIRS:
+            if not scan_dir.is_dir():
+                continue
+            try:
+                for item in sorted(scan_dir.iterdir()):
+                    key = str(item.resolve())
+                    if item.is_dir() and key not in seen and cls._looks_like_playwright_repo(item):
+                        seen.add(key)
+                        return str(item)
+            except PermissionError:
+                continue
         return ""

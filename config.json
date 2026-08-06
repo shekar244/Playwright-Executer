@@ -1,25 +1,34 @@
 {
-  "repo_root": "/Users/admin/Documents/GitHub/p13n-marketing-experiences-qa-automation",
+  "repo_root": "",
   "browsers": ["chromium", "firefox", "webkit"],
   "default_browser": "chromium",
-  "markers": [
-    "smoke",
-    "slow",
-    "nbo",
-    "nbc",
-    "api",
-    "web",
-    "content",
-    "data_driven",
-    "trace",
-    "skip_ci"
-  ],
+  "markers": [],
   "report_paths": [
-    "allure/reports/P13n-Marketing-Experiences-QA-Automation-Report.html",
     "allure/reports/latest/index.html",
     "allure/reports/html/index.html"
   ],
   "default_workers": 1,
   "auto_open_report": false,
-  "window_geometry": "1250x820"
+  "extra_options": [
+    {
+      "label": "Environment",
+      "flag": "--env",
+      "type": "dropdown",
+      "values": ["qa3", "qa4", "int", "prod"],
+      "default": ""
+    },
+    {
+      "label": "Stop after first failure",
+      "flag": "-x",
+      "type": "checkbox",
+      "default": false
+    },
+    {
+      "label": "Reruns on failure",
+      "flag": "--reruns",
+      "type": "dropdown",
+      "values": ["1", "2", "3"],
+      "default": ""
+    }
+  ]
 }

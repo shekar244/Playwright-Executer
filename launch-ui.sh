@@ -5,7 +5,6 @@
 # ============================================================
 set -euo pipefail
 
-# Resolve the directory containing this script (Playwright-Executer root)
 EXECUTER_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 echo ""
@@ -16,55 +15,52 @@ echo "  Launcher root : $EXECUTER_ROOT"
 echo ""
 
 # ----------------------------------------------------------
-# Locate Python
+# Locate Python (prefer Homebrew 3.13 which has Flask)
 # ----------------------------------------------------------
 PYTHON=""
 
-# 1. Executer-project venv
 if [ -f "$EXECUTER_ROOT/venv/bin/python" ]; then
     PYTHON="$EXECUTER_ROOT/venv/bin/python"
     echo "[INFO] Using Executer venv Python: $PYTHON"
-
-# 2. Framework venv (sibling folder)
-elif [ -f "$EXECUTER_ROOT/../p13n-marketing-experiences-qa-automation/venv/bin/python" ]; then
-    PYTHON="$(cd "$EXECUTER_ROOT/../p13n-marketing-experiences-qa-automation/venv/bin" && pwd)/python"
-    echo "[INFO] Using framework venv Python: $PYTHON"
-
-# 3. System python3
+elif command -v /opt/homebrew/bin/python3.13 &>/dev/null; then
+    PYTHON="/opt/homebrew/bin/python3.13"
+    echo "[INFO] Using Homebrew python3.13: $PYTHON"
+elif command -v /usr/local/bin/python3.13 &>/dev/null; then
+    PYTHON="/usr/local/bin/python3.13"
+    echo "[INFO] Using python3.13: $PYTHON"
 elif command -v python3 &>/dev/null; then
     PYTHON="python3"
     echo "[INFO] Using system python3: $(command -v python3)"
-
-# 4. System python
-elif command -v python &>/dev/null; then
-    PYTHON="python"
-    echo "[INFO] Using system python: $(command -v python)"
-
 else
-    echo "[ERROR] Python not found."
-    echo "        Install Python 3.9+ and ensure it is on your PATH, then retry."
+    echo "[ERROR] Python not found. Install Python 3.11+ and retry."
     exit 1
 fi
 
 # ----------------------------------------------------------
-# Verify tkinter is available (common omission on Linux)
+# Verify Flask is available
 # ----------------------------------------------------------
-if ! "$PYTHON" -c "import tkinter" 2>/dev/null; then
+if ! "$PYTHON" -c "import flask" 2>/dev/null; then
     echo ""
-    echo "[ERROR] tkinter is not available in: $PYTHON"
-    echo ""
-    echo "  On Ubuntu/Debian : sudo apt-get install python3-tk"
-    echo "  On Fedora/RHEL   : sudo dnf install python3-tkinter"
-    echo "  On macOS (brew)  : brew install python-tk"
-    echo ""
-    exit 1
+    echo "[INFO] Flask not found — installing..."
+    "$PYTHON" -m pip install flask --break-system-packages --quiet
 fi
 
 # ----------------------------------------------------------
-# Launch the UI from the Executer root
+# Add hosts entry for playwright-executor (once)
+# ----------------------------------------------------------
+if ! grep -q "playwright-executor" /etc/hosts 2>/dev/null; then
+    echo "[INFO] Adding 'playwright-executor' to /etc/hosts (requires sudo)..."
+    echo "127.0.0.1  playwright-executor" | sudo tee -a /etc/hosts > /dev/null && \
+        echo "[INFO] Hosts entry added." || \
+        echo "[WARN] Could not update /etc/hosts — will fall back to localhost:7777."
+fi
+
+# ----------------------------------------------------------
+# Launch the web server
 # ----------------------------------------------------------
 cd "$EXECUTER_ROOT"
 
-echo "[INFO] Starting UI ..."
+echo "[INFO] Starting server at http://playwright-executor:7777"
+echo "[INFO] Press Ctrl+C to stop."
 echo ""
-exec "$PYTHON" -m ui_launcher
+exec "$PYTHON" server.py

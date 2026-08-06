@@ -30,3 +30,7 @@ desktop.ini
 
 # User preferences saved at runtime
 last_run.json
+
+# Tool artifacts — never commit
+.claude-flow/
+.claude/

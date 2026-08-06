@@ -31,6 +31,7 @@ class CommandBuilder:
         headed: bool,
         extra: str,
         test_tree: Dict[str, List[str]],
+        extra_flags: Optional[List[str]] = None,
     ) -> List[str]:
         """Return a list of strings suitable for subprocess.Popen(args=...)."""
 
@@ -78,7 +79,11 @@ class CommandBuilder:
         if verbose:
             cmd.append("-v")
 
-        # ── Extra user args ───────────────────────────────────────────────────
+        # ── Config-defined extra options (dropdowns / checkboxes) ─────────────
+        if extra_flags:
+            cmd.extend(extra_flags)
+
+        # ── Free-text extra user args ─────────────────────────────────────────
         if extra:
             try:
                 cmd.extend(shlex.split(extra))

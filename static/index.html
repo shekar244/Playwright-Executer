@@ -1,0 +1,855 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Playwright Test Executor</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg: #1e1e2e;
+      --surface: #27273a;
+      --border: #383850;
+      --text: #cdd6f4;
+      --text-dim: #6c7086;
+      --text-muted: #9399b2;
+      --accent: #89b4fa;
+      --green: #a6e3a1;
+      --red: #f38ba8;
+      --yellow: #f9e2af;
+      --teal: #94e2d5;
+      --purple: #cba6f7;
+      --mauve: #cba6f7;
+      --header-bg: #181825;
+      --input-bg: #313244;
+      --input-border: #45475a;
+      --btn-run: #a6e3a1;
+      --btn-run-text: #1e1e2e;
+      --btn-stop: #f38ba8;
+      --btn-stop-text: #1e1e2e;
+      --log-bg: #11111b;
+      --sep: #45475a;
+      --radius: 6px;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      font-size: 13px;
+      background: var(--bg);
+      color: var(--text);
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    /* ── Header ── */
+    header {
+      background: var(--header-bg);
+      padding: 12px 20px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      border-bottom: 1px solid var(--border);
+      flex-shrink: 0;
+    }
+    header h1 { font-size: 16px; font-weight: 600; color: var(--text); }
+    header span { color: var(--text-dim); font-size: 12px; }
+    .version { margin-left: auto; color: var(--text-dim); font-size: 11px; }
+    .help-link {
+      margin-left: 14px;
+      color: var(--text-dim);
+      font-size: 11px;
+      text-decoration: none;
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 3px 9px;
+      transition: color 0.15s, border-color 0.15s;
+    }
+    .help-link:hover { color: var(--accent); border-color: var(--accent); }
+    .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--accent); }
+
+    /* ── Body layout ── */
+    .body {
+      display: flex;
+      flex: 1;
+      min-height: 0;
+      gap: 0;
+    }
+
+    /* ── Left panel ── */
+    .panel-left {
+      width: 400px;
+      flex-shrink: 0;
+      background: var(--surface);
+      border-right: 1px solid var(--border);
+      display: flex;
+      flex-direction: column;
+      overflow-y: auto;
+      padding: 16px;
+      gap: 14px;
+    }
+
+    .section-title {
+      font-size: 10px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: var(--text-dim);
+      padding-bottom: 6px;
+      border-bottom: 1px solid var(--border);
+      margin-bottom: 2px;
+    }
+
+    .field { display: flex; flex-direction: column; gap: 4px; }
+    .field label { font-size: 11px; color: var(--text-muted); font-weight: 500; }
+    .field-row { display: flex; gap: 6px; align-items: center; }
+    .field-row input, .field-row select { flex: 1; }
+    .hint { font-size: 10px; color: var(--text-dim); margin-top: 2px; }
+
+    input[type="text"], input[type="number"], select {
+      background: var(--input-bg);
+      border: 1px solid var(--input-border);
+      border-radius: var(--radius);
+      color: var(--text);
+      padding: 6px 9px;
+      font-size: 12px;
+      font-family: inherit;
+      width: 100%;
+      outline: none;
+      transition: border-color 0.15s;
+    }
+    input[type="text"]:focus, input[type="number"]:focus, select:focus {
+      border-color: var(--accent);
+    }
+    select option { background: var(--input-bg); }
+
+    input[type="number"] { width: 70px; }
+
+    .checkboxes { display: flex; gap: 14px; flex-wrap: wrap; }
+    .checkbox-label {
+      display: flex; align-items: center; gap: 5px;
+      font-size: 12px; color: var(--text-muted); cursor: pointer;
+      user-select: none;
+    }
+    .checkbox-label input[type="checkbox"] { accent-color: var(--accent); cursor: pointer; }
+
+    /* ── Buttons ── */
+    .btn {
+      padding: 8px 20px;
+      border: none;
+      border-radius: var(--radius);
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: opacity 0.15s, transform 0.1s;
+      font-family: inherit;
+    }
+    .btn:active { transform: scale(0.97); }
+    .btn:disabled { opacity: 0.4; cursor: not-allowed; transform: none; }
+
+    .btn-run  { background: var(--btn-run);  color: var(--btn-run-text); }
+    .btn-stop { background: var(--btn-stop); color: var(--btn-stop-text); }
+    .btn-sm   { background: var(--input-bg); color: var(--text-muted); padding: 6px 12px; font-size: 11px; font-weight: 500; border: 1px solid var(--input-border); }
+    .btn-sm:hover { border-color: var(--accent); color: var(--text); }
+
+    .browse-btn {
+      background: var(--input-bg);
+      border: 1px solid var(--input-border);
+      border-radius: var(--radius);
+      color: var(--text-muted);
+      padding: 6px 10px;
+      font-size: 11px;
+      cursor: pointer;
+      white-space: nowrap;
+      font-family: inherit;
+      transition: border-color 0.15s;
+    }
+    .browse-btn:hover { border-color: var(--accent); color: var(--text); }
+
+    .action-row { display: flex; gap: 8px; align-items: center; margin-top: 4px; }
+
+    /* ── Report box ── */
+    .report-box {
+      background: var(--input-bg);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 10px 12px;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+    .report-path { font-size: 11px; color: var(--text-dim); word-break: break-all; }
+    .report-path.found { color: var(--green); }
+
+    /* ── Right panel (log) ── */
+    .panel-right {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      min-width: 0;
+      background: var(--log-bg);
+    }
+
+    .log-header {
+      padding: 8px 14px;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      flex-shrink: 0;
+    }
+    .log-title { font-size: 11px; color: var(--text-dim); font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; }
+    .log-actions { margin-left: auto; display: flex; gap: 6px; }
+
+    #log {
+      flex: 1;
+      overflow-y: auto;
+      padding: 12px 16px;
+      font-family: "Menlo", "Monaco", "Consolas", monospace;
+      font-size: 12px;
+      line-height: 1.6;
+      white-space: pre-wrap;
+      word-break: break-all;
+    }
+
+    .log-line { display: block; }
+    .log-cmd     { color: #cba6f7; }
+    .log-sep     { color: #45475a; }
+    .log-passed  { color: #a6e3a1; }
+    .log-failed  { color: #f38ba8; }
+    .log-warning { color: #f9e2af; }
+    .log-info    { color: #89dceb; }
+    .log-highlight { color: #f9e2af; }
+    .log-default { color: #cdd6f4; }
+
+    /* ── Status bar ── */
+    .statusbar {
+      padding: 5px 14px;
+      background: var(--header-bg);
+      border-top: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-size: 11px;
+      flex-shrink: 0;
+    }
+    .status-dot {
+      width: 7px; height: 7px; border-radius: 50%;
+      background: var(--text-dim);
+      transition: background 0.2s;
+    }
+    .status-dot.running { background: var(--yellow); }
+    .status-dot.passed  { background: var(--green); }
+    .status-dot.failed  { background: var(--red); }
+    .status-label { font-weight: 600; color: var(--text-muted); }
+    .status-cmd { color: var(--text-dim); font-family: monospace; font-size: 10px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+    /* ── Test name list ── */
+    .test-name-item {
+      display: flex; align-items: center; gap: 6px;
+      padding: 3px 2px; border-radius: 3px; cursor: pointer;
+    }
+    .test-name-item:hover { background: var(--border); }
+    .test-name-item input[type="checkbox"] { accent-color: var(--accent); cursor: pointer; flex-shrink:0; }
+    .test-name-item label { font-size: 11px; font-family: Menlo, monospace; cursor: pointer; color: var(--text); word-break:break-all; }
+
+    /* ── Scrollbar ── */
+    ::-webkit-scrollbar { width: 6px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+    ::-webkit-scrollbar-thumb:hover { background: var(--sep); }
+  </style>
+</head>
+<body>
+
+<header>
+  <div class="dot"></div>
+  <h1>Playwright Test Executor</h1>
+  <span id="repoSubtitle">— select a repo to begin</span>
+  <span class="version">v1.0.0</span>
+  <a href="/readme" target="_blank" class="help-link" title="Open documentation">? Help</a>
+</header>
+
+<div class="body">
+
+  <!-- ── Left panel ── -->
+  <div class="panel-left">
+
+    <!-- Repo root -->
+    <div>
+      <div class="section-title">Repository</div>
+      <div class="field" style="margin-top:10px;">
+        <label>Select Local Repo</label>
+        <div class="field-row">
+          <select id="repoSelect" onchange="onRepoSelect()" style="flex:1;">
+            <option value="">— scanning… —</option>
+          </select>
+          <button class="browse-btn" onclick="scanRepos()" title="Re-scan for repos">⟳</button>
+        </div>
+      </div>
+      <div class="field" style="margin-top:8px;">
+        <label>Or enter path manually</label>
+        <div class="field-row">
+          <input type="text" id="repo" placeholder="/path/to/your-playwright-repo" />
+          <button class="browse-btn" onclick="browseRepo()">Browse…</button>
+        </div>
+        <div class="hint">Root must contain a <code>tests/</code> folder and pytest config</div>
+      </div>
+      <button class="btn btn-sm" style="margin-top:8px;" onclick="discoverTests()">↻ Discover Tests</button>
+    </div>
+
+    <!-- Test selection -->
+    <div>
+      <div class="section-title">Test Selection</div>
+      <div style="display:flex; flex-direction:column; gap:10px; margin-top:10px;">
+        <div class="field">
+          <label>Suite / Folder</label>
+          <select id="suite" onchange="onSuiteChange()">
+            <option>All Tests</option>
+          </select>
+        </div>
+        <div class="field">
+          <label>Test File</label>
+          <select id="file" onchange="onFileChange()">
+            <option>All in Suite</option>
+          </select>
+        </div>
+        <div class="field" id="nameFilterSection">
+          <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px;">
+            <label style="margin:0;">Test Name Filter (-k)</label>
+            <label class="checkbox-label" style="margin-left:auto;font-size:10px;">
+              <input type="checkbox" id="manualKToggle" onchange="toggleKMode()" />
+              manual
+            </label>
+          </div>
+          <!-- Dynamic list (shown when a specific file is selected) -->
+          <div id="testNameList" style="display:none;max-height:140px;overflow-y:auto;
+               background:var(--input-bg);border:1px solid var(--input-border);
+               border-radius:var(--radius);padding:6px 8px;gap:4px;
+               display:none;flex-direction:column;"></div>
+          <!-- Manual free-text -->
+          <input type="text" id="k_filter" placeholder="e.g. test_login or test_checkout"
+                 style="display:none;" />
+          <div class="hint" id="kHint">Select a specific test file to pick individual tests</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Execution options -->
+    <div>
+      <div class="section-title">Execution Options</div>
+      <div style="display:flex; flex-direction:column; gap:10px; margin-top:10px;">
+        <div class="field">
+          <label>Browser</label>
+          <select id="browser">
+            <option value="chromium">chromium</option>
+            <option value="firefox">firefox</option>
+            <option value="webkit">webkit</option>
+          </select>
+        </div>
+        <div class="field">
+          <label>Marker (-m)</label>
+          <select id="marker">
+            <option value="">(none)</option>
+          </select>
+        </div>
+        <div class="field">
+          <label>Workers (-n)</label>
+          <input type="number" id="workers" value="1" min="1" max="16" />
+        </div>
+        <div class="checkboxes">
+          <label class="checkbox-label"><input type="checkbox" id="headed" checked /> Headed</label>
+          <label class="checkbox-label"><input type="checkbox" id="verbose" /> Verbose (-v)</label>
+          <label class="checkbox-label"><input type="checkbox" id="auto_open" /> Auto-open Report</label>
+        </div>
+        <div class="field">
+          <label>Extra Args</label>
+          <input type="text" id="extra" placeholder="e.g. --timeout=60000" />
+        </div>
+      </div>
+    </div>
+
+    <!-- Custom Options (from config.json extra_options) -->
+    <div id="extraOptionsSection" style="display:none;">
+      <div class="section-title">Custom Options</div>
+      <div id="extraOptionsContainer" style="display:flex;flex-direction:column;gap:10px;margin-top:10px;"></div>
+    </div>
+
+    <!-- Actions -->
+    <div>
+      <div class="section-title">Actions</div>
+      <div class="action-row" style="margin-top:10px;">
+        <button class="btn btn-run" id="runBtn" onclick="runTests()">▶  RUN</button>
+        <button class="btn btn-stop" id="stopBtn" onclick="stopTests()" disabled>■  STOP</button>
+        <button class="btn btn-sm" onclick="clearLog()">Clear Log</button>
+      </div>
+    </div>
+
+    <!-- Report -->
+    <div>
+      <div class="section-title">Report</div>
+      <div class="report-box" style="margin-top:10px;">
+        <div class="report-path" id="reportPath">No report yet — run tests first</div>
+        <div style="display:flex;gap:8px;">
+          <button class="btn btn-sm" id="openReportBtn" onclick="openReport()" disabled>Open Latest Report</button>
+          <button class="btn btn-sm" onclick="refreshReport()">Refresh</button>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- ── Right panel ── -->
+  <div class="panel-right">
+    <div class="log-header">
+      <span class="log-title">Output Log</span>
+      <div class="log-actions">
+        <button class="btn btn-sm" onclick="scrollToBottom()">↓ Bottom</button>
+      </div>
+    </div>
+    <div id="log"></div>
+  </div>
+
+</div>
+
+<!-- Status bar -->
+<div class="statusbar">
+  <div class="status-dot" id="statusDot"></div>
+  <span class="status-label" id="statusLabel">IDLE</span>
+  <span class="status-cmd" id="statusCmd"></span>
+</div>
+
+<script>
+// ── State ────────────────────────────────────────────────────────────────────
+let testTree = {};
+let lastReport = null;
+let eventSource = null;
+let autoScroll = true;
+
+// ── Init ─────────────────────────────────────────────────────────────────────
+async function init() {
+  const cfg = await fetch('/api/config').then(r => r.json()).catch(() => ({}));
+
+  if (cfg.default_browser) document.getElementById('browser').value = cfg.default_browser;
+  if (cfg.default_workers) document.getElementById('workers').value = cfg.default_workers;
+  if (cfg.auto_open_report) document.getElementById('auto_open').checked = true;
+
+  if (cfg.browsers) {
+    const sel = document.getElementById('browser');
+    sel.innerHTML = cfg.browsers.map(b => `<option value="${b}">${b}</option>`).join('');
+    if (cfg.default_browser) sel.value = cfg.default_browser;
+  }
+
+  if (cfg.markers?.length) populateMarkers(cfg.markers);
+  renderExtraOptions(cfg.extra_options || []);
+
+  await scanRepos(cfg.repo_root || '');
+  connectStream();
+}
+
+// ── Extra Options (config-defined) ───────────────────────────────────────────
+let _extraOptions = [];
+
+function renderExtraOptions(options) {
+  _extraOptions = options;
+  const section = document.getElementById('extraOptionsSection');
+  const container = document.getElementById('extraOptionsContainer');
+  container.innerHTML = '';
+
+  if (!options.length) { section.style.display = 'none'; return; }
+  section.style.display = '';
+
+  options.forEach(opt => {
+    const flag = opt.flag;
+    const label = opt.label || flag;
+    const type = opt.type || 'checkbox';
+    const id = 'eo_' + flag.replace(/[^a-zA-Z0-9]/g, '_');
+
+    const wrap = document.createElement('div');
+    wrap.className = 'field';
+
+    if (type === 'checkbox') {
+      wrap.innerHTML = `
+        <label class="checkbox-label">
+          <input type="checkbox" id="${id}" data-flag="${flag}"
+                 ${opt.default ? 'checked' : ''} />
+          ${label} <code style="font-size:10px;margin-left:4px;">${flag}</code>
+        </label>`;
+    } else if (type === 'dropdown') {
+      const opts = (opt.values || [])
+        .map(v => `<option value="${v}"${v === opt.default ? ' selected' : ''}>${v}</option>`)
+        .join('');
+      wrap.innerHTML = `
+        <label>${label} <code style="font-size:10px;margin-left:4px;">${flag}</code></label>
+        <select id="${id}" data-flag="${flag}">
+          <option value="">(none)</option>
+          ${opts}
+        </select>`;
+    }
+
+    container.appendChild(wrap);
+  });
+}
+
+function collectExtraOptionValues() {
+  const values = {};
+  _extraOptions.forEach(opt => {
+    const flag = opt.flag;
+    const id = 'eo_' + flag.replace(/[^a-zA-Z0-9]/g, '_');
+    const el = document.getElementById(id);
+    if (!el) return;
+    if (opt.type === 'checkbox') {
+      values[flag] = el.checked;
+    } else {
+      // Only include dropdown value if something meaningful is selected
+      const v = el.value.trim();
+      if (v && v.toLowerCase() !== 'none' && v !== '(none)') values[flag] = v;
+    }
+  });
+  return values;
+}
+
+// ── Repo scanner ──────────────────────────────────────────────────────────────
+async function scanRepos(preferredPath) {
+  const data = await fetch('/api/repos').then(r => r.json()).catch(() => ({ repos: [] }));
+  const repos = data.repos || [];
+
+  const sel = document.getElementById('repoSelect');
+  sel.innerHTML = '<option value="">— choose a repo —</option>' +
+    repos.map(r => `<option value="${r.path}" title="${r.path}">${r.name}</option>`).join('');
+
+  if (!repos.length) {
+    sel.innerHTML = '<option value="">No Playwright repos found — enter path manually</option>';
+  }
+
+  // Auto-select if there's a preferred path or only one option
+  if (preferredPath) {
+    const match = repos.find(r => r.path === preferredPath);
+    if (match) { sel.value = preferredPath; applyRepo(preferredPath); return; }
+  }
+  if (repos.length === 1) {
+    sel.value = repos[0].path;
+    applyRepo(repos[0].path);
+  }
+}
+
+function onRepoSelect() {
+  const path = document.getElementById('repoSelect').value;
+  if (path) applyRepo(path);
+}
+
+function applyRepo(path) {
+  document.getElementById('repo').value = path;
+  const name = path.split(/[/\\]/).filter(Boolean).pop() || path;
+  const subtitle = '— ' + name;
+  document.getElementById('repoSubtitle').textContent = subtitle;
+  document.title = 'Playwright Test Executor  ' + subtitle;
+  discoverTests();
+}
+
+// ── SSE stream ───────────────────────────────────────────────────────────────
+function connectStream() {
+  if (eventSource) eventSource.close();
+  eventSource = new EventSource('/api/stream');
+
+  eventSource.addEventListener('cmd', e => {
+    const cmd = JSON.parse(e.data);
+    appendLine('$ ' + cmd, 'cmd');
+    appendLine('─'.repeat(72), 'sep');
+    setStatus('running', 'RUNNING', cmd);
+    document.getElementById('statusCmd').textContent = cmd.slice(0, 120);
+  });
+
+  eventSource.addEventListener('line', e => {
+    appendLine(JSON.parse(e.data), classifyLine(JSON.parse(e.data)));
+  });
+
+  eventSource.addEventListener('status', e => {
+    const s = JSON.parse(e.data);
+    appendLine('─'.repeat(72), 'sep');
+    if (s === 'passed') {
+      appendLine('✓  All tests passed!', 'passed');
+      setStatus('passed', 'PASSED');
+    } else if (s === 'cancelled') {
+      appendLine('⚠  Execution cancelled by user.', 'warning');
+      setStatus('idle', 'CANCELLED');
+    } else {
+      const code = s.split(':')[1] || '?';
+      appendLine(`✗  Tests finished with failures  (exit code ${code}).`, 'failed');
+      setStatus('failed', 'FAILED');
+    }
+    setRunning(false);
+  });
+
+  eventSource.addEventListener('done', e => {
+    refreshReport();
+    if (document.getElementById('auto_open').checked && lastReport) openReport();
+  });
+
+  eventSource.onerror = () => setTimeout(connectStream, 3000);
+}
+
+// ── Test discovery ────────────────────────────────────────────────────────────
+async function discoverTests() {
+  const repo = document.getElementById('repo').value.trim();
+  if (!repo) return;
+
+  appendLine('⟳  Discovering tests…', 'info');
+
+  const res = await fetch(`/api/tests?repo=${encodeURIComponent(repo)}`);
+  if (!res.ok) {
+    const err = await res.json();
+    appendLine('✗  ' + (err.error || 'Discovery failed'), 'failed');
+    return;
+  }
+
+  const data = await res.json();
+  testTree = data.tree || {};
+
+  const suites = ['All Tests', ...Object.keys(testTree).sort()];
+  const suiteEl = document.getElementById('suite');
+  suiteEl.innerHTML = suites.map(s => `<option>${s}</option>`).join('');
+  onSuiteChange();
+
+  if (data.markers?.length) populateMarkers(data.markers);
+
+  const total = Object.values(testTree).reduce((a, b) => a + b.length, 0);
+  appendLine(`✓  Discovered ${total} test files in ${Object.keys(testTree).length} suite(s).`, 'passed');
+
+}
+
+function onSuiteChange() {
+  const suite = document.getElementById('suite').value;
+  const files = suite === 'All Tests' ? [] : (testTree[suite] || []);
+  const fileEl = document.getElementById('file');
+  fileEl.innerHTML = ['All in Suite', ...files.map(f => f.split('/').pop())]
+    .map(f => `<option>${f}</option>`).join('');
+  clearTestNames();
+}
+
+// ── Test name filter ──────────────────────────────────────────────────────────
+async function onFileChange() {
+  clearTestNames();
+  const file = document.getElementById('file').value;
+  if (!file || file === 'All in Suite') return;
+  const repo = document.getElementById('repo').value.trim();
+  if (!repo) return;
+
+  const data = await fetch(`/api/tests/names?repo=${encodeURIComponent(repo)}&file=${encodeURIComponent(file)}`)
+    .then(r => r.json()).catch(() => ({ names: [] }));
+
+  const names = data.names || [];
+  const list = document.getElementById('testNameList');
+  const hint = document.getElementById('kHint');
+  const manual = document.getElementById('manualKToggle').checked;
+
+  if (names.length === 0 || manual) return;
+
+  list.innerHTML = names.map(n => `
+    <div class="test-name-item">
+      <input type="checkbox" id="tn_${n}" value="${n}" onchange="syncKFilter()" />
+      <label for="tn_${n}">${n}</label>
+    </div>`).join('');
+  list.style.display = 'flex';
+  document.getElementById('k_filter').style.display = 'none';
+  hint.textContent = `${names.length} test${names.length !== 1 ? 's' : ''} — check to select, leave all unchecked to run all`;
+}
+
+function clearTestNames() {
+  const list = document.getElementById('testNameList');
+  list.innerHTML = '';
+  list.style.display = 'none';
+  if (!document.getElementById('manualKToggle').checked) {
+    document.getElementById('k_filter').style.display = 'none';
+    document.getElementById('k_filter').value = '';
+    document.getElementById('kHint').textContent = 'Select a specific test file to pick individual tests';
+  }
+}
+
+function syncKFilter() {
+  const checked = Array.from(document.querySelectorAll('#testNameList input:checked')).map(c => c.value);
+  document.getElementById('k_filter').value = checked.join(' or ');
+}
+
+function toggleKMode() {
+  const manual = document.getElementById('manualKToggle').checked;
+  const list = document.getElementById('testNameList');
+  const input = document.getElementById('k_filter');
+  const hint = document.getElementById('kHint');
+  if (manual) {
+    list.style.display = 'none';
+    input.style.display = '';
+    hint.textContent = 'Type a pytest -k expression (e.g. test_login or test_checkout)';
+  } else {
+    input.style.display = 'none';
+    // reload dynamic list if a file is selected
+    const file = document.getElementById('file').value;
+    if (file && file !== 'All in Suite') { onFileChange(); }
+    else hint.textContent = 'Select a specific test file to pick individual tests';
+  }
+}
+
+function getKFilter() {
+  const manual = document.getElementById('manualKToggle').checked;
+  if (manual) return document.getElementById('k_filter').value.trim();
+  const checked = Array.from(document.querySelectorAll('#testNameList input:checked')).map(c => c.value);
+  return checked.join(' or ');
+}
+
+function populateMarkers(markers) {
+  const sel = document.getElementById('marker');
+  const existing = Array.from(sel.options).map(o => o.value).filter(Boolean);
+  markers.forEach(m => {
+    if (!existing.includes(m)) sel.add(new Option(m, m));
+  });
+}
+
+// ── Run / Stop ────────────────────────────────────────────────────────────────
+async function runTests() {
+  const repo = document.getElementById('repo').value.trim();
+  if (!repo) { alert('Please set the Framework Repository Root first.'); return; }
+
+  clearLog();
+  setRunning(true);
+
+  const body = {
+    repo,
+    suite:    document.getElementById('suite').value,
+    file_sel: document.getElementById('file').value,
+    k_filter: getKFilter(),
+    browser:  document.getElementById('browser').value,
+    marker:   document.getElementById('marker').value || null,
+    workers:  parseInt(document.getElementById('workers').value) || 1,
+    verbose:  document.getElementById('verbose').checked,
+    headed:   document.getElementById('headed').checked,
+    extra:              document.getElementById('extra').value,
+    extra_option_values: collectExtraOptionValues(),
+  };
+
+  const res = await fetch('/api/run', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+
+  if (!res.ok) {
+    const err = await res.json();
+    appendLine('✗  ' + (err.error || 'Failed to start'), 'failed');
+    setRunning(false);
+  }
+}
+
+async function stopTests() {
+  await fetch('/api/stop', { method: 'POST' });
+}
+
+function setRunning(running) {
+  document.getElementById('runBtn').disabled = running;
+  document.getElementById('stopBtn').disabled = !running;
+}
+
+// ── Report ────────────────────────────────────────────────────────────────────
+async function refreshReport() {
+  const repo = document.getElementById('repo').value.trim();
+  if (!repo) return;
+  const data = await fetch(`/api/report?repo=${encodeURIComponent(repo)}`).then(r => r.json());
+  const pathEl = document.getElementById('reportPath');
+  const btn = document.getElementById('openReportBtn');
+  if (data.path) {
+    lastReport = data.path;
+    const rel = data.path.replace(repo + '/', '');
+    pathEl.textContent = '✓  ' + rel;
+    pathEl.className = 'report-path found';
+    btn.disabled = false;
+  } else {
+    lastReport = null;
+    pathEl.textContent = 'No report found — run tests first';
+    pathEl.className = 'report-path';
+    btn.disabled = true;
+  }
+}
+
+async function openReport() {
+  if (!lastReport) { await refreshReport(); }
+  if (!lastReport) { alert('No report found. Run tests first.'); return; }
+  const res = await fetch('/api/report/open', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ path: lastReport }),
+  });
+  if (!res.ok) {
+    const err = await res.json();
+    alert('Could not open report: ' + (err.error || 'unknown error'));
+  }
+}
+
+// ── Log helpers ───────────────────────────────────────────────────────────────
+function classifyLine(line) {
+  const lo = line.toLowerCase();
+  if (/^passed/i.test(line)) return 'passed';
+  if (/^failed/i.test(line)) return 'failed';
+  if (/^error/i.test(line))  return 'failed';
+  if (lo.includes('passed') && !lo.includes('failed') && !lo.includes('error')) return 'highlight';
+  if (lo.includes('failed') || lo.includes('error') || lo.includes('traceback')) return 'failed';
+  if (lo.includes('warning') || lo.includes('warn')) return 'warning';
+  if (/^[=\-]/.test(line)) return 'sep';
+  return 'default';
+}
+
+function appendLine(text, cls) {
+  const log = document.getElementById('log');
+  const span = document.createElement('span');
+  span.className = 'log-line log-' + (cls || 'default');
+  span.textContent = text;
+  log.appendChild(span);
+  if (autoScroll) scrollToBottom();
+}
+
+function clearLog() {
+  document.getElementById('log').innerHTML = '';
+}
+
+function scrollToBottom() {
+  const log = document.getElementById('log');
+  log.scrollTop = log.scrollHeight;
+}
+
+// ── Status bar ────────────────────────────────────────────────────────────────
+function setStatus(state, label, cmd) {
+  const dot = document.getElementById('statusDot');
+  const lbl = document.getElementById('statusLabel');
+  dot.className = 'status-dot ' + state;
+  lbl.textContent = label;
+  if (cmd !== undefined) document.getElementById('statusCmd').textContent = cmd.slice(0, 100);
+}
+
+// ── Browse helpers ────────────────────────────────────────────────────────────
+function browseRepo() {
+  const current = document.getElementById('repo').value;
+  const path = prompt('Enter the full path to the Playwright repo root:', current);
+  if (path && path.trim()) {
+    const p = path.trim();
+    document.getElementById('repo').value = p;
+    // Add to dropdown as custom entry if not already there
+    const sel = document.getElementById('repoSelect');
+    if (!Array.from(sel.options).some(o => o.value === p)) {
+      const opt = new Option('📁 ' + p.split(/[/\\]/).pop() + ' (custom)', p);
+      sel.add(opt);
+    }
+    sel.value = p;
+    applyRepo(p);
+  }
+}
+
+// ── Auto-scroll toggle on manual scroll ──────────────────────────────────────
+document.getElementById('log').addEventListener('scroll', function() {
+  const el = this;
+  autoScroll = el.scrollTop + el.clientHeight >= el.scrollHeight - 20;
+});
+
+init();
+</script>
+</body>
+</html>

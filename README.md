@@ -1,241 +1,180 @@
 # Playwright Test Executor
 
-A lightweight local desktop launcher for the **p13n-marketing-experiences-qa-automation** Playwright + pytest framework.
-
-Non-technical users can run tests by double-clicking a script — no VS Code, no terminal, no command knowledge required.
-
----
-
-## What this is
-
-This is a **standalone UI project**. It sits alongside the automation framework and acts as a thin orchestration layer on top of it:
+A browser-based local UI for running tests against any **Playwright + pytest** framework — no VS Code, no terminal knowledge, no command memorisation required.
 
 ```
 GitHub/
-├── p13n-marketing-experiences-qa-automation/   ← unchanged framework
-└── Playwright-Executer/                        ← this project (UI only)
+├── Your-Git-Project-Folder/     ← your existing framework (unchanged)
+└── Playwright-Executer/      ← this project (UI layer only)
 ```
 
-It does **not** modify the framework. All test logic, fixtures, page objects, reporting, and configuration remain exactly as they are.
+The executor **never modifies the framework**. All test logic, fixtures, page objects, reporting, and configuration remain exactly as they are.
+
+---
+
+## How it works
+
+A lightweight Python (Flask) web server runs locally and serves a browser UI at:
+
+```
+http://playwright-executor:7777
+```
+
+The UI lets you pick a repo, choose tests, configure options, hit **RUN**, and watch live output stream in real time — then open the generated report with one click.
 
 ---
 
 ## Prerequisites
 
-| Requirement | Notes |
+| Requirement | Where to get it |
 |---|---|
-| Python 3.9 or newer | Must be installed and on your PATH |
-| Framework dependencies installed | Run `pip install -r requirements.txt` inside the **framework** folder |
-| Playwright browsers installed | Run `playwright install` inside the **framework** folder |
-| Tkinter | Included with Python on Windows and macOS. Linux users may need to install it separately (see below) |
+| **Python 3.11+** | [python.org](https://python.org) — must be on your `PATH` |
+| **Flask** | Installed automatically by the launch script |
+| **Framework dependencies** | `pip install -r requirements.txt` inside **your framework folder** |
+| **Playwright browsers** | `playwright install` inside **your framework folder** |
 
 You do **not** need VS Code, Node.js, or any other tool.
-
-### Linux — install Tkinter if missing
-
-```bash
-# Ubuntu / Debian
-sudo apt-get install python3-tk
-
-# Fedora / RHEL / Rocky
-sudo dnf install python3-tkinter
-
-# Arch
-sudo pacman -S tk
-```
 
 ---
 
 ## Installation
 
-### Step 1 — Clone or copy this project
-
-Place the `Playwright-Executer` folder alongside the framework folder:
+### Step 1 — Place alongside your framework
 
 ```
 GitHub/
-├── p13n-marketing-experiences-qa-automation/
+├── Your-Git-Project-Folder/
 └── Playwright-Executer/
 ```
 
-### Step 2 — (Optional) Create a virtual environment for the UI
+The executor auto-detects sibling directories that look like Playwright repos (any folder containing `tests/` and a pytest config file).
 
-The UI itself has no extra pip dependencies, but if you want an isolated environment:
+### Step 2 — Verify `config.json` (optional)
 
-```bash
-cd Playwright-Executer
-python3 -m venv venv
-```
-
-You can also point the launcher at the **framework's own venv** — the launcher auto-detects it.
-
-### Step 3 — Verify `config.json`
-
-Open `config.json` and confirm `repo_root` points to the framework:
-
-```json
-{
-  "repo_root": "/path/to/p13n-marketing-experiences-qa-automation"
-}
-```
-
-The value pre-filled in `config.json` is the path detected at build time. Edit it if your layout differs.
+`config.json` ships with empty defaults — no editing required on first run. The repo is selected at runtime from the dropdown.
 
 ---
 
-## Launching the UI
-
-### Windows
-
-Double-click **`launch-ui.bat`**.
-
-Or from a terminal:
-```cmd
-launch-ui.bat
-```
+## Launching
 
 ### macOS / Linux
-
-Double-click **`launch-ui.sh`** (if your file manager supports it), or run:
 
 ```bash
 bash launch-ui.sh
 ```
 
-### From any terminal (alternative)
+- Installs Flask automatically if missing
+- Adds `playwright-executor` to `/etc/hosts` on first run (prompts for sudo password once)
+- Starts the server and opens the browser automatically
+
+### Windows
+
+**Double-click `launch-ui.bat`** or run from a terminal:
+
+```cmd
+launch-ui.bat
+```
+
+> **First run:** right-click `launch-ui.bat` → **Run as administrator** so it can add `playwright-executor` to the Windows hosts file. Subsequent launches do not need admin.
+
+### Direct (any platform)
 
 ```bash
 cd Playwright-Executer
-python3 -m ui_launcher
+python server.py
 ```
+
+Then open **http://playwright-executor:7777** (or **http://localhost:7777** if the hosts entry was not added).
 
 ---
 
 ## Using the UI
 
-### 1. Framework Repository Root
+Once the server is running, open your browser to:
 
-The path to the automation framework. Defaults to the value in `config.json`. Use **Browse…** to change it. The launcher uses this as the working directory (`cwd`) for every pytest invocation.
+```
+http://playwright-executor:7777
+```
 
-### 2. Test Selection
+### Repository
+
+| Control | Description |
+|---|---|
+| **Select Local Repo** | Dropdown auto-populated by scanning `~/Documents/GitHub`, `~/GitHub`, `~/Projects`, and sibling directories for any Playwright/pytest repo |
+| **⟳ button** | Re-scan for repos without refreshing the page |
+| **Or enter path manually** | Type or paste a full path; use **Browse…** to get a prompt |
+
+Selecting a repo automatically discovers tests, markers, and updates the browser tab title.
+
+### Test Selection
 
 | Field | Description |
 |---|---|
-| **Suite / Folder** | A folder under `tests/` (e.g. `tests/api`, `tests/web/email_layout_content`) |
-| **Test File** | A specific `test_*.py` file within the selected suite |
-| **Name filter (-k)** | Substring or expression passed to pytest `-k` (e.g. `test_login or test_checkout`) |
+| **Suite / Folder** | A subdirectory under `tests/` |
+| **Test File** | A specific `test_*.py` file within the suite |
+| **Test Name Filter (-k)** | Select a test file to get a checkbox list of individual test functions. Check one or more to run only those; leave all unchecked to run the whole file. Toggle **manual** to type a custom `-k` expression instead. |
 
-Selecting **All Tests** / **All in Suite** runs everything in that scope.
-
-### 3. Execution Options
+### Execution Options
 
 | Option | Description |
 |---|---|
 | **Browser** | `chromium`, `firefox`, or `webkit` |
-| **Marker (-m)** | Run only tests tagged with this marker (e.g. `smoke`, `api`) |
-| **Workers (-n)** | Number of parallel workers via pytest-xdist (1 = serial) |
-| **Headed** | Run browsers visibly (uncheck for headless/CI-style) |
+| **Marker (-m)** | Run only tests tagged with this marker (discovered from your repo's conftest) |
+| **Workers (-n)** | Parallel workers via pytest-xdist (1 = serial) |
+| **Headed** | Run browsers visibly — uncheck for headless / CI-style |
 | **Verbose (-v)** | Show full test names in the output log |
-| **Auto-open Report** | Automatically open the HTML report when the run finishes |
+| **Auto-open Report** | Open the HTML report automatically when the run finishes |
 
-### 4. .env File
+### Extra Args
 
-The framework reads environment-specific settings (URLs, credentials, etc.) from a `.env` file in the repository root. Use **Browse…** to select which `.env` file to use for this run.
+Raw pytest arguments appended verbatim to the end of the command (e.g. `--timeout=60000 -x`).
 
-- `.env` → default / QA settings
-- `.env.uat`, `.env.perf`, etc. → other environments (if present in the framework)
+### Run / Stop / Output Log
 
-The launcher does **not** copy or modify the `.env` file. It passes the selected path as `EXECUTOR_ENV_FILE` in the subprocess environment so custom scripts can use it.
+- **▶ RUN** — builds and executes the pytest command; disabled while running
+- **■ STOP** — sends a termination signal to the pytest process
+- **Output Log** — live stdout/stderr streamed line-by-line, colour-coded:
 
-### 5. Extra Args
-
-Raw pytest arguments appended verbatim to the command (e.g. `--timeout=30 -x`).
-
-### 6. Run / Stop
-
-- **▶ RUN** — builds the command and executes it. The button is disabled while running.
-- **■ STOP** — sends a termination signal to the pytest process.
-
-### 7. Output Log
-
-Live stdout/stderr from pytest streamed in real time. Color-coded:
-
-| Color | Meaning |
+| Colour | Meaning |
 |---|---|
 | Teal | PASSED |
 | Red | FAILED / ERROR |
 | Yellow | WARNING |
 | Purple | Command preview |
-| Grey | Separator lines |
+| Dark grey | Separator lines |
 
-### 8. Report
+### Report
 
-After a run the launcher scans for the latest HTML report in `allure/reports/`. Click **Open Latest Report** to open it in your default browser.
+After a run the executor scans common report output directories (`allure/reports`, `reports`, `test-results`, etc.) for the latest HTML file. Click **Open Latest Report** to open it in your default browser.
 
-Supported report locations (in priority order):
-1. `allure/reports/P13n-Marketing-Experiences-QA-Automation-Report.html`
-2. `allure/reports/latest/index.html`
-3. `allure/reports/html/index.html`
-4. Any `*.html` file found recursively under `allure/reports/`
+### ? Help
+
+Opens this documentation in a new tab.
 
 ---
 
-## How commands are constructed
+## Generated commands
 
-The launcher calls `python -m pytest` with the framework's venv Python (auto-detected) and builds a safe argument list — never a shell string, so there is no shell-injection risk.
+The executor calls `python -m pytest` using the framework venv's Python (auto-detected) and builds a safe argument list — never a shell string.
 
-Example commands the UI might produce:
+Example commands:
 
 ```bash
 # All tests, chromium, headed
 python -m pytest -c config/pytest.ini --override-ini "addopts=" \
     --alluredir=allure/results --browser chromium --headed
 
-# API suite, firefox, smoke marker
+# Specific suite, smoke marker, firefox
 python -m pytest tests/api -c config/pytest.ini --override-ini "addopts=" \
     --alluredir=allure/results --browser firefox --headed -m smoke
 
-# Specific file, webkit, 4 parallel workers, verbose
-python -m pytest tests/web/email_layout_content/test_email_content.py \
+# Single test function, webkit, verbose
+python -m pytest tests/api/test_example.py \
     -c config/pytest.ini --override-ini "addopts=" \
-    --alluredir=allure/results --browser webkit --headed -n 4 -v
+    --alluredir=allure/results --browser webkit --headed -k test_login -v
 ```
 
-The `--override-ini "addopts="` flag clears the defaults from `config/pytest.ini` so the UI selections take full effect without duplicating options.
-
----
-
-## Repo root and path behaviour
-
-- The launcher always sets subprocess `cwd` to the framework repo root.
-- All relative paths (`allure/results`, `config/pytest.ini`, test files) resolve from there.
-- The `repo_root` in `config.json` is the single source of truth. Edit it once; all paths follow.
-
----
-
-## Existing CLI users — nothing changes
-
-Automation engineers can continue to run tests exactly as before:
-
-```bash
-cd p13n-marketing-experiences-qa-automation
-pytest tests/api -c config/pytest.ini --browser chromium --headed
-```
-
-The UI is an additional entry point, not a replacement.
-
----
-
-## Troubleshooting
-
-| Symptom | Fix |
-|---|---|
-| **"Repo root not found"** | Use Browse… to point to `p13n-marketing-experiences-qa-automation` |
-| **"No module named tkinter"** | Install python3-tk (Linux) or use the system Python that ships with Tkinter |
-| **Tests fail with "unrecognized arguments"** | A test option may not be supported by the installed plugin versions. Check the Output Log for the exact error. |
-| **No report found after run** | The framework may need `allure` CLI installed to generate the HTML dashboard. The shareable `.html` file is generated automatically by the framework's `conftest.py`. |
-| **Wrong Python / venv used** | The launcher prefers `<framework-repo>/venv/bin/python`. Check it exists and has all dependencies. |
-| **UI won't open on macOS** | Run `bash launch-ui.sh` from a terminal once to see any error messages. |
+`--override-ini "addopts="` clears defaults in `pytest.ini` so the UI selections take full effect without duplicating options.
 
 ---
 
@@ -243,37 +182,70 @@ The UI is an additional entry point, not a replacement.
 
 ```
 Playwright-Executer/
-├── config.json           ← user-editable settings (repo root, browsers, markers, …)
-├── launch-ui.bat         ← Windows double-click launcher
-├── launch-ui.sh          ← macOS / Linux launcher
-├── requirements.txt      ← intentionally empty (tkinter is stdlib)
-├── README.md             ← this file
-└── ui_launcher/
-    ├── __init__.py
-    ├── __main__.py        ← enables "python -m ui_launcher"
-    ├── app.py             ← main Tkinter window and event wiring
-    ├── config_reader.py   ← loads / saves config.json
-    ├── test_discovery.py  ← scans tests/ for test files and markers
-    ├── command_builder.py ← converts UI selections → pytest arg list
-    ├── runner.py          ← subprocess execution + live log streaming
-    └── report_resolver.py ← finds the latest HTML report artefact
+├── server.py              ← Flask server; REST API + SSE stream; auto-opens browser
+├── static/
+│   └── index.html         ← single-page browser UI (HTML + CSS + JS, no build step)
+├── ui_launcher/
+│   ├── config_reader.py   ← loads config.json; auto-detects repos generically
+│   ├── test_discovery.py  ← scans tests/ for files and markers (read-only)
+│   ├── command_builder.py ← converts UI selections → safe pytest arg list
+│   ├── runner.py          ← subprocess execution + live output streaming
+│   └── report_resolver.py ← finds the latest HTML report in common output dirs
+├── config.json            ← user-editable defaults (all optional)
+├── launch-ui.sh           ← macOS / Linux launcher
+├── launch-ui.bat          ← Windows launcher
+└── requirements.txt       ← pip dependencies (flask)
 ```
 
 ---
 
-## Customising `config.json`
+## `config.json` reference
 
-All settings are optional — the UI falls back to sensible defaults.
+All keys are optional — the UI falls back to sensible defaults.
 
 ```json
 {
-  "repo_root":       "/path/to/framework",   // absolute path to the framework
-  "default_browser": "chromium",              // pre-selected browser on startup
-  "browsers":        ["chromium", "firefox", "webkit"],
-  "markers":         ["smoke", "slow", "nbo", "nbc", "api", "web"],
-  "report_paths":    ["allure/reports/P13n-Marketing-Experiences-QA-Automation-Report.html"],
-  "default_workers": 1,                       // parallel workers spinbox default
-  "auto_open_report": false,                  // auto-open report checkbox default
-  "window_geometry": "1250x820"               // initial window size
+  "repo_root":        "",
+  "default_browser":  "chromium",
+  "browsers":         ["chromium", "firefox", "webkit"],
+  "markers":          [],
+  "report_paths":     [
+    "allure/reports/latest/index.html",
+    "allure/reports/html/index.html"
+  ],
+  "default_workers":  1,
+  "auto_open_report": false
 }
 ```
+
+- `repo_root` — leave empty; the repo is selected from the dropdown at runtime
+- `markers` — leave empty; markers are discovered live from the repo's `conftest.py`
+- `report_paths` — relative paths checked first before the broad scan
+
+---
+
+## Existing CLI users — nothing changes
+
+You can continue running tests exactly as before from the terminal:
+
+```bash
+cd Your-Git-Project-Folder
+pytest tests/ -c config/pytest.ini --browser chromium --headed
+```
+
+The executor is an additional entry point, not a replacement.
+
+---
+
+## Troubleshooting
+
+| Symptom | Fix |
+|---|---|
+| **Browser shows "This site can't be reached"** | The server isn't running — start it with `bash launch-ui.sh` or `python server.py` |
+| **`playwright-executor` doesn't resolve** | The hosts entry is missing. Run the launch script (it adds it automatically), or add `127.0.0.1  playwright-executor` to your hosts file manually. Use `http://localhost:7777` as a fallback. |
+| **Windows: hosts entry not added** | Right-click `launch-ui.bat` → **Run as administrator** on the first launch |
+| **No repos appear in the dropdown** | Enter the path manually or use Browse…; the executor scans `~/Documents/GitHub`, `~/GitHub`, `~/Projects`, and sibling directories |
+| **"Flask not installed"** | Run `pip install flask` (the launch script does this automatically) |
+| **Tests fail with "unrecognised arguments"** | A pytest option may not be supported by the installed plugin versions — check the Output Log for the exact error |
+| **No report found after run** | Verify the framework generates a report; check the Output Log for the report path |
+| **Wrong Python / venv used** | The executor prefers `<repo>/venv/bin/python` or `<repo>/.venv/bin/python`. Verify it exists and has all dependencies installed |
