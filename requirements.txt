@@ -1,0 +1,9 @@
+# Playwright-Executer UI — Dependencies
+#
+# Tkinter (the UI toolkit) is bundled with Python and needs no pip install.
+# This file is intentionally minimal. Install the TARGET FRAMEWORK dependencies
+# from the framework's own requirements.txt instead.
+#
+# If you see "No module named tkinter" on Linux, install it with:
+#   Ubuntu/Debian: sudo apt-get install python3-tk
+#   Fedora/RHEL:   sudo dnf install python3-tkinter

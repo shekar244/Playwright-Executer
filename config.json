@@ -1,0 +1,25 @@
+{
+  "repo_root": "/Users/admin/Documents/GitHub/p13n-marketing-experiences-qa-automation",
+  "browsers": ["chromium", "firefox", "webkit"],
+  "default_browser": "chromium",
+  "markers": [
+    "smoke",
+    "slow",
+    "nbo",
+    "nbc",
+    "api",
+    "web",
+    "content",
+    "data_driven",
+    "trace",
+    "skip_ci"
+  ],
+  "report_paths": [
+    "allure/reports/P13n-Marketing-Experiences-QA-Automation-Report.html",
+    "allure/reports/latest/index.html",
+    "allure/reports/html/index.html"
+  ],
+  "default_workers": 1,
+  "auto_open_report": false,
+  "window_geometry": "1250x820"
+}
