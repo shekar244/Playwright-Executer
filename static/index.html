@@ -1460,6 +1460,12 @@
     <!-- Import Tests tab -->
     <div id="zpanel-import" class="zpanel" style="padding:16px;display:flex;flex-direction:column;gap:12px;overflow-y:auto;">
 
+      <!-- Target context banner -->
+      <div id="zImportContext" style="background:var(--input-bg);border:1px solid var(--border);border-radius:var(--radius);padding:7px 12px;font-size:11px;">
+        <span style="color:var(--text-dim);">Target: </span>
+        <span style="color:var(--yellow);">⚠ No cycle selected — use Steps 2 &amp; 3 on the left to select Version → Cycle → Folder</span>
+      </div>
+
       <!-- Mode tabs -->
       <div style="display:flex;gap:4px;flex-wrap:wrap;">
         <button class="btn btn-sm import-mode-btn active" id="imode-keys" onclick="setImportMode('keys')">📋 By Issue Keys</button>
@@ -1759,11 +1765,19 @@
     </div>
 
     <!-- Executions tab -->
-    <div id="zpanel-executions" class="zpanel" style="display:none;padding:16px;flex-direction:column;gap:12px;overflow-y:auto;">
+    <div id="zpanel-executions" class="zpanel" style="display:none;padding:16px;flex-direction:column;gap:10px;overflow-y:auto;">
+
+      <!-- Context: which cycle/folder is loaded -->
+      <div id="zExecContext" style="background:var(--input-bg);border:1px solid var(--border);border-radius:var(--radius);padding:7px 12px;font-size:11px;color:var(--text-dim);">
+        Click ⟳ Load Executions to load tests from the selected cycle / folder
+      </div>
+
+      <!-- Toolbar -->
       <div class="action-row">
         <button class="btn btn-sm" onclick="zLoadExecutions()">⟳ Load Executions</button>
+        <span id="zExecCount" style="font-size:11px;color:var(--text-dim);"></span>
         <div style="display:flex;gap:6px;margin-left:auto;">
-          <select id="z_exec_status_filter" style="font-size:11px;width:130px;">
+          <select id="z_exec_status_filter" style="font-size:11px;width:130px;" onchange="zFilterExecTable()">
             <option value="">All Status</option>
             <option value="1">Pass</option>
             <option value="2">Fail</option>
@@ -1771,52 +1785,57 @@
             <option value="4">Blocked</option>
             <option value="-1">Unexecuted</option>
           </select>
-          <button class="btn btn-sm" onclick="zBulkMark()" id="zBulkMarkBtn" disabled>Bulk Mark Selected</button>
         </div>
       </div>
-      <div style="overflow-x:auto;max-height:320px;overflow-y:auto;">
+
+      <!-- Table -->
+      <div style="overflow-x:auto;flex:1;min-height:0;border:1px solid var(--border);border-radius:var(--radius);">
         <table class="history-tbl" id="zExecTable">
           <thead style="position:sticky;top:0;z-index:2;">
             <tr>
               <th style="width:32px;"><input type="checkbox" id="zSelectAll" onchange="zToggleAll(this)" /></th>
               <th>Issue Key</th>
               <th>Summary</th>
-              <th>Status</th>
+              <th>Current Status</th>
               <th>Assignee</th>
-              <th>Actions</th>
+              <th style="width:70px;">Action</th>
             </tr>
           </thead>
           <tbody id="zExecTbody">
-            <tr><td colspan="6" style="text-align:center;color:var(--text-dim);padding:24px;">Load executions to see test results</td></tr>
+            <tr><td colspan="6" style="text-align:center;color:var(--text-dim);padding:24px;">Click ⟳ Load Executions above</td></tr>
           </tbody>
         </table>
       </div>
-      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;">
-        <div class="field">
-          <label>Mark selected as</label>
-          <select id="z_mark_status">
-            <option value="1">Pass</option>
-            <option value="2">Fail</option>
-            <option value="3">WIP</option>
-            <option value="4">Blocked</option>
-            <option value="-1">Unexecuted</option>
-          </select>
+
+      <!-- Bulk mark controls -->
+      <div style="background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius);padding:12px 14px;display:flex;flex-direction:column;gap:8px;">
+        <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.07em;color:var(--text-muted);">Mark Selected / Individual</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;">
+          <div class="field">
+            <label>Mark as</label>
+            <select id="z_mark_status">
+              <option value="1">✓ Pass</option>
+              <option value="2">✗ Fail</option>
+              <option value="3">⋯ WIP</option>
+              <option value="4">⊘ Blocked</option>
+              <option value="-1">— Unexecuted</option>
+            </select>
+          </div>
+          <div class="field">
+            <label>Comment</label>
+            <input type="text" id="z_mark_comment" placeholder="Optional comment" />
+          </div>
+          <div class="field">
+            <label>Update test steps</label>
+            <select id="z_mark_steps">
+              <option value="true">Yes — match status</option>
+              <option value="false">No</option>
+            </select>
+          </div>
         </div>
-        <div class="field">
-          <label>Comment</label>
-          <input type="text" id="z_mark_comment" placeholder="Optional comment" />
-        </div>
-        <div class="field">
-          <label>Also update steps</label>
-          <select id="z_mark_steps">
-            <option value="true">Yes</option>
-            <option value="false">No</option>
-          </select>
-        </div>
-      </div>
-      <div class="field">
-        <label>Attach file to each marked execution</label>
-        <input type="file" id="zExecAttachFile" style="font-size:11px;color:var(--text-muted);" />
+        <button class="btn btn-run" onclick="zBulkMark()" id="zBulkMarkBtn" disabled>
+          Mark Selected Executions
+        </button>
       </div>
     </div>
 
@@ -2631,7 +2650,7 @@ function switchTab(tab) {
   });
   if (tab === 'tools')     { switchCfgTab('features'); loadTools(); loadFeatures(); loadZephyrConfig(); loadMappingConfig(); }
   if (tab === 'dashboard') loadDashboard();
-  if (tab === 'zephyr')    loadZephyrConfig();
+  if (tab === 'zephyr')    { loadZephyrConfig(); _updateZephyrContextBanners(); }
 }
 
 // ── Dashboard ─────────────────────────────────────────────────────────────────
@@ -3074,6 +3093,7 @@ function switchZTab(tab) {
     if (btn)   btn.classList.toggle('active', active);
     if (panel) panel.style.display = active ? 'flex' : 'none';
   });
+  _updateZephyrContextBanners();   // always refresh context banners on tab switch
 }
 
 // ── Field Mapping Config ──────────────────────────────────────────────────────
@@ -3417,9 +3437,10 @@ async function onZephyrVersionChange() {
 }
 
 function onZephyrCycleChange() {
-  _zCycleId = document.getElementById('z_cycle').value;
+  _zCycleId  = document.getElementById('z_cycle').value;
   _zFolderId = '';
   updateZephyrBreadcrumb();
+  _updateZephyrContextBanners();
 }
 
 async function loadZephyrCycles() {
@@ -3532,6 +3553,7 @@ function selectZephyrFolder(id, name) {
   const el = document.getElementById('zf_' + id);
   if (el) el.classList.add('selected');
   updateZephyrBreadcrumb();
+  _updateZephyrContextBanners();
   zLog(`✓  Selected folder: ${name} (id: ${id})`, 'passed');
 }
 
@@ -3752,7 +3774,9 @@ function renderImportPreview() {
       <td style="font-size:11px;color:var(--text-muted);max-width:280px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${escHtml(r.summary)}">${escHtml(r.summary||'—')}</td>
     </tr>`).join('');
   preview.style.display = 'flex';
-  btn.disabled = !_zCycleId;
+  // Enable as soon as keys are present — cycle is validated at submit time
+  btn.disabled = false;
+  btn.title = _zCycleId ? '' : 'Select a Test Cycle (Step 3) before adding';
 }
 
 // ── Create from CSV (grouped by Story) ───────────────────────────────────────
@@ -3935,25 +3959,44 @@ function setResultsMode(mode) {
   _updateResultsContext();
 }
 
+function _updateZephyrContextBanners() {
+  // Resolve display names from dropdowns / folder tree
+  const vSel  = document.getElementById('z_version');
+  const cSel  = document.getElementById('z_cycle');
+  const fEl   = _zFolderId ? document.getElementById('zf_' + _zFolderId) : null;
+
+  const vName = (vSel && vSel.selectedIndex >= 0 && vSel.options[vSel.selectedIndex]?.value !== '')
+                  ? vSel.options[vSel.selectedIndex].text : '';
+  const cName = (_zCycleId && cSel && cSel.selectedIndex >= 0)
+                  ? cSel.options[cSel.selectedIndex]?.text || _zCycleId : '';
+  const fName = _zFolderId
+                  ? (fEl?.querySelector('span:last-child')?.textContent || _zFolderId) : '';
+
+  const chip = (label, value, color) =>
+    `<span style="font-size:10px;color:var(--text-dim);margin-right:2px;">${label}:</span>` +
+    `<span style="font-weight:700;color:${color};margin-right:8px;">${escHtml(value)}</span>`;
+
+  const warn = (msg) =>
+    `<span style="color:var(--yellow);font-size:11px;">⚠ ${msg}</span>`;
+
+  let html;
+  if (!_zCycleId) {
+    html = warn('No cycle selected — use Steps 2 &amp; 3 on the left: Version → Cycle → Folder');
+  } else {
+    html = '<span style="color:var(--text-dim);font-size:10px;margin-right:6px;">TARGET</span>' +
+           (vName ? chip('Version', vName, 'var(--text-muted)') : '') +
+           chip('Cycle', cName || _zCycleId, 'var(--accent)') +
+           (fName ? chip('Folder', fName, 'var(--teal)') : warn('No folder selected — tests will go to cycle root'));
+  }
+
+  ['zImportContext', 'zResultsContext', 'zExecContext'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.innerHTML = html;
+  });
+}
+
 function _updateResultsContext() {
-  const el = document.getElementById('zResultsContext');
-  if (!el) return;
-  const parts = [];
-  if (_zVersionId && _zVersionId !== '-1') {
-    const vSel = document.getElementById('z_version');
-    parts.push('v: ' + (vSel?.options[vSel.selectedIndex]?.text || _zVersionId));
-  }
-  if (_zCycleId) {
-    const cSel = document.getElementById('z_cycle');
-    parts.push('→ Cycle: ' + (cSel?.options[cSel.selectedIndex]?.text || _zCycleId));
-  }
-  if (_zFolderId) {
-    const fEl = document.getElementById('zf_' + _zFolderId);
-    parts.push('→ Folder: ' + (fEl?.querySelector('span:last-child')?.textContent || _zFolderId));
-  }
-  el.innerHTML = parts.length
-    ? `<span style="color:var(--text-muted);">Target: </span><span style="color:var(--accent);font-weight:600;">${escHtml(parts.join(' '))}</span>`
-    : '<span style="color:var(--text-dim);">Select Version → Cycle → Folder on the left</span>';
+  _updateZephyrContextBanners();
 }
 
 // ── Results CSV handling ──────────────────────────────────────────────────────
@@ -4197,8 +4240,15 @@ async function _addKeysToTarget(keys, baseBody) {
 
 // ── Add Tests to Cycle (import tab) ──────────────────────────────────────────
 async function zAddTests() {
-  if (!_zProject) { zLog('✗  No project configured.', 'failed'); return; }
-  if (!_zCycleId) { zLog('✗  Select a test cycle first.', 'failed'); return; }
+  if (!_zProject) {
+    zLog('✗  No project key configured — go to Config → Zephyr Config and set Project Key.', 'failed');
+    return;
+  }
+  if (!_zCycleId) {
+    zLog('✗  No test cycle selected — use Step 3 on the left panel to select or create a cycle.', 'failed');
+    switchZTab('import');   // stay on import tab so user sees the message
+    return;
+  }
 
   const btn = document.getElementById('zAddTestsBtn');
   btn.disabled = true; btn.textContent = 'Adding…';
@@ -4229,6 +4279,8 @@ let _executions = [];
 
 async function zLoadExecutions() {
   if (!_zCycleId) { zLog('✗  Select a test cycle first.', 'failed'); return; }
+
+  _updateZephyrContextBanners();   // refresh shared context banner
   zLog('⟳  Loading executions…', 'info');
 
   const params = { versionId: _zVersionId || '-1' };
@@ -4241,28 +4293,55 @@ async function zLoadExecutions() {
   const data = await res.json().catch(() => ({}));
   if (!res.ok) { zLog('✗  ' + JSON.stringify(data.error || data), 'failed'); return; }
 
+  // Zephyr Squad Cloud status ID → display name + CSS class
   const STAT     = { '-1':'UNEXECUTED', '1':'PASS', '2':'FAIL', '3':'WIP', '4':'BLOCKED' };
-  const STAT_CLS = { '1':'pass', '2':'fail', '3':'broken', '4':'skip', '-1':'' };
+  const STAT_CLS = { '1':'passed', '2':'failed', '3':'broken', '4':'cancelled', '-1':'' };
+  const STAT_ICON= { '1':'✓', '2':'✗', '3':'⋯', '4':'⊘', '-1':'—' };
+
   _executions = data.searchObjectList || data.executions || [];
+  const countEl = document.getElementById('zExecCount');
+  if (countEl) countEl.textContent = `${_executions.length} execution(s)`;
   zLog(`✓  Loaded ${_executions.length} execution(s).`, 'passed');
+  // Debug: log field names from first execution so we can verify Zephyr's exact response shape
+  if (_executions.length) {
+    const sample = _executions[0];
+    zLog(`  ℹ  Fields: ${Object.keys(sample).join(', ')}`, 'info');
+    zLog(`  ℹ  executionStatus="${sample.executionStatus}"  issueSummary="${sample.issueSummary}"  assigneeDisplay="${sample.assigneeDisplay}"`, 'info');
+  }
 
   document.getElementById('zExecTbody').innerHTML = _executions.length
     ? _executions.map((e, i) => {
-        // Zephyr Squad Cloud returns status in various shapes — normalise all of them
+
+        /* ── Status: Zephyr returns executionStatus as a plain string like "-1","1","2"
+           OR as an object {id,name,color} OR sometimes as a numeric status name string ── */
         const rawStat = e.executionStatus ?? e.status ?? e.statusId ?? -1;
-        const sid = typeof rawStat === 'object' && rawStat !== null
-          ? String(rawStat.id ?? -1)
-          : String(rawStat);
-        const sName = typeof rawStat === 'object' && rawStat?.name
-          ? rawStat.name
-          : (STAT[sid] || sid);
-        const sCls = STAT_CLS[sid] || '';
+        let sid, sName;
+        if (rawStat !== null && typeof rawStat === 'object') {
+          sid   = String(rawStat.id ?? -1);
+          sName = rawStat.name || STAT[sid] || sid;
+        } else {
+          sid   = String(rawStat).trim();
+          // Handle name strings like "PASS","FAIL" returned by some Zephyr versions
+          const nameToId = { 'PASS':'1','FAIL':'2','WIP':'3','BLOCKED':'4','UNEXECUTED':'-1' };
+          if (nameToId[sid]) { sName = sid; sid = nameToId[sid]; }
+          else               { sName = STAT[sid] || sid; }
+        }
+        const sCls  = STAT_CLS[sid]   || '';
+        const sIcon = STAT_ICON[sid]  || '';
+
+        /* ── Summary: Zephyr uses issueSummary, label, or summary ── */
+        const summary  = e.issueSummary || e.label || e.summary || e.issueLabel || '';
+
+        /* ── Assignee: Zephyr uses assigneeDisplay, executedByDisplay, assigneeUserName ── */
+        const assignee = e.assigneeDisplay || e.executedByDisplay || e.assigneeUserName
+                       || e.executor || e.executedBy || '';
+
         return `<tr>
           <td style="width:32px;"><input type="checkbox" class="z-exec-cb" data-idx="${i}" /></td>
           <td style="font-family:'JetBrains Mono',monospace;font-size:11px;font-weight:600;color:var(--accent);">${escHtml(e.issueKey||'')}</td>
-          <td style="font-size:11px;max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${escHtml(e.summary||'')}">${escHtml(e.summary||'')}</td>
-          <td><span class="tbl-status-badge ${sCls}" style="font-size:10px;">${sName}</span></td>
-          <td style="font-size:11px;color:var(--text-dim);">${escHtml(e.assignee||e.assigneeUserName||'')}</td>
+          <td style="font-size:11px;max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${escHtml(summary)}">${escHtml(summary||'—')}</td>
+          <td><span class="tbl-status-badge ${sCls}" style="font-size:10px;">${sIcon} ${sName}</span></td>
+          <td style="font-size:11px;color:var(--text-dim);max-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escHtml(assignee||'—')}</td>
           <td style="white-space:nowrap;">
             <button class="btn btn-sm" style="font-size:10px;padding:3px 8px;" onclick="zQuickMark('${e.id||e.executionId}',${e.issueId||0})">Mark</button>
           </td>
@@ -4278,50 +4357,58 @@ function zToggleAll(cb) {
   document.querySelectorAll('.z-exec-cb').forEach(c => c.checked = cb.checked);
 }
 
-async function zQuickMark(execId, issueId) {
-  const statusId = parseInt(document.getElementById('z_mark_status').value) || 1;
-  const comment  = document.getElementById('z_mark_comment')?.value.trim() || '';
-  const updateSteps = document.getElementById('z_mark_steps')?.value === 'true';
-  const body = {
-    status: { id: statusId }, id: execId,
-    projectId: _zProjectId ? parseInt(_zProjectId) : _zProject,
-    issueId, cycleId: _zCycleId,
-    versionId: parseInt(_zVersionId) || -1,
-    comment, testStepStatusChangeFlag: updateSteps, stepStatus: statusId,
-  };
-  const res = await fetch(`/api/zephyr/execution/${execId}`, {
-    method: 'PUT', headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(body),
-  });
-  if (res.ok) { zLog(`✓  Marked ${execId} → status ${statusId}`, 'passed'); await zLoadExecutions(); }
-  else        { const e = await res.json().catch(() => ({})); zLog('✗  ' + JSON.stringify(e.error || e), 'failed'); }
+// ── Shared mark helper — uses bulk-results endpoint ───────────────────────────
+async function _markExecsByKey(issueKeys) {
+  if (!issueKeys.length || !_zCycleId) return;
+  const statusId  = parseInt(document.getElementById('z_mark_status').value) || 1;
+  const comment   = document.getElementById('z_mark_comment')?.value.trim() || '';
+  const statusStr = {1:'pass',2:'fail',3:'wip',4:'blocked','-1':'unexecuted'}[statusId] || 'pass';
 
-  // Attach file if provided
-  const attachFile = _zFiles['zExecAttachFile'];
-  if (attachFile && res.ok) {
-    const aForm = new FormData();
-    aForm.append('file', attachFile);
-    aForm.append('entityId', execId); aForm.append('entityName', 'EXECUTION');
-    aForm.append('cycleId', _zCycleId); aForm.append('issueId', String(issueId));
-    aForm.append('projectId', String(_zProjectId || _zProject));
-    aForm.append('versionId', String(_zVersionId || -1));
-    await fetch('/api/zephyr/attach', { method: 'POST', body: aForm });
-  }
+  const csv = ['Issue Key,Status,Comment',
+    ...issueKeys.map(k => `${k},${statusStr},"${comment.replace(/"/g,'""')}"`)
+  ].join('\n');
+
+  const form = new FormData();
+  form.append('file',      new Blob([csv], { type: 'text/csv' }), 'mark.csv');
+  form.append('cycleId',   _zCycleId);
+  form.append('folderId',  _zFolderId  || '');
+  form.append('projectId', _zProjectId || _zProject || '');
+  form.append('versionId', _zVersionId || '-1');
+
+  zLog(`⟳  Marking ${issueKeys.length} test(s) as ${statusStr}…`, 'info');
+  try {
+    const res  = await fetch('/api/zephyr/bulk-results', { method: 'POST', body: form });
+    const data = await res.json();
+    if (res.ok) {
+      zLog(`✓  ${data.success}/${data.processed} updated${data.not_found ? `  ⚠ ${data.not_found} not found` : ''}`,
+           (data.errors || data.not_found) ? 'warning' : 'passed');
+      (data.details?.success || []).forEach(r => {
+        const stepsOk = (r.steps || []).filter(s => s.updated).length;
+        if (stepsOk) zLog(`  📝 ${r.issue}: ${stepsOk} step(s) → ${statusStr}`, 'passed');
+      });
+      (data.details?.errors    || []).forEach(r => zLog(`  ✗ ${r.issue}: ${r.error}`, 'failed'));
+      (data.details?.not_found || []).forEach(r => zLog(`  ⚠  ${r.issue}: ${r.error}`, 'warning'));
+    } else {
+      zLog('✗  Mark failed: ' + JSON.stringify(data.error || data), 'failed');
+    }
+  } catch (err) { zLog('✗  ' + err.message, 'failed'); }
+  await zLoadExecutions();
+}
+
+async function zQuickMark(execId, issueId) {
+  const exec = _executions.find(e => (e.id || e.executionId) === execId);
+  const key  = exec?.issueKey || String(issueId);
+  await _markExecsByKey([key]);
 }
 
 async function zBulkMark() {
   const checked = [...document.querySelectorAll('.z-exec-cb:checked')];
   if (!checked.length) { zLog('✗  Select at least one execution.', 'failed'); return; }
-  const statusId = parseInt(document.getElementById('z_mark_status').value) || 1;
-  const ids = checked.map(c => _executions[parseInt(c.dataset.idx)]?.id).filter(Boolean);
-  zLog(`⟳  Bulk marking ${ids.length} execution(s)…`, 'info');
-  const res = await fetch('/api/zephyr/executions/bulk', {
-    method: 'POST', headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ executions: ids, status: statusId, testStepStatusChangeFlag: document.getElementById('z_mark_steps')?.value === 'true', stepStatus: statusId, clearDefectMappingFlag: false }),
-  });
-  const data = await res.json().catch(() => ({}));
-  if (res.ok) { zLog(`✓  Bulk update complete.`, 'passed'); await zLoadExecutions(); }
-  else { zLog('✗  ' + JSON.stringify(data.error || data), 'failed'); }
+  const keys = checked.map(c => _executions[parseInt(c.dataset.idx)]?.issueKey).filter(Boolean);
+  const btn  = document.getElementById('zBulkMarkBtn');
+  btn.disabled = true; btn.textContent = 'Marking…';
+  await _markExecsByKey(keys);
+  btn.disabled = false; btn.textContent = 'Mark Selected Executions';
 }
 
 function zLog(msg, cls) {

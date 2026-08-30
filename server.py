@@ -1140,15 +1140,15 @@ def add_tests_to_cycle():
 def list_executions():
     cycle_id  = request.args.get("cycleId", "")
     folder_id = request.args.get("folderId", "")
-    params = {k: request.args.get(k) for k in ("projectId", "versionId") if request.args.get(k)}
+    base: dict = {k: request.args.get(k) for k in ("projectId", "versionId") if request.args.get(k)}
     if folder_id:
         path = f"/public/rest/api/1.0/executions/search/folder/{folder_id}"
-        params["cycleId"] = cycle_id
+        base["cycleId"] = cycle_id
     else:
         path = f"/public/rest/api/1.0/executions/search/cycle/{cycle_id}"
-    params.update({k: request.args.get(k) for k in ("offset", "size") if request.args.get(k)})
-    data, code = _z_call("GET", path, params)
-    return jsonify(data), code
+    # Paginate — Zephyr rejects size > 50
+    all_execs = _z_get_all_executions(path, base, page_size=50)
+    return jsonify({"searchObjectList": all_execs, "totalCount": len(all_execs)})
 
 
 @app.route("/api/zephyr/execution/<exec_id>", methods=["PUT"])
@@ -1218,37 +1218,41 @@ def zephyr_attach():
 # ── Jira search / filter / links ──────────────────────────────────────────────
 
 def _jira_search_jql(jql: str, max_results: int = 200) -> tuple:
-    """Run a JQL search using REST API v3 (POST /rest/api/3/search/jql).
-    Falls back to v2 GET if v3 returns 404 (older Jira Server installs)."""
-    body = {
-        "jql":        jql,
-        "maxResults": max_results,
-        "fields":     ["summary", "issuetype", "status", "priority", "assignee", "key"],
-    }
-    # Try v3 first (Jira Cloud)
+    """Run a JQL search using the current Atlassian REST API v3 endpoint.
+
+    Primary:  GET /rest/api/3/search/jql?jql=...  (Atlassian Cloud current)
+    Fallback: GET /rest/api/2/search?jql=...       (Jira Server / old Cloud)
+    """
     cfg      = _z_cfg()
     jira_url = cfg.get("jira_url", "").rstrip("/")
     if not jira_url:
         return {"error": "Jira URL not configured"}, 400
+
     creds = base64.b64encode(
         f"{cfg.get('username','')}:{cfg.get('api_token','')}".encode()
     ).decode()
-    hdrs = {"Authorization": f"Basic {creds}", "Content-Type": "application/json", "Accept": "application/json"}
+    hdrs = {"Authorization": f"Basic {creds}",
+            "Content-Type": "application/json", "Accept": "application/json"}
+    fields = "summary,issuetype,status,priority,assignee,key"
 
-    # POST /rest/api/3/search/jql  (Jira Cloud v3)
-    url = f"{jira_url}/rest/api/3/search/jql"
+    # ── GET /rest/api/3/search/jql?jql= (Atlassian Cloud v3) ─────────────────
+    qs  = urllib.parse.urlencode({"jql": jql, "maxResults": max_results, "fields": fields})
+    url = f"{jira_url}/rest/api/3/search/jql?{qs}"
     try:
-        req = urllib.request.Request(url, data=json.dumps(body).encode(), headers=hdrs, method="POST")
+        req = urllib.request.Request(url, headers=hdrs, method="GET")
         with _urlopen(req, timeout=20) as resp:
-            return _parse_response(resp.read(), resp.status)
+            data, code = _parse_response(resp.read(), resp.status)
+            if isinstance(data, dict) and "issues" in data:
+                return data, code
+            # Endpoint exists but returned unexpected body — fall through
     except urllib.error.HTTPError as e:
-        if e.code == 404:
-            # Jira Server / older Cloud — fall back to v2 GET
-            return _jira_call("GET", "/search", {"jql": jql, "maxResults": max_results,
-                                                  "fields": "summary,issuetype,status,priority,assignee,key"})
-        return _parse_error(e)
-    except Exception as ex:
-        return {"error": str(ex)}, 500
+        if e.code not in (404, 405, 410):
+            return _parse_error(e)   # auth / bad JQL — stop, don't retry
+    except Exception:
+        pass
+
+    # ── Fallback: GET /rest/api/2/search?jql= (Jira Server / old Cloud) ──────
+    return _jira_call("GET", "/search", {"jql": jql, "maxResults": max_results, "fields": fields})
 
 
 @app.route("/api/jira/search")
@@ -1659,6 +1663,24 @@ def import_testcases():
 
 # ── Bulk Results Upload ───────────────────────────────────────────────────────
 
+def _z_get_all_executions(path: str, base_params: dict, page_size: int = 50) -> list[dict]:
+    """Paginate through Zephyr execution search results (max 50 per page) and return all."""
+    all_execs: list[dict] = []
+    offset = 0
+    while True:
+        params = {**base_params, "size": str(page_size), "offset": str(offset)}
+        data, code = _z_call("GET", path, params)
+        if code != 200:
+            break
+        page = data.get("searchObjectList", data.get("executions", []))
+        all_execs.extend(page)
+        total = data.get("totalCount", data.get("total", len(page)))
+        if len(page) < page_size or offset + page_size >= int(total):
+            break
+        offset += page_size
+    return all_execs
+
+
 def _update_exec_steps(exec_id: str, issue_id: int | str, status_id: int) -> list[dict]:
     """Fetch all step results for an execution and update each to status_id.
     Returns list of updated step info dicts."""
@@ -1748,20 +1770,19 @@ def bulk_results_upload():
     col_attach   = res_map.get("attachment_path", "Attachment Path")
     update_steps = res_map.get("update_steps",  True)
 
-    # Load all executions from the cycle/folder once
-    exec_params: dict = {"versionId": version_id, "size": "500"}
-    if project_id: exec_params["projectId"] = project_id
+    # Load all executions paginated (Zephyr limit: 50 per page)
+    base_params: dict = {"versionId": version_id}
+    if project_id: base_params["projectId"] = project_id
     if folder_id:
         exec_path = f"/public/rest/api/1.0/executions/search/folder/{folder_id}"
-        exec_params["cycleId"] = cycle_id
+        base_params["cycleId"] = cycle_id
     else:
         exec_path = f"/public/rest/api/1.0/executions/search/cycle/{cycle_id}"
 
-    exec_data, exec_code = _z_call("GET", exec_path, exec_params)
-    if exec_code != 200:
-        return jsonify({"error": f"Could not load executions: {exec_data}"}), exec_code
+    exec_list = _z_get_all_executions(exec_path, base_params, page_size=50)
+    if not exec_list and not rows:
+        return jsonify({"error": "Could not load executions from cycle/folder"}), 400
 
-    exec_list   = exec_data.get("searchObjectList", [])
     exec_by_key = {e.get("issueKey", ""): e for e in exec_list}
     exec_by_id  = {str(e.get("issueId", "")): e for e in exec_list}
 
