@@ -1199,22 +1199,246 @@ def zephyr_attach():
         return jsonify({"error": str(ex)}), 500
 
 
+# ── Jira search / filter / links ──────────────────────────────────────────────
+
+@app.route("/api/jira/search")
+def jira_search():
+    """Search Jira issues by JQL or filter ID."""
+    jql         = request.args.get("jql", "").strip()
+    filter_id   = request.args.get("filterId", "").strip()
+    max_results = min(int(request.args.get("maxResults", 200)), 500)
+
+    if filter_id:
+        f_data, f_code = _jira_call("GET", f"/filter/{filter_id}")
+        if f_code != 200:
+            return jsonify({"error": f_data}), f_code
+        jql = f_data.get("jql", "")
+    if not jql:
+        return jsonify({"error": "jql or filterId required"}), 400
+
+    data, code = _jira_call("GET", "/search", {
+        "jql": jql, "maxResults": max_results,
+        "fields": "summary,issuetype,status,priority,assignee,key",
+    })
+    return jsonify(data), code
+
+
+@app.route("/api/jira/link-types")
+def jira_link_types():
+    data, code = _jira_call("GET", "/issueLinkType")
+    return jsonify(data), code
+
+
+@app.route("/api/jira/link", methods=["POST"])
+def jira_link():
+    """Create an issue link between two Jira issues."""
+    body = request.json or {}
+    data, code = _jira_call("POST", "/issueLink", body=body)
+    return jsonify(data if data else {"ok": True}), code if code != 204 else 200
+
+
+# ── Enhanced test-case import with story-folder grouping ───────────────────────
+
+@app.route("/api/zephyr/import-testcases-grouped", methods=["POST"])
+def import_testcases_grouped():
+    """Create Jira Test issues from a CSV that contains a Story ID column.
+    For each unique Story ID:
+    1. Find or create a folder named after the Story ID under the selected cycle.
+    2. Create test cases (with steps) under that folder.
+    3. Link each test case to the Story via a Jira issue link.
+    4. Enrol tests into the cycle/folder.
+    """
+    file        = request.files.get("file")
+    cycle_id    = request.form.get("cycleId", "")
+    folder_id   = request.form.get("folderId", "")   # parent folder (optional)
+    project_key = request.form.get("projectKey", "")
+    version_id  = request.form.get("versionId", "-1")
+    link_type   = request.form.get("linkType", "Tests")
+
+    if not file or not project_key:
+        return jsonify({"error": "file and projectKey are required"}), 400
+
+    app_cfg  = ConfigReader().load()
+    mapping  = app_cfg.get("zephyr_tc_mapping", app_cfg.get("zephyr_mapping", {}))
+    col_story   = mapping.get("story_id", "Story ID")
+    col_summary = mapping.get("summary", "Summary")
+    col_desc    = mapping.get("description", "")
+    col_priority= mapping.get("priority", "")
+    col_labels  = mapping.get("labels", "")
+    col_type    = mapping.get("issue_type_name", "Test")
+    steps_fmt   = mapping.get("steps_format", "columns")
+    step_act    = mapping.get("step_action_prefix", "Step Action")
+    step_dat    = mapping.get("step_data_prefix",   "Step Data")
+    step_exp    = mapping.get("step_expected_prefix","Expected Result")
+
+    content = file.read().decode("utf-8-sig")
+    rows    = list(csv.DictReader(io.StringIO(content)))
+
+    # Fetch existing folders for this cycle so we can reuse them
+    existing_folders: dict[str, str] = {}
+    if cycle_id:
+        params = {"versionId": version_id}
+        if folder_id: params["folderId"] = folder_id
+        fd, _ = _z_call("GET", "/public/rest/api/1.0/folders",
+                         {"cycleId": cycle_id, "versionId": version_id})
+        for f in (fd if isinstance(fd, list) else fd.get("folders", [])):
+            existing_folders[f.get("name", "")] = str(f.get("id", ""))
+
+    # Group rows by Story ID
+    from collections import defaultdict
+    groups: dict[str, list] = defaultdict(list)
+    for row in rows:
+        story = row.get(col_story, "").strip()
+        groups[story].append(row)
+
+    results: dict = {"created": [], "errors": [], "skipped": [], "folders": {}}
+
+    def _extract_steps(row: dict) -> list[dict]:
+        steps = []
+        if steps_fmt == "columns":
+            i = 1
+            while True:
+                act = row.get(f"{step_act} {i}", row.get(f"{step_act}{i}", "")).strip()
+                if not act: break
+                steps.append({"step": act,
+                               "data":   row.get(f"{step_dat} {i}", row.get(f"{step_dat}{i}","")).strip(),
+                               "result": row.get(f"{step_exp} {i}", row.get(f"{step_exp}{i}","")).strip()})
+                i += 1
+        return steps
+
+    for story_id, story_rows in groups.items():
+        # Resolve folder: reuse if name exists, else create
+        target_folder_id = existing_folders.get(story_id, "")
+        if story_id and not target_folder_id and cycle_id:
+            fd_body = {"name": story_id, "cycleId": cycle_id,
+                       "projectId": project_key, "versionId": int(version_id) if str(version_id).lstrip("-").isdigit() else -1}
+            if folder_id: fd_body["clonedFolderId"] = folder_id
+            new_fd, fd_code = _z_call("POST", "/public/rest/api/1.0/folder", body=fd_body)
+            if fd_code in (200, 201):
+                target_folder_id = str(new_fd.get("id", ""))
+                existing_folders[story_id] = target_folder_id
+                results["folders"][story_id] = {"id": target_folder_id, "created": True}
+            else:
+                results["errors"].append({"story": story_id, "error": f"folder creation failed: {new_fd}"})
+                continue
+        elif story_id and target_folder_id:
+            results["folders"][story_id] = {"id": target_folder_id, "created": False}
+
+        for row in story_rows:
+            summary = row.get(col_summary, "").strip()
+            if not summary:
+                results["skipped"].append({"story": story_id, "reason": "empty summary"})
+                continue
+
+            fields: dict = {
+                "project":   {"key": project_key},
+                "issuetype": {"name": col_type or "Test"},
+                "summary":   summary,
+            }
+            if col_desc and row.get(col_desc):
+                fields["description"] = row[col_desc].strip()
+            if col_priority and row.get(col_priority):
+                fields["priority"] = {"name": row[col_priority].strip()}
+            if col_labels and row.get(col_labels):
+                fields["labels"] = [l.strip() for l in row[col_labels].split(",") if l.strip()]
+
+            issue_data, issue_code = _jira_call("POST", "/issue", body={"fields": fields})
+            if issue_code not in (200, 201):
+                results["errors"].append({"summary": summary, "error": issue_data})
+                continue
+
+            issue_key = issue_data.get("key", "")
+            issue_id  = issue_data.get("id",  "")
+            results["created"].append({"key": issue_key, "summary": summary,
+                                       "story": story_id, "folder": story_id})
+
+            # Add Zephyr steps
+            for step in _extract_steps(row):
+                if step.get("step"):
+                    _z_call("POST", f"/public/rest/api/1.0/teststep/{issue_id}",
+                            body={"step": step["step"], "data": step.get("data",""), "result": step.get("result","")})
+
+            # Link test case → story
+            if story_id:
+                link_body = {
+                    "type":          {"name": link_type},
+                    "inwardIssue":   {"key": issue_key},
+                    "outwardIssue":  {"key": story_id},
+                }
+                _jira_call("POST", "/issueLink", body=link_body)
+
+            # Enrol in cycle/folder
+            enrol = {"issues": [issue_key], "method": 1, "projectId": project_key,
+                     "versionId": int(version_id) if str(version_id).lstrip("-").isdigit() else -1,
+                     "assigneeType": "currentUser"}
+            use_folder = target_folder_id or folder_id
+            if use_folder:
+                enrol["cycleId"] = cycle_id
+                _z_call("POST", f"/public/rest/api/1.0/executions/add/folder/{use_folder}", body=enrol)
+            elif cycle_id:
+                _z_call("POST", f"/public/rest/api/1.0/executions/add/cycle/{cycle_id}", body=enrol)
+
+    return jsonify({"created": len(results["created"]), "errors": len(results["errors"]),
+                    "skipped": len(results["skipped"]), "folders": results["folders"],
+                    "details": results})
+
+
+# ── Raw ZAPI proxy (path + params + body, used by frontend for arbitrary calls) ─
+
+@app.route("/api/zephyr/proxy-raw", methods=["POST"])
+def zephyr_proxy_raw():
+    body   = request.json or {}
+    method = body.get("method", "GET").upper()
+    path   = body.get("path", "")
+    params = body.get("params") or {}
+    b      = body.get("body")
+    data, code = _z_call(method, path, params if params else None, b)
+    return jsonify(data), code
+
+
 # ── Field Mapping Config ──────────────────────────────────────────────────────
 
+@app.route("/api/zephyr/mapping/testcase", methods=["GET", "POST"])
+def zephyr_mapping_testcase():
+    """Load / save the Test Case Upload field mapping (stored as zephyr_tc_mapping)."""
+    reader = ConfigReader()
+    cfg    = reader.load()
+    if request.method == "POST":
+        cfg["zephyr_tc_mapping"] = request.json or {}
+        try:    reader.save(cfg)
+        except OSError as exc: return jsonify({"error": str(exc)}), 500
+        return jsonify({"ok": True})
+    return jsonify(cfg.get("zephyr_tc_mapping", {}))
+
+
+@app.route("/api/zephyr/mapping/results", methods=["GET", "POST"])
+def zephyr_mapping_results():
+    """Load / save the Results Upload field mapping (stored as zephyr_results_mapping)."""
+    reader = ConfigReader()
+    cfg    = reader.load()
+    if request.method == "POST":
+        cfg["zephyr_results_mapping"] = request.json or {}
+        try:    reader.save(cfg)
+        except OSError as exc: return jsonify({"error": str(exc)}), 500
+        return jsonify({"ok": True})
+    return jsonify(cfg.get("zephyr_results_mapping", {}))
+
+
+# Keep old combined endpoint for backward compat
 @app.route("/api/zephyr/mapping", methods=["GET", "POST"])
 def zephyr_mapping():
-    """Load / save the CSV-to-Jira field mapping configuration."""
     reader = ConfigReader()
     cfg    = reader.load()
     if request.method == "POST":
         body = request.json or {}
-        cfg["zephyr_mapping"] = body
-        try:
-            reader.save(cfg)
-        except OSError as exc:
-            return jsonify({"error": str(exc)}), 500
+        cfg["zephyr_tc_mapping"]      = {k: v for k, v in body.items() if not k.startswith("results_")}
+        cfg["zephyr_results_mapping"] = {k.replace("results_","",1): v for k, v in body.items() if k.startswith("results_")}
+        try:    reader.save(cfg)
+        except OSError as exc: return jsonify({"error": str(exc)}), 500
         return jsonify({"ok": True})
-    return jsonify(cfg.get("zephyr_mapping", {}))
+    tc  = cfg.get("zephyr_tc_mapping", {})
+    res = cfg.get("zephyr_results_mapping", {})
+    return jsonify({**tc, **{"results_" + k: v for k, v in res.items()}})
 
 
 @app.route("/api/zephyr/csv-preview", methods=["POST"])
@@ -1249,7 +1473,7 @@ def import_testcases():
 
     cfg        = _z_cfg()
     app_cfg    = ConfigReader().load()
-    mapping    = app_cfg.get("zephyr_mapping", {})
+    mapping    = app_cfg.get("zephyr_tc_mapping", app_cfg.get("zephyr_mapping", {}))
 
     content = file.read().decode("utf-8-sig")
     rows    = list(csv.DictReader(io.StringIO(content)))
@@ -1386,96 +1610,206 @@ def import_testcases():
 
 # ── Bulk Results Upload ───────────────────────────────────────────────────────
 
+def _update_exec_steps(exec_id: str, issue_id: int | str, status_id: int) -> list[dict]:
+    """Fetch all step results for an execution and update each to status_id.
+    Returns list of updated step info dicts."""
+    sr_data, sr_code = _z_call("GET", "/public/rest/api/1.0/stepresult/search",
+                                 {"executionId": exec_id, "issueId": str(issue_id)})
+    steps_updated: list[dict] = []
+    if sr_code != 200:
+        return steps_updated
+    step_results = sr_data.get("stepResults", [])
+    for sr in step_results:
+        sr_id   = sr.get("id", "")
+        step_id = sr.get("stepId", "")
+        if not sr_id:
+            continue
+        upd_body = {
+            "status":      {"id": status_id},
+            "issueId":     issue_id,
+            "stepId":      step_id,
+            "executionId": exec_id,
+        }
+        _, code = _z_call("PUT", f"/public/rest/api/1.0/stepresult/{sr_id}", body=upd_body)
+        steps_updated.append({
+            "stepResultId": sr_id,
+            "orderId":      sr.get("orderId", ""),
+            "updated":      code in (200, 201),
+            "status":       status_id,
+        })
+    return steps_updated
+
+
+def _attach_file_to_exec(exec_id: str, issue_id: int | str, cycle_id: str,
+                          project_id: str, version_id: str,
+                          file_bytes: bytes, filename: str) -> bool:
+    """Upload a file as an attachment to a Zephyr execution. Returns True on success."""
+    cfg = _z_cfg()
+    path_att = "/public/rest/api/1.0/attachment"
+    params   = {
+        "projectId":  project_id, "issueId": str(issue_id),
+        "versionId":  version_id, "cycleId": cycle_id,
+        "entityId":   exec_id,    "entityName": "EXECUTION",
+    }
+    tok = _zephyr_jwt(cfg.get("access_key",""), cfg.get("secret_key",""),
+                      cfg.get("account_id",""), "POST", path_att, params)
+    bb, ct = _multipart({}, "file", filename, file_bytes)
+    url_att = ZAPI_BASE + path_att + "?" + urllib.parse.urlencode(params)
+    hdrs_att = {"Authorization": f"JWT {tok}",
+                "zapiAccessKey": cfg.get("access_key",""), "Content-Type": ct}
+    try:
+        req = urllib.request.Request(url_att, data=bb, headers=hdrs_att, method="POST")
+        _urlopen(req, timeout=30).close()
+        return True
+    except Exception:
+        return False
+
+
 @app.route("/api/zephyr/bulk-results", methods=["POST"])
 def bulk_results_upload():
-    """Parse a results CSV and bulk-update Zephyr execution statuses."""
-    file      = request.files.get("file")
-    cycle_id  = request.form.get("cycleId", "")
-    folder_id = request.form.get("folderId", "")
+    """Parse a results CSV and update Zephyr execution statuses with:
+    - step-by-step updates (reads existing Zephyr steps and sets each to the status)
+    - per-row attachment from local file path column in CSV
+    - global attachment applied to every execution
+    - full processing of all rows (errors reported, not skipped silently)
+    """
+    file       = request.files.get("file")
+    cycle_id   = request.form.get("cycleId", "")
+    folder_id  = request.form.get("folderId", "")
     project_id = request.form.get("projectId", "")
     version_id = request.form.get("versionId", "-1")
-    attachment = request.files.get("attachment")
+    global_attachment = request.files.get("attachment")   # same file for all rows
+    bulk_status_override = request.form.get("bulkStatus", "")  # override CSV status
 
     if not file:
         return jsonify({"error": "No CSV file provided"}), 400
+    if not cycle_id:
+        return jsonify({"error": "cycleId is required"}), 400
 
     content = file.read().decode("utf-8-sig")
     reader  = csv.DictReader(io.StringIO(content))
     rows    = list(reader)
 
-    # Get all executions from the cycle/folder
-    params = {"projectId": project_id, "versionId": version_id, "size": "500"}
-    if folder_id:
-        path = f"/public/rest/api/1.0/executions/search/folder/{folder_id}"
-        params["cycleId"] = cycle_id
-    else:
-        path = f"/public/rest/api/1.0/executions/search/cycle/{cycle_id}"
-    exec_data, _ = _z_call("GET", path, params)
-    exec_list = exec_data.get("searchObjectList", [])
+    # Load results mapping config
+    app_cfg      = ConfigReader().load()
+    res_map      = app_cfg.get("zephyr_results_mapping", {})
+    col_key      = res_map.get("issue_key",     "Issue Key")
+    col_status   = res_map.get("status",        "Status")
+    col_comment  = res_map.get("comment",       "Comment")
+    col_attach   = res_map.get("attachment_path", "Attachment Path")
+    update_steps = res_map.get("update_steps",  True)
 
-    # Build lookup: issueKey → execution
+    # Load all executions from the cycle/folder once
+    exec_params: dict = {"versionId": version_id, "size": "500"}
+    if project_id: exec_params["projectId"] = project_id
+    if folder_id:
+        exec_path = f"/public/rest/api/1.0/executions/search/folder/{folder_id}"
+        exec_params["cycleId"] = cycle_id
+    else:
+        exec_path = f"/public/rest/api/1.0/executions/search/cycle/{cycle_id}"
+
+    exec_data, exec_code = _z_call("GET", exec_path, exec_params)
+    if exec_code != 200:
+        return jsonify({"error": f"Could not load executions: {exec_data}"}), exec_code
+
+    exec_list   = exec_data.get("searchObjectList", [])
     exec_by_key = {e.get("issueKey", ""): e for e in exec_list}
     exec_by_id  = {str(e.get("issueId", "")): e for e in exec_list}
 
     results: dict = {"success": [], "errors": [], "not_found": []}
 
-    for row in rows:
-        # Flexible column name matching
-        issue_key = (row.get("Issue Key") or row.get("Test ID") or row.get("Jira ID")
-                     or row.get("issueKey") or row.get("Key") or "").strip()
-        status_str = (row.get("Status") or row.get("Result") or row.get("result") or "pass").strip().lower()
-        comment    = (row.get("Comment") or row.get("Notes") or row.get("comment") or "").strip()
-        status_id  = STATUS_MAP.get(status_str, 1)
-
+    for row_num, row in enumerate(rows, start=2):   # row 2 = first data row (header = 1)
+        issue_key = (row.get(col_key) or row.get("Issue Key") or row.get("Test ID")
+                     or row.get("Jira ID") or row.get("issueKey") or "").strip()
         if not issue_key:
             continue
 
+        # Resolve status
+        if bulk_status_override:
+            status_id  = int(bulk_status_override)
+            status_str = {1:"pass",2:"fail",3:"wip",4:"blocked","-1":"unexecuted"}.get(int(bulk_status_override),"pass")
+        else:
+            status_str = (row.get(col_status) or row.get("Status") or row.get("Result") or "pass").strip().lower()
+            status_id  = STATUS_MAP.get(status_str, 1)
+
+        comment = (row.get(col_comment) or row.get("Comment") or "").strip()
+        row_attach_path = (row.get(col_attach) or row.get("Attachment Path") or "").strip()
+
+        # Find execution
         exec_obj = exec_by_key.get(issue_key) or exec_by_id.get(issue_key)
         if not exec_obj:
-            results["not_found"].append(issue_key)
+            results["not_found"].append({"row": row_num, "issue": issue_key,
+                                          "error": f"'{issue_key}' not found in cycle/folder"})
+            continue   # always process all rows
+
+        exec_id  = str(exec_obj.get("id") or exec_obj.get("executionId", ""))
+        issue_id = exec_obj.get("issueId", "")
+
+        # 1. Update execution status
+        update_body = {
+            "status":    {"id": status_id},
+            "id":         exec_id,
+            "issueId":    issue_id,
+            "cycleId":    cycle_id,
+            "versionId":  int(version_id) if str(version_id).lstrip("-").isdigit() else -1,
+            "comment":    comment,
+            # step flag: we handle steps manually below for full detail
+            "testStepStatusChangeFlag": False,
+        }
+        if project_id.isdigit():
+            update_body["projectId"] = int(project_id)
+
+        upd, upd_code = _z_call("PUT", f"/public/rest/api/1.0/execution/{exec_id}", body=update_body)
+        if upd_code not in (200, 201):
+            results["errors"].append({"row": row_num, "issue": issue_key,
+                                       "error": f"Execution update failed ({upd_code}): {upd}"})
             continue
 
-        exec_id  = exec_obj.get("id") or exec_obj.get("executionId", "")
-        issue_id = exec_obj.get("issueId")
-        update_body = {
-            "status": {"id": status_id},
-            "id": exec_id,
-            "projectId": int(project_id) if project_id.isdigit() else project_id,
-            "issueId": issue_id,
-            "cycleId": cycle_id,
-            "versionId": int(version_id) if str(version_id).lstrip("-").isdigit() else -1,
-            "comment": comment,
-            "testStepStatusChangeFlag": True,
-            "stepStatus": status_id,
+        row_result: dict = {
+            "row":       row_num,
+            "issue":     issue_key,
+            "status":    status_str,
+            "execId":    exec_id,
+            "steps":     [],
+            "attached":  [],
         }
-        upd, upd_code = _z_call("PUT", f"/public/rest/api/1.0/execution/{exec_id}", body=update_body)
-        if upd_code in (200, 201):
-            results["success"].append({"issue": issue_key, "status": status_str, "execId": exec_id})
-            # Attach the report file to this execution if provided
-            if attachment and exec_id:
-                attach_params = {
-                    "projectId": project_id, "issueId": str(issue_id),
-                    "versionId": version_id, "cycleId": cycle_id,
-                    "entityId": exec_id, "entityName": "EXECUTION",
-                }
-                attachment.seek(0)
-                ab = attachment.read()
-                cfg = _z_cfg()
-                path_att = "/public/rest/api/1.0/attachment"
-                tok = _zephyr_jwt(cfg.get("access_key",""), cfg.get("secret_key",""),
-                                   cfg.get("account_id",""), "POST", path_att, attach_params)
-                bb, ct = _multipart({}, "file", attachment.filename or "report.html", ab)
-                url_att = ZAPI_BASE + path_att + "?" + urllib.parse.urlencode(attach_params)
-                hdrs_att = {"Authorization": f"JWT {tok}", "zapiAccessKey": cfg.get("access_key",""), "Content-Type": ct}
-                try:
-                    req = urllib.request.Request(url_att, data=bb, headers=hdrs_att, method="POST")
-                    _urlopen(req, timeout=30).close()
-                except Exception:
-                    pass
-        else:
-            results["errors"].append({"issue": issue_key, "error": str(upd)})
 
-    return jsonify(results)
+        # 2. Update each Zephyr step individually
+        if update_steps:
+            steps_updated = _update_exec_steps(exec_id, issue_id, status_id)
+            row_result["steps"] = steps_updated
+
+        # 3. Global attachment (same file for every row)
+        if global_attachment:
+            global_attachment.seek(0)
+            fb = global_attachment.read()
+            fname = global_attachment.filename or "report.html"
+            ok = _attach_file_to_exec(exec_id, issue_id, cycle_id, project_id, version_id, fb, fname)
+            if ok: row_result["attached"].append(fname)
+
+        # 4. Per-row local file attachment from CSV path column
+        if row_attach_path:
+            p = Path(row_attach_path)
+            if p.exists() and p.is_file():
+                try:
+                    fb = p.read_bytes()
+                    ok = _attach_file_to_exec(exec_id, issue_id, cycle_id, project_id, version_id, fb, p.name)
+                    if ok: row_result["attached"].append(str(p.name))
+                    else:  row_result["attach_error"] = f"Upload failed for {p.name}"
+                except Exception as e:
+                    row_result["attach_error"] = str(e)
+            else:
+                row_result["attach_error"] = f"File not found: {row_attach_path}"
+
+        results["success"].append(row_result)
+
+    return jsonify({
+        "processed": len(rows),
+        "success":   len(results["success"]),
+        "errors":    len(results["errors"]),
+        "not_found": len(results["not_found"]),
+        "details":   results,
+    })
 
 
 # ── Native folder picker ───────────────────────────────────────────────────────

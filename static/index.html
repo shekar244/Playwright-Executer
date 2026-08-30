@@ -1112,13 +1112,14 @@
     <div id="cfgMapping" style="display:none;flex-direction:column;gap:20px;">
 
       <!-- Section 1: Test Case Upload -->
-      <div class="section-block" style="border-radius:var(--radius-lg);overflow:hidden;">
-        <div class="section-title" style="background:rgba(137,180,250,0.08);border-color:rgba(137,180,250,0.2);">
+      <div class="section-block" style="border-radius:var(--radius-lg);overflow:hidden;border-color:rgba(137,180,250,0.25);">
+        <div class="section-title" style="background:rgba(137,180,250,0.08);">
           <span class="stitle-icon">📋</span>Test Case Upload — Field Mapping
         </div>
         <div class="section-content" style="flex-direction:column;gap:10px;">
           <div class="hint">Map your CSV column headers to Jira/Zephyr fields. Case-sensitive. Leave blank to skip.</div>
           <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
+            <div class="field" style="grid-column:1/-1;"><label>Story ID column — groups tests into sub-folders &amp; links to story</label><input type="text" id="m_story_id" placeholder="e.g. Story ID, Epic Key" /></div>
             <div class="field"><label>Summary / Name * (required)</label><input type="text" id="m_summary" placeholder="e.g. Test Name" /></div>
             <div class="field"><label>Description</label><input type="text" id="m_description" placeholder="e.g. Description" /></div>
             <div class="field"><label>Priority</label><input type="text" id="m_priority" placeholder="e.g. Priority" /></div>
@@ -1148,36 +1149,40 @@
           <div id="m_single_col_fields" style="display:none;">
             <div class="field"><label>Steps column</label><input type="text" id="m_step_single" placeholder="Steps" /></div>
           </div>
+          <div class="action-row">
+            <button class="btn btn-sm" onclick="saveTcMapping()">💾 Save Test Case Mapping</button>
+            <button class="btn btn-sm" onclick="loadMappingConfig()">↺ Reload</button>
+            <span id="mappingSaveStatus" style="font-size:11px;color:var(--text-dim);margin-left:6px;"></span>
+          </div>
         </div>
       </div>
 
       <!-- Section 2: Results Upload -->
-      <div class="section-block" style="border-radius:var(--radius-lg);overflow:hidden;">
-        <div class="section-title" style="background:rgba(166,227,161,0.08);border-color:rgba(166,227,161,0.2);">
+      <div class="section-block" style="border-radius:var(--radius-lg);overflow:hidden;border-color:rgba(166,227,161,0.25);">
+        <div class="section-title" style="background:rgba(166,227,161,0.08);">
           <span class="stitle-icon">📊</span>Results Upload — Field Mapping
         </div>
         <div class="section-content" style="flex-direction:column;gap:10px;">
           <div class="hint">Map CSV columns used when bulk-uploading execution results.</div>
-          <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;">
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
             <div class="field"><label>Issue Key column</label><input type="text" id="rm_issue_key" placeholder="Issue Key" /></div>
             <div class="field"><label>Status column</label><input type="text" id="rm_status" placeholder="Status" /></div>
             <div class="field"><label>Comment column</label><input type="text" id="rm_comment" placeholder="Comment" /></div>
+            <div class="field"><label>Attachment Path column</label><input type="text" id="rm_attach_path" placeholder="Attachment Path" /></div>
           </div>
-          <div class="hint">Status values: <code>pass</code> <code>fail</code> <code>wip</code> <code>blocked</code> <code>unexecuted</code></div>
+          <div class="hint">Status: <code>pass</code> <code>fail</code> <code>wip</code> <code>blocked</code> · Attachment Path: local file path per test row</div>
           <div class="field"><label>Update test steps to match execution status?</label>
             <select id="rm_update_steps">
               <option value="true">Yes — set all steps to same status</option>
               <option value="false">No — leave steps unchanged</option>
             </select>
           </div>
+          <div class="action-row">
+            <button class="btn btn-sm" onclick="saveResultsMapping()">💾 Save Results Mapping</button>
+            <button class="btn btn-sm" onclick="loadMappingConfig()">↺ Reload</button>
+            <span id="mappingSaveStatus2" style="font-size:11px;color:var(--text-dim);margin-left:6px;"></span>
+          </div>
         </div>
-      </div>
-
-      <div class="action-row">
-        <button class="btn btn-run" onclick="saveMappingConfig()">💾 Save Mapping</button>
-        <button class="btn btn-sm" onclick="loadMappingConfig()">↺ Reload</button>
-        <span id="mappingSaveStatus" style="font-size:11px;color:var(--text-dim);margin-left:6px;"></span>
-        <span id="mappingSaveStatus2" style="display:none;"></span>
       </div>
     </div>
 
@@ -1455,49 +1460,60 @@
     <!-- Import Tests tab -->
     <div id="zpanel-import" class="zpanel" style="padding:16px;display:flex;flex-direction:column;gap:12px;overflow-y:auto;">
 
-      <!-- Mode toggle -->
-      <div style="display:flex;gap:6px;">
-        <button class="btn btn-sm import-mode-btn active" id="imode-keys" onclick="setImportMode('keys')">By Issue Keys</button>
-        <button class="btn btn-sm import-mode-btn" id="imode-create" onclick="setImportMode('create')">Create from CSV</button>
-        <a href="#" onclick="switchTab('tools');toggleConfigSection('cfgMapping','cfgMappingArrow');return false;"
-           style="margin-left:auto;font-size:11px;color:var(--accent);text-decoration:none;">⚙ Field Mapping</a>
+      <!-- Mode tabs -->
+      <div style="display:flex;gap:4px;flex-wrap:wrap;">
+        <button class="btn btn-sm import-mode-btn active" id="imode-keys" onclick="setImportMode('keys')">📋 By Issue Keys</button>
+        <button class="btn btn-sm import-mode-btn" id="imode-create" onclick="setImportMode('create')">✨ Create from CSV</button>
+        <button class="btn btn-sm import-mode-btn" id="imode-filter" onclick="setImportMode('filter')">🔍 From Jira Filter</button>
+        <a href="#" onclick="switchTab('tools');switchCfgTab('mapping');return false;"
+           style="margin-left:auto;font-size:11px;color:var(--accent);text-decoration:none;align-self:center;">⚙ Mapping</a>
       </div>
 
-      <!-- Mode: By Issue Keys -->
-      <div id="import-mode-keys">
-        <div style="font-size:12px;color:var(--text-muted);line-height:1.6;margin-bottom:8px;">
-          Add existing Jira test cases to the selected cycle/folder by issue key.
-        </div>
+      <!-- ── Mode: By Issue Keys ── -->
+      <div id="import-mode-keys" style="display:flex;flex-direction:column;gap:10px;">
+        <div class="hint" style="line-height:1.5;">Paste Jira issue keys to add to the selected cycle/folder. Preview loads before upload.</div>
         <div class="field">
           <label>Jira Issue Keys (one per line)</label>
-          <textarea id="z_issue_keys" placeholder="PROJ-1&#10;PROJ-2&#10;PROJ-3"
-                    style="height:90px;background:var(--input-bg);border:1px solid var(--input-border);
+          <textarea id="z_issue_keys" placeholder="PROJ-1&#10;PROJ-2&#10;PROJ-3" oninput="onIssueKeysChange()"
+                    style="height:80px;background:var(--input-bg);border:1px solid var(--input-border);
                            border-radius:var(--radius);color:var(--text);padding:8px 10px;
                            font-family:'JetBrains Mono',monospace;font-size:11px;resize:vertical;width:100%;outline:none;"></textarea>
         </div>
-        <div style="text-align:center;color:var(--text-dim);font-size:11px;margin:4px 0;">— or upload CSV with Issue Key column —</div>
-        <div class="drop-zone" id="zImportDropZone" onclick="document.getElementById('zImportFile').click()"
+        <div style="text-align:center;color:var(--text-dim);font-size:11px;">— or upload CSV —</div>
+        <div class="drop-zone" style="padding:10px;" onclick="document.getElementById('zImportFile').click()"
              ondragover="event.preventDefault();this.classList.add('drag-over')"
              ondragleave="this.classList.remove('drag-over')"
-             ondrop="onZDrop(event,'zImportFile','zImportFileInfo')">
-          <input type="file" id="zImportFile" accept=".csv" onchange="onZFileSelect(event,'zImportFileInfo')" />
-          <span class="drop-zone-icon" style="font-size:18px;">📄</span>
-          <div style="font-size:12px;">CSV with <code>Issue Key</code> column</div>
+             ondrop="onZDrop(event,'zImportFile','zImportFileInfo',onImportCsvLoaded)">
+          <input type="file" id="zImportFile" accept=".csv" onchange="onZFileSelect(event,'zImportFileInfo',onImportCsvLoaded)" />
+          <div style="font-size:12px;">📄 CSV with Issue Key column</div>
         </div>
         <div class="z-file-info" id="zImportFileInfo">
           <span>📄</span><span id="zImportFileName">—</span>
-          <button class="btn btn-sm" style="margin-left:auto;color:var(--red);" onclick="clearZFile('zImportFile','zImportFileInfo')">✕</button>
+          <button class="btn btn-sm" style="margin-left:auto;color:var(--red);" onclick="clearZFile('zImportFile','zImportFileInfo');_importKeys=[];renderImportPreview()">✕</button>
         </div>
-        <button class="btn btn-run" style="margin-top:8px;" id="zAddTestsBtn" onclick="zAddTests()">Add Tests to Cycle</button>
+        <!-- Keys preview table -->
+        <div id="zKeysPreview" style="display:none;flex-direction:column;gap:6px;">
+          <div style="display:flex;align-items:center;gap:8px;">
+            <span style="font-size:11px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.07em;">Selected Tests</span>
+            <span id="zKeysCount" style="font-size:11px;color:var(--accent);font-weight:700;"></span>
+          </div>
+          <div style="overflow-y:auto;max-height:180px;border:1px solid var(--border);border-radius:var(--radius);">
+            <table class="history-tbl" style="font-size:11px;" id="zKeysTable">
+              <thead><tr><th>#</th><th>Issue Key</th><th>Summary</th></tr></thead>
+              <tbody id="zKeysTbody"></tbody>
+            </table>
+          </div>
+        </div>
+        <button class="btn btn-run" id="zAddTestsBtn" onclick="zAddTests()" disabled>Add Tests to Cycle</button>
       </div>
 
-      <!-- Mode: Create from CSV -->
+      <!-- ── Mode: Create from CSV (Story-folder grouping) ── -->
       <div id="import-mode-create" style="display:none;flex-direction:column;gap:10px;">
-        <div style="font-size:12px;color:var(--text-muted);line-height:1.6;">
-          Create new Jira Test issues from CSV using your <b>Field Mapping</b> config, then add them to the selected cycle. Steps are created automatically.
+        <div class="hint" style="line-height:1.5;">
+          CSV with a <strong>Story ID</strong> column creates one sub-folder per story,
+          links test cases to the story, and adds them to the selected cycle.
+          Existing folders are reused. Uses <a href="#" onclick="switchTab('tools');switchCfgTab('mapping');return false;" style="color:var(--accent);">Field Mapping</a> config.
         </div>
-
-        <!-- CSV upload -->
         <div class="drop-zone" id="zCreateDropZone" onclick="document.getElementById('zCreateFile').click()"
              ondragover="event.preventDefault();this.classList.add('drag-over')"
              ondragleave="this.classList.remove('drag-over')"
@@ -1505,99 +1521,241 @@
           <input type="file" id="zCreateFile" accept=".csv" onchange="onZCreateFileSelect(event)" />
           <span class="drop-zone-icon" style="font-size:20px;">📋</span>
           <div style="font-weight:600;font-size:12px;">Upload Test Cases CSV</div>
-          <div style="font-size:10px;opacity:0.7;margin-top:2px;">Headers will be matched to your field mapping</div>
+          <div style="font-size:10px;opacity:0.7;margin-top:2px;">Story ID, Test Name, Steps columns → matched by Field Mapping</div>
         </div>
         <div class="z-file-info" id="zCreateFileInfo">
           <span>📋</span><span id="zCreateFileName">—</span>
           <button class="btn btn-sm" style="margin-left:auto;color:var(--red);" onclick="clearZCreateFile()">✕</button>
         </div>
-
-        <!-- Mapping preview: shown after CSV loaded -->
+        <!-- Story grouping preview -->
         <div id="zMappingPreview" style="display:none;flex-direction:column;gap:8px;">
-          <div style="font-size:11px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.07em;">
-            Mapping Preview
-            <span id="zMappingStatus" style="font-weight:400;color:var(--text-dim);text-transform:none;letter-spacing:0;margin-left:8px;"></span>
+          <div style="display:flex;align-items:center;gap:8px;">
+            <span style="font-size:11px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.07em;">Preview</span>
+            <span id="zMappingStatus" style="font-size:11px;color:var(--text-dim);"></span>
           </div>
-          <div style="overflow-x:auto;max-height:180px;overflow-y:auto;border:1px solid var(--border);border-radius:var(--radius);">
+          <div style="overflow-x:auto;max-height:200px;overflow-y:auto;border:1px solid var(--border);border-radius:var(--radius);">
             <table class="history-tbl" id="zPreviewTable" style="font-size:11px;">
               <thead><tr id="zPreviewHead"></tr></thead>
               <tbody id="zPreviewBody"></tbody>
             </table>
           </div>
-          <div style="font-size:11px;color:var(--text-dim);">
-            <span style="display:inline-block;width:10px;height:10px;background:rgba(137,180,250,0.3);border:1px solid var(--accent);border-radius:2px;margin-right:4px;"></span>Mapped field
-            <span style="display:inline-block;width:10px;height:10px;background:rgba(249,226,175,0.2);border:1px solid var(--yellow);border-radius:2px;margin:0 4px 0 10px;"></span>Step field
-            <span style="display:inline-block;width:10px;height:10px;background:var(--surface);border:1px solid var(--border);border-radius:2px;margin:0 4px 0 10px;"></span>Unmapped
+          <div style="font-size:10px;color:var(--text-dim);">
+            <span style="color:var(--purple);">■</span> Story ID (becomes folder)
+            <span style="color:var(--accent);margin-left:8px;">■</span> Mapped field
+            <span style="color:var(--yellow);margin-left:8px;">■</span> Step column
           </div>
         </div>
-
-        <div class="field">
-          <label>Assignee</label>
-          <select id="z_create_assignee">
-            <option value="currentUser">Current User</option>
-            <option value="unassigned">Unassigned</option>
-          </select>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
+          <div class="field">
+            <label>Jira Link Type (test→story)</label>
+            <input type="text" id="z_link_type" placeholder="Tests" value="Tests" />
+          </div>
+          <div class="field">
+            <label>Assignee</label>
+            <select id="z_create_assignee">
+              <option value="currentUser">Current User</option>
+              <option value="unassigned">Unassigned</option>
+            </select>
+          </div>
         </div>
-        <button class="btn btn-run" id="zCreateTestsBtn" onclick="zCreateTestcases()" disabled>
-          Create Test Cases &amp; Add to Cycle
+        <button class="btn btn-run" id="zCreateTestsBtn" onclick="zCreateTestcasesGrouped()" disabled>
+          Create Test Cases by Story → Add to Cycle
         </button>
+      </div>
+
+      <!-- ── Mode: From Jira Filter ── -->
+      <div id="import-mode-filter" style="display:none;flex-direction:column;gap:10px;">
+        <div class="hint" style="line-height:1.5;">Fetch Jira issues by Filter ID or JQL, preview the list, then add selected tests to the cycle.</div>
+        <div style="display:flex;gap:6px;">
+          <button class="btn btn-sm import-mode-btn active" id="fsub-filter" onclick="setFilterSubMode('filter')">Filter ID</button>
+          <button class="btn btn-sm import-mode-btn" id="fsub-jql" onclick="setFilterSubMode('jql')">JQL</button>
+        </div>
+        <div id="filter-sub-filter">
+          <div class="field">
+            <label>Jira Saved Filter ID</label>
+            <input type="text" id="z_filter_id" placeholder="e.g. 12345" style="font-family:'JetBrains Mono',monospace;" />
+          </div>
+        </div>
+        <div id="filter-sub-jql" style="display:none;">
+          <div class="field">
+            <label>JQL Query</label>
+            <textarea id="z_jql" placeholder='project = "BBX" AND issuetype = Test AND status = Open'
+                      style="height:60px;background:var(--input-bg);border:1px solid var(--input-border);
+                             border-radius:var(--radius);color:var(--text);padding:8px 10px;
+                             font-family:'JetBrains Mono',monospace;font-size:11px;resize:vertical;width:100%;outline:none;"></textarea>
+          </div>
+        </div>
+        <div style="display:flex;gap:6px;align-items:center;">
+          <button class="btn btn-sm" onclick="zFetchFilterIssues()">⟳ Fetch Issues</button>
+          <span id="zFilterStatus" style="font-size:11px;color:var(--text-dim);"></span>
+          <div style="margin-left:auto;display:flex;align-items:center;gap:6px;">
+            <label style="font-size:11px;color:var(--text-muted);">Max results</label>
+            <input type="number" id="z_filter_max" value="100" min="1" max="500" style="width:65px;font-size:11px;" />
+          </div>
+        </div>
+        <!-- Filter results table -->
+        <div id="zFilterPreview" style="display:none;flex-direction:column;gap:6px;">
+          <div style="display:flex;align-items:center;gap:8px;">
+            <input type="checkbox" id="zFilterSelectAll" onchange="zFilterToggleAll(this)" />
+            <span style="font-size:11px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.07em;">Issues Found</span>
+            <span id="zFilterCount" style="font-size:11px;color:var(--accent);font-weight:700;"></span>
+          </div>
+          <div style="overflow-x:auto;max-height:220px;overflow-y:auto;border:1px solid var(--border);border-radius:var(--radius);">
+            <table class="history-tbl" id="zFilterTable" style="font-size:11px;">
+              <thead style="position:sticky;top:0;z-index:2;">
+                <tr>
+                  <th style="width:28px;"></th>
+                  <th>Key</th><th>Summary</th><th>Type</th><th>Status</th>
+                </tr>
+              </thead>
+              <tbody id="zFilterTbody"></tbody>
+            </table>
+          </div>
+        </div>
+        <button class="btn btn-run" id="zAddFilterBtn" onclick="zAddFilterTests()" disabled>Add Selected to Cycle</button>
       </div>
 
     </div>
 
     <!-- Upload Results tab -->
     <div id="zpanel-results" class="zpanel" style="display:none;padding:16px;flex-direction:column;gap:12px;overflow-y:auto;">
-      <div style="font-size:12px;color:var(--text-muted);line-height:1.6;">
-        Upload a CSV to bulk-update execution statuses. Columns: <code>Issue Key</code>, <code>Status</code> (pass/fail/wip/blocked), <code>Comment</code> (optional).
+
+      <!-- Context breadcrumb -->
+      <div style="background:var(--input-bg);border:1px solid var(--border);border-radius:var(--radius);padding:7px 12px;font-size:11px;" id="zResultsContext">
+        Select Version → Cycle → Folder on the left to set the target
       </div>
-      <div class="drop-zone" id="zResultsDropZone" onclick="document.getElementById('zResultsFile').click()"
-           ondragover="event.preventDefault();this.classList.add('drag-over')"
-           ondragleave="this.classList.remove('drag-over')"
-           ondrop="onZDrop(event,'zResultsFile','zResultsFileInfo')">
-        <input type="file" id="zResultsFile" accept=".csv" onchange="onZFileSelect(event,'zResultsFileInfo')" />
-        <span class="drop-zone-icon" style="font-size:20px;">📊</span>
-        <div style="font-weight:600;font-size:12px;">Results CSV (Issue Key, Status, Comment)</div>
+
+      <!-- Mode toggle -->
+      <div style="display:flex;gap:6px;">
+        <button class="btn btn-sm import-mode-btn active" id="rmode-csv" onclick="setResultsMode('csv')">📊 Bulk CSV Upload</button>
+        <button class="btn btn-sm import-mode-btn" id="rmode-single" onclick="setResultsMode('single')">🔍 Individual Test</button>
       </div>
-      <div class="z-file-info" id="zResultsFileInfo">
-        <span>📄</span><span id="zResultsFileName">—</span>
-        <button class="btn btn-sm" style="margin-left:auto;color:var(--red);" onclick="clearZFile('zResultsFile','zResultsFileInfo')">✕</button>
-      </div>
-      <div class="field">
-        <label>Attach HTML/Document to each execution (optional)</label>
-        <div class="drop-zone" onclick="document.getElementById('zAttachFile').click()"
-             style="padding:12px;"
+
+      <!-- ── CSV mode ── -->
+      <div id="results-mode-csv" style="display:flex;flex-direction:column;gap:10px;">
+        <div class="hint" style="line-height:1.5;">
+          CSV columns (from <a href="#" onclick="switchTab('tools');switchCfgTab('mapping');return false;" style="color:var(--accent);">Results Mapping config</a>):
+          <strong>Test ID / Issue Key</strong>, <strong>Status</strong>, <strong>Comment</strong>
+          + optional <strong>Attachment Path</strong> (absolute path to file for that test row).
+        </div>
+
+        <!-- CSV drop zone -->
+        <div class="drop-zone" id="zResultsDropZone"
+             onclick="document.getElementById('zResultsFile').click()"
              ondragover="event.preventDefault();this.classList.add('drag-over')"
              ondragleave="this.classList.remove('drag-over')"
-             ondrop="onZDrop(event,'zAttachFile','zAttachFileInfo')">
-          <input type="file" id="zAttachFile" accept=".html,.pdf,.txt,.png,.jpg,.zip,.doc,.docx"
-                 onchange="onZFileSelect(event,'zAttachFileInfo')" />
-          <div style="font-size:12px;">📎 Drop report/document here</div>
+             ondrop="onZDrop(event,'zResultsFile','zResultsFileInfo',onResultsCsvSelected)">
+          <input type="file" id="zResultsFile" accept=".csv" onchange="onZFileSelect(event,'zResultsFileInfo',onResultsCsvSelected)" />
+          <span class="drop-zone-icon" style="font-size:20px;">📊</span>
+          <div style="font-weight:600;font-size:12px;">Drop Results CSV or click to browse</div>
+          <div style="font-size:10px;opacity:0.7;margin-top:2px;">Test ID, Status, Comment [, Attachment Path]</div>
         </div>
-        <div class="z-file-info" id="zAttachFileInfo">
-          <span>📎</span><span id="zAttachFileName">—</span>
-          <button class="btn btn-sm" style="margin-left:auto;color:var(--red);" onclick="clearZFile('zAttachFile','zAttachFileInfo')">✕</button>
+        <div class="z-file-info" id="zResultsFileInfo">
+          <span>📄</span><span id="zResultsFileName">—</span>
+          <button class="btn btn-sm" style="margin-left:auto;color:var(--red);" onclick="clearZResultsCsv()">✕</button>
         </div>
-      </div>
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
+
+        <!-- CSV preview table -->
+        <div id="zResultsPreview" style="display:none;flex-direction:column;gap:6px;">
+          <div style="display:flex;align-items:center;gap:8px;">
+            <span style="font-size:11px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.07em;">Preview</span>
+            <span id="zResultsPreviewInfo" style="font-size:11px;color:var(--text-dim);"></span>
+            <div style="margin-left:auto;display:flex;gap:6px;">
+              <select id="z_bulk_status" style="font-size:11px;width:140px;">
+                <option value="">Use CSV status values</option>
+                <option value="1">Override → Pass All</option>
+                <option value="2">Override → Fail All</option>
+                <option value="3">Override → WIP All</option>
+                <option value="4">Override → Block All</option>
+              </select>
+              <select id="z_step_flag" style="font-size:11px;width:130px;">
+                <option value="true">Update steps ✓</option>
+                <option value="false">Keep steps as-is</option>
+              </select>
+            </div>
+          </div>
+          <div style="overflow-x:auto;max-height:240px;overflow-y:auto;border:1px solid var(--border);border-radius:var(--radius);">
+            <table class="history-tbl" id="zResultsCsvTable" style="font-size:11px;">
+              <thead style="position:sticky;top:0;z-index:2;"><tr id="zResultsCsvHead"></tr></thead>
+              <tbody id="zResultsCsvBody"></tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- Global attachment (same file attached to every execution) -->
         <div class="field">
-          <label>Bulk Status Override</label>
-          <select id="z_bulk_status">
-            <option value="">Use CSV values</option>
-            <option value="1">Pass All</option>
-            <option value="2">Fail All</option>
-            <option value="3">WIP All</option>
-            <option value="4">Block All</option>
-          </select>
+          <label>Global Attachment — attach same file to every test execution (optional)</label>
+          <div class="drop-zone" style="padding:10px;"
+               onclick="document.getElementById('zAttachFile').click()"
+               ondragover="event.preventDefault();this.classList.add('drag-over')"
+               ondragleave="this.classList.remove('drag-over')"
+               ondrop="onZDrop(event,'zAttachFile','zAttachFileInfo',null)">
+            <input type="file" id="zAttachFile" accept=".html,.pdf,.txt,.png,.jpg,.zip,.doc,.docx"
+                   onchange="onZFileSelect(event,'zAttachFileInfo',null)" />
+            <div style="font-size:12px;">📎 Drop report/document here</div>
+          </div>
+          <div class="z-file-info" id="zAttachFileInfo">
+            <span>📎</span><span id="zAttachFileName">—</span>
+            <button class="btn btn-sm" style="margin-left:auto;color:var(--red);" onclick="clearZFile('zAttachFile','zAttachFileInfo')">✕</button>
+          </div>
+        </div>
+
+        <button class="btn btn-run" id="zUploadResultsBtn" onclick="zUploadResults()" disabled>
+          Upload Results to Cycle
+        </button>
+      </div>
+
+      <!-- ── Individual test mode ── -->
+      <div id="results-mode-single" style="display:none;flex-direction:column;gap:10px;">
+        <div class="hint">Update a single test execution by its Jira Issue Key.</div>
+        <div class="field">
+          <label>Test ID / Issue Key *</label>
+          <input type="text" id="z_single_key" placeholder="e.g. PROJ-123" style="font-family:'JetBrains Mono',monospace;font-weight:600;" />
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
+          <div class="field">
+            <label>Status *</label>
+            <select id="z_single_status">
+              <option value="1">✓ Pass</option>
+              <option value="2">✗ Fail</option>
+              <option value="3">⋯ WIP</option>
+              <option value="4">⊘ Blocked</option>
+              <option value="-1">— Unexecuted</option>
+            </select>
+          </div>
+          <div class="field">
+            <label>Update Test Steps</label>
+            <select id="z_single_steps">
+              <option value="true">Yes — match status</option>
+              <option value="false">No</option>
+            </select>
+          </div>
         </div>
         <div class="field">
-          <label>Update Test Steps</label>
-          <select id="z_step_flag">
-            <option value="true">Yes — match execution status</option>
-            <option value="false">No</option>
-          </select>
+          <label>Comment</label>
+          <textarea id="z_single_comment" placeholder="Optional comment…"
+                    style="height:60px;background:var(--input-bg);border:1px solid var(--input-border);
+                           border-radius:var(--radius);color:var(--text);padding:8px 10px;
+                           font-size:12px;resize:vertical;width:100%;outline:none;"></textarea>
         </div>
+        <div class="field">
+          <label>Attachment (optional)</label>
+          <div class="drop-zone" style="padding:10px;"
+               onclick="document.getElementById('zSingleAttach').click()"
+               ondragover="event.preventDefault();this.classList.add('drag-over')"
+               ondragleave="this.classList.remove('drag-over')"
+               ondrop="onZDrop(event,'zSingleAttach','zSingleAttachInfo',null)">
+            <input type="file" id="zSingleAttach" onchange="onZFileSelect(event,'zSingleAttachInfo',null)" />
+            <div style="font-size:12px;">📎 Drop or click to browse</div>
+          </div>
+          <div class="z-file-info" id="zSingleAttachInfo">
+            <span>📎</span><span id="zSingleAttachName">—</span>
+            <button class="btn btn-sm" style="margin-left:auto;color:var(--red);" onclick="clearZFile('zSingleAttach','zSingleAttachInfo')">✕</button>
+          </div>
+        </div>
+        <button class="btn btn-run" onclick="zUploadSingle()">Upload This Result</button>
       </div>
-      <button class="btn btn-run" id="zUploadResultsBtn" onclick="zUploadResults()">Upload Results</button>
+
     </div>
 
     <!-- Executions tab -->
@@ -2931,35 +3089,50 @@ function onMappingStepsFormatChange() {
 }
 
 async function loadMappingConfig() {
-  const m = await fetch('/api/zephyr/mapping').then(r => r.json()).catch(() => ({}));
-  _csvMapping = m;
+  const [tc, res] = await Promise.all([
+    fetch('/api/zephyr/mapping/testcase').then(r => r.json()).catch(() => ({})),
+    fetch('/api/zephyr/mapping/results').then(r => r.json()).catch(() => ({})),
+  ]);
+  _csvMapping = { ...tc, results: res };
+
   const s = (id, val) => { const el = document.getElementById(id); if (el) el.value = val || ''; };
-  s('m_summary',       m.summary || '');
-  s('m_description',   m.description || '');
-  s('m_priority',      m.priority || '');
-  s('m_labels',        m.labels || '');
-  s('m_components',    m.components || '');
-  s('m_issue_type',    m.issue_type_name || 'Test');
-  s('m_step_action',   m.step_action_prefix || 'Step Action');
-  s('m_step_data',     m.step_data_prefix   || 'Step Data');
-  s('m_step_expected', m.step_expected_prefix || 'Expected Result');
-  s('m_row_step',      m.row_step || 'Step');
-  s('m_row_data',      m.row_data || 'Data');
-  s('m_row_expected',  m.row_expected || 'Expected');
-  s('m_step_single',   m.step_single_column || 'Steps');
-  // Results mapping
-  s('rm_issue_key', m.results_issue_key || 'Issue Key');
-  s('rm_status',    m.results_status    || 'Status');
-  s('rm_comment',   m.results_comment   || 'Comment');
-  const stepsEl = document.getElementById('rm_update_steps');
-  if (stepsEl) stepsEl.value = m.results_update_steps !== false ? 'true' : 'false';
+
+  // Test case mapping
+  s('m_story_id',      tc.story_id            || '');
+  s('m_summary',       tc.summary             || '');
+  s('m_description',   tc.description         || '');
+  s('m_priority',      tc.priority            || '');
+  s('m_labels',        tc.labels              || '');
+  s('m_components',    tc.components          || '');
+  s('m_issue_type',    tc.issue_type_name     || 'Test');
+  s('m_step_action',   tc.step_action_prefix  || 'Step Action');
+  s('m_step_data',     tc.step_data_prefix    || 'Step Data');
+  s('m_step_expected', tc.step_expected_prefix|| 'Expected Result');
+  s('m_row_step',      tc.row_step            || 'Step');
+  s('m_row_data',      tc.row_data            || 'Data');
+  s('m_row_expected',  tc.row_expected        || 'Expected');
+  s('m_step_single',   tc.step_single_column  || 'Steps');
   const fmtEl = document.getElementById('m_steps_format');
-  if (fmtEl) { fmtEl.value = m.steps_format || 'columns'; onMappingStepsFormatChange(); }
+  if (fmtEl) { fmtEl.value = tc.steps_format || 'columns'; onMappingStepsFormatChange(); }
+
+  // Results mapping (stored separately)
+  s('rm_issue_key',    res.issue_key       || 'Issue Key');
+  s('rm_status',       res.status         || 'Status');
+  s('rm_comment',      res.comment        || 'Comment');
+  s('rm_attach_path',  res.attachment_path|| 'Attachment Path');
+  const stepsEl = document.getElementById('rm_update_steps');
+  if (stepsEl) stepsEl.value = res.update_steps !== false ? 'true' : 'false';
 }
 
-async function saveMappingConfig() {
+function _showSaveStatus(id, ok) {
+  const el = document.getElementById(id);
+  if (el) { el.textContent = ok ? '✓ Saved' : '✗ Failed'; setTimeout(() => { if (el) el.textContent = ''; }, 3000); }
+}
+
+async function saveTcMapping() {
   const v = id => { const el = document.getElementById(id); return el ? el.value.trim() : ''; };
   const mapping = {
+    story_id:             v('m_story_id'),
     summary:              v('m_summary')       || 'Summary',
     description:          v('m_description'),
     priority:             v('m_priority'),
@@ -2970,26 +3143,39 @@ async function saveMappingConfig() {
     step_action_prefix:   v('m_step_action')   || 'Step Action',
     step_data_prefix:     v('m_step_data')     || 'Step Data',
     step_expected_prefix: v('m_step_expected') || 'Expected Result',
-    row_step:             v('m_row_step')       || 'Step',
-    row_data:             v('m_row_data')       || 'Data',
-    row_expected:         v('m_row_expected')   || 'Expected',
-    step_single_column:   v('m_step_single')   || 'Steps',
-    // Results mapping
-    results_issue_key: v('rm_issue_key') || 'Issue Key',
-    results_status:    v('rm_status')    || 'Status',
-    results_comment:   v('rm_comment')   || 'Comment',
+    row_step:             v('m_row_step')      || 'Step',
+    row_data:             v('m_row_data')      || 'Data',
+    row_expected:         v('m_row_expected')  || 'Expected',
+    step_single_column:   v('m_step_single')  || 'Steps',
   };
-  mapping.results_update_steps = document.getElementById('rm_update_steps')?.value === 'true';
-  _csvMapping = mapping;
-  const res = await fetch('/api/zephyr/mapping', {
+  _csvMapping = { ..._csvMapping, ...mapping };
+  const res = await fetch('/api/zephyr/mapping/testcase', {
     method: 'POST', headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(mapping),
   });
-  const ok = res.ok;
-  ['mappingSaveStatus','mappingSaveStatus2'].forEach(id => {
-    const el = document.getElementById(id);
-    if (el) { el.textContent = ok ? '✓ Saved' : '✗ Failed'; setTimeout(() => { if(el) el.textContent=''; }, 3000); }
+  _showSaveStatus('mappingSaveStatus', res.ok);
+}
+
+async function saveResultsMapping() {
+  const v = id => { const el = document.getElementById(id); return el ? el.value.trim() : ''; };
+  const mapping = {
+    issue_key:       v('rm_issue_key')    || 'Issue Key',
+    status:          v('rm_status')       || 'Status',
+    comment:         v('rm_comment')      || 'Comment',
+    attachment_path: v('rm_attach_path')  || 'Attachment Path',
+    update_steps:    document.getElementById('rm_update_steps')?.value === 'true',
+  };
+  const res = await fetch('/api/zephyr/mapping/results', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(mapping),
   });
+  _showSaveStatus('mappingSaveStatus2', res.ok);
+}
+
+// Keep backward-compat alias
+async function saveMappingConfig() {
+  await saveTcMapping();
+  await saveResultsMapping();
 }
 
 // ── Import mode toggle ────────────────────────────────────────────────────────
@@ -3349,28 +3535,72 @@ function selectZephyrFolder(id, name) {
   zLog(`✓  Selected folder: ${name} (id: ${id})`, 'passed');
 }
 
+async function createZephyrCycle() {
+  if (!_zProject) { zLog('✗  No project configured — set Project Key in Config.', 'failed'); return; }
+  const name = document.getElementById('z_new_cycle').value.trim();
+  if (!name) { zLog('✗  Enter a cycle name.', 'failed'); return; }
+
+  const versionId = parseInt(_zVersionId) || -1;
+  const body = {
+    name,
+    projectId: _zProjectId ? parseInt(_zProjectId) : _zProject,
+    versionId,
+    description: '',
+  };
+
+  zLog(`⟳  Creating cycle "${name}"…`, 'info');
+  const res = await fetch('/api/zephyr/cycle', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) { zLog('✗  Create cycle failed: ' + JSON.stringify(data.error || data), 'failed'); return; }
+
+  zLog(`✓  Cycle created: ${data.name || name} (id: ${data.id || '?'})`, 'passed');
+  document.getElementById('z_new_cycle').value = '';
+  // Reload cycles so the new one appears in the dropdown
+  await loadZephyrCycles();
+  // Auto-select the new cycle
+  if (data.id) {
+    const sel = document.getElementById('z_cycle');
+    if (sel) { sel.value = String(data.id); onZephyrCycleChange(); }
+  }
+}
+
 async function createZephyrFolder() {
-  if (!_zProject) { zLog('✗  Select a project first.', 'failed'); return; }
+  if (!_zProject) { zLog('✗  No project configured — set Project Key in Config.', 'failed'); return; }
+  if (!_zCycleId)  { zLog('✗  Select a test cycle first (Step 3).', 'failed'); return; }
   const name = document.getElementById('z_new_folder').value.trim();
   if (!name) { zLog('✗  Enter a folder name.', 'failed'); return; }
 
-  const body = { name, projectKey: _zProject, folderType: 'TEST_CASE' };
-  if (_zFolderId) body.parentId = parseInt(_zFolderId);
+  const versionId = parseInt(_zVersionId) || -1;
+  const body = {
+    name,
+    cycleId:   _zCycleId,
+    projectId: _zProjectId ? parseInt(_zProjectId) : _zProject,
+    versionId,
+    description: '',
+  };
+  // Optional: nest under selected folder
+  if (_zFolderId) body.clonedFolderId = String(_zFolderId);
 
   zLog(`⟳  Creating folder "${name}"…`, 'info');
-  const res = await fetch('/api/zephyr/proxy', {
+  const res = await fetch('/api/zephyr/folder', {
     method: 'POST', headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ endpoint: 'folders', method: 'POST', body }),
+    body: JSON.stringify(body),
   });
-  if (!res.ok) { const e = await res.json(); zLog('✗  ' + JSON.stringify(e.error || e), 'failed'); return; }
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) { zLog('✗  Create folder failed: ' + JSON.stringify(data.error || data), 'failed'); return; }
 
-  const created = await res.json();
-  zLog(`✓  Folder created: ${created.name} (id: ${created.id})`, 'passed');
+  zLog(`✓  Folder created: ${data.name || name} (id: ${data.id || '?'})`, 'passed');
   document.getElementById('z_new_folder').value = '';
-  loadZephyrFolders();
+  // Reload folders and auto-select the new one
+  await loadZephyrFolders();
+  if (data.id) selectZephyrFolder(String(data.id), data.name || name);
 }
 
 function updateZephyrBreadcrumb() {
+  _updateResultsContext();
   const bc = document.getElementById('zImportBreadcrumb');
   const parts = [];
   if (_zProject) parts.push(`<span class="crumb">Project: ${escHtml(_zProject)}</span>`);
@@ -3447,6 +3677,622 @@ async function runZephyrImport() {
     zLog('✗  Network error: ' + err.message, 'failed');
   }
   document.getElementById('zImportBtn').disabled = false;
+}
+
+// ── Import mode helpers ───────────────────────────────────────────────────────
+let _importKeys = [];   // [{key, summary}] for preview
+
+function setImportMode(mode) {
+  ['keys','create','filter'].forEach(m => {
+    document.getElementById('import-mode-' + m).style.display = m === mode ? 'flex' : 'none';
+    document.getElementById('imode-' + m)?.classList.toggle('active', m === mode);
+  });
+}
+
+function onIssueKeysChange() {
+  const raw = document.getElementById('z_issue_keys').value;
+  const keys = raw.split('\n').map(k => k.trim()).filter(Boolean);
+  _importKeys = keys.map(k => ({ key: k, summary: '' }));
+  renderImportPreview();
+}
+
+async function onImportCsvLoaded(file) {
+  const text = await file.text();
+  const lines = text.split('\n').filter(l => l.trim());
+  const headers = _parseCsvLine(lines[0]);
+  const keyCol = headers.findIndex(h => /issue.?key|test.?id|jira.?id|key/i.test(h));
+  if (keyCol < 0) { zLog('⚠  No Issue Key column found in CSV', 'warning'); return; }
+  _importKeys = lines.slice(1)
+    .map(l => _parseCsvLine(l)[keyCol]?.trim())
+    .filter(Boolean)
+    .map(k => ({ key: k, summary: '' }));
+  document.getElementById('z_issue_keys').value = _importKeys.map(r => r.key).join('\n');
+  renderImportPreview();
+  // Try to fetch summaries from Jira
+  fetchImportSummaries();
+}
+
+async function fetchImportSummaries() {
+  if (!_importKeys.length) return;
+  const jql = `issueKey in (${_importKeys.map(r => r.key).join(',')})`;
+  const res = await fetch(`/api/jira/search?jql=${encodeURIComponent(jql)}&maxResults=${_importKeys.length}`);
+  if (!res.ok) return;
+  const data = await res.json();
+  const byKey = {};
+  (data.issues || []).forEach(i => { byKey[i.key] = i.fields?.summary || ''; });
+  _importKeys.forEach(r => { if (byKey[r.key]) r.summary = byKey[r.key]; });
+  renderImportPreview();
+}
+
+function renderImportPreview() {
+  const preview = document.getElementById('zKeysPreview');
+  const tbody   = document.getElementById('zKeysTbody');
+  const btn     = document.getElementById('zAddTestsBtn');
+  if (!_importKeys.length) {
+    preview.style.display = 'none';
+    btn.disabled = true;
+    return;
+  }
+  document.getElementById('zKeysCount').textContent = `${_importKeys.length} issue(s)`;
+  tbody.innerHTML = _importKeys.map((r, i) => `
+    <tr>
+      <td style="color:var(--text-dim);font-size:10px;">${i+1}</td>
+      <td style="font-family:'JetBrains Mono',monospace;font-weight:600;color:var(--accent);">${escHtml(r.key)}</td>
+      <td style="font-size:11px;color:var(--text-muted);max-width:280px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${escHtml(r.summary)}">${escHtml(r.summary||'—')}</td>
+    </tr>`).join('');
+  preview.style.display = 'flex';
+  btn.disabled = !_zCycleId;
+}
+
+// ── Create from CSV (grouped by Story) ───────────────────────────────────────
+async function zCreateTestcasesGrouped() {
+  if (!_createFile || !_zProject) return;
+  if (!_zCycleId) { zLog('✗  Select a test cycle first.', 'failed'); return; }
+  const btn = document.getElementById('zCreateTestsBtn');
+  btn.disabled = true; btn.textContent = 'Creating…';
+
+  const form = new FormData();
+  form.append('file', _createFile);
+  form.append('projectKey', _zProject);
+  form.append('cycleId',    _zCycleId);
+  form.append('folderId',   _zFolderId || '');
+  form.append('versionId',  _zVersionId || '-1');
+  form.append('linkType',   document.getElementById('z_link_type')?.value.trim() || 'Tests');
+
+  zLog(`⟳  Creating test cases from "${_createFile.name}" (grouped by Story)…`, 'info');
+  try {
+    const res  = await fetch('/api/zephyr/import-testcases-grouped', { method: 'POST', body: form });
+    const data = await res.json();
+    if (res.ok) {
+      zLog(`✓  Created: ${data.created}  Errors: ${data.errors}  Skipped: ${data.skipped}`, data.errors ? 'warning' : 'passed');
+      Object.entries(data.folders || {}).forEach(([story, f]) =>
+        zLog(`  📁 ${story} → folder ${f.id} (${f.created ? 'new' : 'existing'})`, 'info'));
+      (data.details?.created || []).slice(0, 20).forEach(t =>
+        zLog(`  ✓ ${t.key}  ${t.summary}  [story: ${t.story}]`, 'passed'));
+      (data.details?.errors || []).forEach(e =>
+        zLog(`  ✗ ${e.summary}: ${JSON.stringify(e.error)}`, 'failed'));
+    } else {
+      zLog('✗  ' + JSON.stringify(data.error || data), 'failed');
+    }
+  } catch (err) { zLog('✗  ' + err.message, 'failed'); }
+  btn.disabled = false; btn.textContent = 'Create Test Cases by Story → Add to Cycle';
+}
+
+// ── From Jira Filter ──────────────────────────────────────────────────────────
+let _filterIssues = [];
+
+function setFilterSubMode(sub) {
+  document.getElementById('filter-sub-filter').style.display = sub === 'filter' ? '' : 'none';
+  document.getElementById('filter-sub-jql').style.display    = sub === 'jql'    ? '' : 'none';
+  document.getElementById('fsub-filter')?.classList.toggle('active', sub === 'filter');
+  document.getElementById('fsub-jql')?.classList.toggle('active', sub === 'jql');
+}
+
+async function zFetchFilterIssues() {
+  const filterId = document.getElementById('z_filter_id').value.trim();
+  const jql      = document.getElementById('z_jql').value.trim();
+  const maxRes   = document.getElementById('z_filter_max').value || '100';
+  const statusEl = document.getElementById('zFilterStatus');
+
+  if (!filterId && !jql) { zLog('✗  Enter a Filter ID or JQL query.', 'failed'); return; }
+  statusEl.textContent = '⟳ Loading…';
+
+  const params = new URLSearchParams({ maxResults: maxRes });
+  if (filterId) params.set('filterId', filterId);
+  else          params.set('jql', jql);
+
+  const res  = await fetch('/api/jira/search?' + params);
+  const data = await res.json();
+
+  if (!res.ok) {
+    statusEl.textContent = '✗ Failed';
+    zLog('✗  Jira search error: ' + JSON.stringify(data.error || data), 'failed');
+    return;
+  }
+
+  _filterIssues = data.issues || [];
+  statusEl.textContent = `✓ ${_filterIssues.length} issue(s) found`;
+  zLog(`✓  Fetched ${_filterIssues.length} issue(s) from Jira.`, 'passed');
+  _renderFilterTable();
+  document.getElementById('zAddFilterBtn').disabled = !_filterIssues.length;
+}
+
+function _renderFilterTable() {
+  const tbody = document.getElementById('zFilterTbody');
+  document.getElementById('zFilterCount').textContent = `${_filterIssues.length} issues`;
+  document.getElementById('zFilterSelectAll').checked = false;
+
+  const TYPE_COLOR = { Bug:'var(--red)', Story:'var(--green)', Task:'var(--accent)', Test:'var(--purple)' };
+
+  tbody.innerHTML = _filterIssues.map((issue, i) => {
+    const type   = issue.fields?.issuetype?.name || '—';
+    const status = issue.fields?.status?.name || '—';
+    const col    = TYPE_COLOR[type] || 'var(--text-muted)';
+    return `<tr>
+      <td style="width:28px;"><input type="checkbox" class="z-filter-cb" data-idx="${i}" checked onchange="zFilterUpdateBtn()" /></td>
+      <td style="font-family:'JetBrains Mono',monospace;font-weight:600;color:var(--accent);font-size:11px;">${escHtml(issue.key)}</td>
+      <td style="font-size:11px;max-width:260px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${escHtml(issue.fields?.summary||'')}">${escHtml(issue.fields?.summary||'')}</td>
+      <td style="font-size:10px;color:${col};font-weight:600;">${escHtml(type)}</td>
+      <td style="font-size:10px;color:var(--text-dim);">${escHtml(status)}</td>
+    </tr>`;
+  }).join('');
+  document.getElementById('zFilterPreview').style.display = 'flex';
+}
+
+function zFilterToggleAll(cb) {
+  document.querySelectorAll('.z-filter-cb').forEach(c => c.checked = cb.checked);
+  zFilterUpdateBtn();
+}
+
+function zFilterUpdateBtn() {
+  const checked = document.querySelectorAll('.z-filter-cb:checked').length;
+  const btn = document.getElementById('zAddFilterBtn');
+  btn.disabled = !checked || !_zCycleId;
+  btn.textContent = checked ? `Add ${checked} Selected to Cycle` : 'Add Selected to Cycle';
+}
+
+async function zAddFilterTests() {
+  const checked = [...document.querySelectorAll('.z-filter-cb:checked')];
+  const keys = checked.map(c => _filterIssues[parseInt(c.dataset.idx)]?.key).filter(Boolean);
+  if (!keys.length || !_zCycleId) return;
+
+  const btn = document.getElementById('zAddFilterBtn');
+  btn.disabled = true; btn.textContent = 'Adding…';
+
+  const body = {
+    issues: keys, method: 1, cycleId: _zCycleId,
+    projectId: _zProjectId || _zProject, versionId: parseInt(_zVersionId) || -1,
+    assigneeType: 'currentUser',
+  };
+  if (_zFolderId) body.folderId = _zFolderId;
+
+  zLog(`⟳  Adding ${keys.length} issue(s) from Jira filter to cycle…`, 'info');
+  const res  = await fetch('/api/zephyr/executions/add', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+  const data = await res.json().catch(() => ({}));
+  if (res.ok) { zLog(`✓  Added ${keys.length} issue(s). ${data.message||''}`, 'passed'); }
+  else        { zLog('✗  ' + JSON.stringify(data.error || data), 'failed'); }
+  btn.disabled = false;
+  zFilterUpdateBtn();
+}
+
+// ── Generic file-input helpers ────────────────────────────────────────────────
+const _zFiles = {};   // fileInputId → File object
+
+function onZFileSelect(e, infoId, callback) {
+  const f = e.target.files[0]; if (!f) return;
+  _zFiles[e.target.id] = f;
+  _showZFileInfo(infoId, e.target.id, f);
+  if (callback) callback(f);
+}
+
+function onZDrop(e, fileId, infoId, callback) {
+  e.preventDefault();
+  e.currentTarget.classList.remove('drag-over');
+  const f = e.dataTransfer.files[0]; if (!f) return;
+  _zFiles[fileId] = f;
+  document.getElementById(fileId).value = '';   // reset so re-select fires
+  _showZFileInfo(infoId, fileId, f);
+  if (callback) callback(f);
+}
+
+function _showZFileInfo(infoId, fileId, file) {
+  const info = document.getElementById(infoId);
+  if (!info) return;
+  const nameEl = info.querySelector('span:nth-child(2)');
+  if (nameEl) nameEl.textContent = `${file.name}  (${(file.size/1024).toFixed(1)} KB)`;
+  info.classList.add('visible');
+  // Hide corresponding drop zone
+  const dz = document.getElementById(fileId)?.closest('.drop-zone');
+  if (dz) dz.style.display = 'none';
+}
+
+function clearZFile(fileId, infoId) {
+  delete _zFiles[fileId];
+  const el = document.getElementById(fileId);
+  if (el) el.value = '';
+  const info = document.getElementById(infoId);
+  if (info) info.classList.remove('visible');
+  const dz = document.getElementById(fileId)?.closest('.drop-zone');
+  if (dz) dz.style.display = '';
+}
+
+// ── Results mode toggle ───────────────────────────────────────────────────────
+function setResultsMode(mode) {
+  document.getElementById('results-mode-csv').style.display    = mode === 'csv'    ? 'flex' : 'none';
+  document.getElementById('results-mode-single').style.display = mode === 'single' ? 'flex' : 'none';
+  document.querySelectorAll('.import-mode-btn[id^="rmode"]').forEach(b => b.classList.remove('active'));
+  document.getElementById('rmode-' + mode)?.classList.add('active');
+  _updateResultsContext();
+}
+
+function _updateResultsContext() {
+  const el = document.getElementById('zResultsContext');
+  if (!el) return;
+  const parts = [];
+  if (_zVersionId && _zVersionId !== '-1') {
+    const vSel = document.getElementById('z_version');
+    parts.push('v: ' + (vSel?.options[vSel.selectedIndex]?.text || _zVersionId));
+  }
+  if (_zCycleId) {
+    const cSel = document.getElementById('z_cycle');
+    parts.push('→ Cycle: ' + (cSel?.options[cSel.selectedIndex]?.text || _zCycleId));
+  }
+  if (_zFolderId) {
+    const fEl = document.getElementById('zf_' + _zFolderId);
+    parts.push('→ Folder: ' + (fEl?.querySelector('span:last-child')?.textContent || _zFolderId));
+  }
+  el.innerHTML = parts.length
+    ? `<span style="color:var(--text-muted);">Target: </span><span style="color:var(--accent);font-weight:600;">${escHtml(parts.join(' '))}</span>`
+    : '<span style="color:var(--text-dim);">Select Version → Cycle → Folder on the left</span>';
+}
+
+// ── Results CSV handling ──────────────────────────────────────────────────────
+let _resultsCsvRows = [];
+let _resultsCsvHeaders = [];
+
+async function onResultsCsvSelected(file) {
+  const form = new FormData(); form.append('file', file);
+  const res  = await fetch('/api/zephyr/csv-preview', { method: 'POST', body: form });
+  if (!res.ok) { zLog('✗  Could not parse results CSV', 'failed'); return; }
+  const data = await res.json();
+  _resultsCsvHeaders = data.headers || [];
+
+  // Read all rows (re-read file for full data)
+  const text = await file.text();
+  const lines = text.split('\n').filter(l => l.trim());
+  const headers = lines[0].split(',').map(h => h.trim().replace(/^"|"$/g,''));
+  _resultsCsvHeaders = headers;
+  _resultsCsvRows = lines.slice(1).map(line => {
+    const vals = _parseCsvLine(line);
+    const row = {};
+    headers.forEach((h, i) => row[h] = vals[i] || '');
+    return row;
+  }).filter(r => Object.values(r).some(v => v));
+
+  _renderResultsCsvPreview();
+  document.getElementById('zResultsPreview').style.display = 'flex';
+  document.getElementById('zUploadResultsBtn').disabled = !_zCycleId;
+  document.getElementById('zResultsPreviewInfo').textContent =
+    `${_resultsCsvRows.length} rows · ${_resultsCsvHeaders.length} columns`;
+}
+
+function _parseCsvLine(line) {
+  const result = []; let cur = ''; let inQ = false;
+  for (let i = 0; i < line.length; i++) {
+    const c = line[i];
+    if (c === '"') { inQ = !inQ; }
+    else if (c === ',' && !inQ) { result.push(cur.trim()); cur = ''; }
+    else { cur += c; }
+  }
+  result.push(cur.trim());
+  return result;
+}
+
+function _renderResultsCsvPreview() {
+  const resCfg  = { issue_key: 'Issue Key', status: 'Status', comment: 'Comment' };   // fallback
+  const colKey  = resCfg.issue_key;
+  const colStat = resCfg.status;
+  const colCom  = resCfg.comment;
+  const STAT_COLOR = { pass:'var(--green)', passed:'var(--green)', fail:'var(--red)', failed:'var(--red)',
+                       wip:'var(--yellow)', blocked:'var(--accent)', unexecuted:'var(--text-dim)' };
+
+  const head = document.getElementById('zResultsCsvHead');
+  const body = document.getElementById('zResultsCsvBody');
+
+  head.innerHTML = _resultsCsvHeaders.map(h => {
+    const hi = [colKey,colStat,colCom].includes(h)
+      ? 'background:rgba(137,180,250,0.15);color:var(--accent);'
+      : h.toLowerCase().includes('attach') ? 'background:rgba(148,226,213,0.12);color:var(--teal);' : '';
+    return `<th style="font-size:10px;padding:5px 10px;${hi}">${escHtml(h)}</th>`;
+  }).join('');
+
+  body.innerHTML = _resultsCsvRows.map((row, idx) => {
+    const status = (row[colStat] || '').toLowerCase();
+    const color  = STAT_COLOR[status] || 'var(--text-muted)';
+    return '<tr>' + _resultsCsvHeaders.map(h => {
+      const v = row[h] || '';
+      if (h === colStat) return `<td style="padding:4px 10px;"><span style="font-size:10px;font-weight:700;color:${color};">${escHtml(v)}</span></td>`;
+      if (h === colKey)  return `<td style="padding:4px 10px;font-family:'JetBrains Mono',monospace;font-size:11px;font-weight:600;color:var(--accent);">${escHtml(v)}</td>`;
+      return `<td style="padding:4px 10px;font-size:11px;max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${escHtml(v)}">${escHtml(v)}</td>`;
+    }).join('') + '</tr>';
+  }).join('');
+}
+
+function clearZResultsCsv() {
+  _resultsCsvRows = [];
+  _resultsCsvHeaders = [];
+  clearZFile('zResultsFile', 'zResultsFileInfo');
+  document.getElementById('zResultsPreview').style.display = 'none';
+  document.getElementById('zUploadResultsBtn').disabled = true;
+}
+
+// ── Upload Results (bulk CSV) ─────────────────────────────────────────────────
+async function zUploadResults() {
+  if (!_zCycleId) { zLog('✗  Select a test cycle first.', 'failed'); return; }
+  const csvFile = _zFiles['zResultsFile'];
+  if (!csvFile) { zLog('✗  Upload a results CSV first.', 'failed'); return; }
+
+  const btn = document.getElementById('zUploadResultsBtn');
+  btn.disabled = true; btn.textContent = 'Uploading…';
+
+  const form = new FormData();
+  form.append('file', csvFile);
+  form.append('cycleId',   _zCycleId);
+  form.append('folderId',  _zFolderId  || '');
+  form.append('projectId', _zProjectId || _zProject || '');
+  form.append('versionId', _zVersionId || '-1');
+
+  const bulkStatus = document.getElementById('z_bulk_status')?.value;
+  if (bulkStatus) form.append('bulkStatus', bulkStatus);
+
+  const attachFile = _zFiles['zAttachFile'];
+  if (attachFile) form.append('attachment', attachFile);
+
+  zLog(`⟳  Uploading results from "${csvFile.name}" to cycle (${_resultsCsvRows.length} rows)…`, 'info');
+
+  try {
+    const res  = await fetch('/api/zephyr/bulk-results', { method: 'POST', body: form });
+    const data = await res.json();
+    if (res.ok) {
+      const s = data.success || 0, e = data.errors || 0, nf = data.not_found || 0;
+      zLog(`✓  Processed ${data.processed} rows — Success: ${s}  Errors: ${e}  Not found: ${nf}`,
+           (e || nf) ? 'warning' : 'passed');
+
+      // Rich per-row results
+      (data.details?.success || []).forEach(r => {
+        const stepMsg = r.steps?.length
+          ? `  📝 ${r.steps.length} step(s) → ${r.steps.filter(s=>s.updated).length} updated`
+          : '';
+        const attachMsg = r.attached?.length ? `  📎 ${r.attached.join(', ')}` : '';
+        const attachErr = r.attach_error ? `  ⚠ attach: ${r.attach_error}` : '';
+        zLog(`  ✓ Row ${r.row}: ${r.issue} → ${r.status}${stepMsg}${attachMsg}${attachErr}`, 'passed');
+        // Show each updated step
+        (r.steps || []).forEach(step => {
+          const icon = step.updated ? '✓' : '✗';
+          zLog(`     ${icon} Step ${step.orderId || ''} (id: ${step.stepResultId?.slice(-8) || '?'})`, step.updated ? 'info' : 'warning');
+        });
+      });
+      (data.details?.errors || []).forEach(r =>
+        zLog(`  ✗ Row ${r.row}: ${r.issue} — ${r.error}`, 'failed'));
+      (data.details?.not_found || []).forEach(r =>
+        zLog(`  ⚠ Row ${r.row}: ${r.issue} — ${r.error}`, 'warning'));
+    } else {
+      zLog('✗  Upload failed: ' + JSON.stringify(data.error || data), 'failed');
+    }
+  } catch (err) {
+    zLog('✗  ' + err.message, 'failed');
+  }
+  btn.disabled = false; btn.textContent = 'Upload Results to Cycle';
+}
+
+// ── Upload single test result ─────────────────────────────────────────────────
+async function zUploadSingle() {
+  const issueKey    = document.getElementById('z_single_key').value.trim();
+  const statusId    = parseInt(document.getElementById('z_single_status').value);
+  const comment     = document.getElementById('z_single_comment').value.trim();
+  const updateSteps = document.getElementById('z_single_steps').value === 'true';
+  const statusNames = {1:'Pass',2:'Fail',3:'WIP',4:'Blocked','-1':'Unexecuted'};
+
+  if (!issueKey)   { zLog('✗  Enter a Test ID / Issue Key.', 'failed'); return; }
+  if (!_zCycleId)  { zLog('✗  Select a test cycle first.', 'failed'); return; }
+
+  zLog(`⟳  Updating ${issueKey}…`, 'info');
+
+  // Use bulk-results with a single-row CSV for consistency
+  const headers = ['Issue Key','Status','Comment'];
+  const statusStr = {1:'pass',2:'fail',3:'wip',4:'blocked','-1':'unexecuted'}[statusId] || 'pass';
+  const csvContent = `Issue Key,Status,Comment\n${issueKey},${statusStr},"${comment.replace(/"/g,'""')}"`;
+
+  const form = new FormData();
+  form.append('file', new Blob([csvContent], {type:'text/csv'}), 'single.csv');
+  form.append('cycleId',   _zCycleId);
+  form.append('folderId',  _zFolderId  || '');
+  form.append('projectId', _zProjectId || _zProject || '');
+  form.append('versionId', _zVersionId || '-1');
+
+  const attachFile = _zFiles['zSingleAttach'];
+  if (attachFile) form.append('attachment', attachFile);
+
+  try {
+    const res  = await fetch('/api/zephyr/bulk-results', { method: 'POST', body: form });
+    const data = await res.json();
+    if (!res.ok) { zLog('✗  ' + JSON.stringify(data.error || data), 'failed'); return; }
+
+    const r = data.details?.success?.[0];
+    if (r) {
+      zLog(`✓  ${issueKey} → ${statusNames[statusId] || statusId}`, 'passed');
+      if (r.steps?.length) {
+        const updated = r.steps.filter(s => s.updated).length;
+        zLog(`  📝 ${r.steps.length} test step(s) found — ${updated} updated to ${statusNames[statusId]}:`, 'info');
+        r.steps.forEach(step =>
+          zLog(`     ${step.updated ? '✓' : '✗'} Step ${step.orderId || ''}`, step.updated ? 'passed' : 'warning'));
+      } else {
+        zLog('  ℹ  No Zephyr test steps found for this test case.', 'info');
+      }
+      if (r.attached?.length) zLog(`  📎 Attached: ${r.attached.join(', ')}`, 'passed');
+      if (r.attach_error)     zLog(`  ⚠  Attachment error: ${r.attach_error}`, 'warning');
+    } else if (data.details?.not_found?.length) {
+      zLog(`✗  "${issueKey}" not found in the selected cycle/folder.`, 'failed');
+    } else if (data.details?.errors?.length) {
+      zLog(`✗  ${data.details.errors[0].error}`, 'failed');
+    }
+  } catch (err) {
+    zLog('✗  ' + err.message, 'failed');
+  }
+}
+
+async function _zApiCall(method, path, params = {}, body = null) {
+  const qs = Object.keys(params).length ? '?' + new URLSearchParams(params) : '';
+  return fetch('/api/zephyr/proxy-raw', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ method, path, params, body }),
+  });
+}
+
+// ── Add Tests to Cycle (import tab) ──────────────────────────────────────────
+async function zAddTests() {
+  if (!_zProject) { zLog('✗  No project configured.', 'failed'); return; }
+  if (!_zCycleId) { zLog('✗  Select a test cycle first.', 'failed'); return; }
+
+  const btn = document.getElementById('zAddTestsBtn');
+  btn.disabled = true; btn.textContent = 'Adding…';
+
+  // Collect keys from textarea or CSV
+  let keys = [];
+  const textarea = document.getElementById('z_issue_keys').value.trim();
+  if (textarea) {
+    keys = textarea.split('\n').map(k => k.trim()).filter(Boolean);
+  } else {
+    const csvFile = _zFiles['zImportFile'];
+    if (csvFile) {
+      const text = await csvFile.text();
+      const lines = text.split('\n').filter(l => l.trim());
+      const headers = _parseCsvLine(lines[0]);
+      const keyCol = headers.findIndex(h => /issue.?key|test.?id|jira.?id/i.test(h));
+      if (keyCol >= 0) {
+        keys = lines.slice(1).map(l => _parseCsvLine(l)[keyCol]?.trim()).filter(Boolean);
+      }
+    }
+  }
+  if (!keys.length) { zLog('✗  No issue keys found.', 'failed'); btn.disabled = false; btn.textContent = 'Add Tests to Cycle'; return; }
+
+  zLog(`⟳  Adding ${keys.length} test(s) to cycle…`, 'info');
+
+  const body = {
+    issues: keys, method: 1,
+    projectId: _zProjectId || _zProject,
+    versionId: parseInt(_zVersionId) || -1,
+    assigneeType: document.getElementById('z_assignee_type')?.value || 'currentUser',
+    cycleId: _zCycleId,
+  };
+
+  const folderId = _zFolderId;
+  const res = await fetch(folderId ? '/api/zephyr/executions/add' : '/api/zephyr/executions/add', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(folderId ? { ...body, folderId, cycleId: _zCycleId } : body),
+  });
+  const data = await res.json().catch(() => ({}));
+  if (res.ok) { zLog(`✓  Added ${keys.length} test(s) to cycle. ${data.message || ''}`, 'passed'); }
+  else { zLog('✗  Failed: ' + JSON.stringify(data.error || data), 'failed'); }
+  btn.disabled = false; btn.textContent = 'Add Tests to Cycle';
+}
+
+// ── Executions tab ────────────────────────────────────────────────────────────
+let _executions = [];
+
+async function zLoadExecutions() {
+  if (!_zCycleId) { zLog('✗  Select a test cycle first.', 'failed'); return; }
+  zLog('⟳  Loading executions…', 'info');
+
+  const params = { versionId: _zVersionId || '-1' };
+  if (_zProjectId) params.projectId = _zProjectId;
+  const url = _zFolderId
+    ? `/api/zephyr/executions?folderId=${_zFolderId}&cycleId=${_zCycleId}&${new URLSearchParams(params)}`
+    : `/api/zephyr/executions?cycleId=${_zCycleId}&${new URLSearchParams(params)}`;
+
+  const res  = await fetch(url);
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) { zLog('✗  ' + JSON.stringify(data.error || data), 'failed'); return; }
+
+  const STAT = { '-1':'UNEXECUTED', '1':'PASS', '2':'FAIL', '3':'WIP', '4':'BLOCKED' };
+  const STAT_CLS = { '1':'pass','2':'fail','3':'broken','4':'skip' };
+  _executions = data.searchObjectList || data.executions || [];
+  zLog(`✓  Loaded ${_executions.length} execution(s).`, 'passed');
+
+  document.getElementById('zExecTbody').innerHTML = _executions.length
+    ? _executions.map((e, i) => {
+        const sid = String(e.status?.id || e.statusId || -1);
+        const sName = STAT[sid] || sid;
+        const sCls  = STAT_CLS[sid] || '';
+        return `<tr>
+          <td style="width:32px;"><input type="checkbox" class="z-exec-cb" data-idx="${i}" /></td>
+          <td style="font-family:'JetBrains Mono',monospace;font-size:11px;font-weight:600;color:var(--accent);">${escHtml(e.issueKey||'')}</td>
+          <td style="font-size:11px;max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${escHtml(e.summary||'')}">${escHtml(e.summary||'')}</td>
+          <td><span class="tbl-status-badge ${sCls}" style="font-size:10px;">${sName}</span></td>
+          <td style="font-size:11px;color:var(--text-dim);">${escHtml(e.assignee||e.assigneeUserName||'')}</td>
+          <td style="white-space:nowrap;">
+            <button class="btn btn-sm" style="font-size:10px;padding:3px 8px;" onclick="zQuickMark('${e.id||e.executionId}',${e.issueId||0})">Mark</button>
+          </td>
+        </tr>`;
+      }).join('')
+    : '<tr><td colspan="6" style="text-align:center;color:var(--text-dim);padding:24px;">No executions found</td></tr>';
+
+  document.getElementById('zBulkMarkBtn').disabled = !_executions.length;
+  document.getElementById('zSelectAll').checked = false;
+}
+
+function zToggleAll(cb) {
+  document.querySelectorAll('.z-exec-cb').forEach(c => c.checked = cb.checked);
+}
+
+async function zQuickMark(execId, issueId) {
+  const statusId = parseInt(document.getElementById('z_mark_status').value) || 1;
+  const comment  = document.getElementById('z_mark_comment')?.value.trim() || '';
+  const updateSteps = document.getElementById('z_mark_steps')?.value === 'true';
+  const body = {
+    status: { id: statusId }, id: execId,
+    projectId: _zProjectId ? parseInt(_zProjectId) : _zProject,
+    issueId, cycleId: _zCycleId,
+    versionId: parseInt(_zVersionId) || -1,
+    comment, testStepStatusChangeFlag: updateSteps, stepStatus: statusId,
+  };
+  const res = await fetch(`/api/zephyr/execution/${execId}`, {
+    method: 'PUT', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+  if (res.ok) { zLog(`✓  Marked ${execId} → status ${statusId}`, 'passed'); await zLoadExecutions(); }
+  else        { const e = await res.json().catch(() => ({})); zLog('✗  ' + JSON.stringify(e.error || e), 'failed'); }
+
+  // Attach file if provided
+  const attachFile = _zFiles['zExecAttachFile'];
+  if (attachFile && res.ok) {
+    const aForm = new FormData();
+    aForm.append('file', attachFile);
+    aForm.append('entityId', execId); aForm.append('entityName', 'EXECUTION');
+    aForm.append('cycleId', _zCycleId); aForm.append('issueId', String(issueId));
+    aForm.append('projectId', String(_zProjectId || _zProject));
+    aForm.append('versionId', String(_zVersionId || -1));
+    await fetch('/api/zephyr/attach', { method: 'POST', body: aForm });
+  }
+}
+
+async function zBulkMark() {
+  const checked = [...document.querySelectorAll('.z-exec-cb:checked')];
+  if (!checked.length) { zLog('✗  Select at least one execution.', 'failed'); return; }
+  const statusId = parseInt(document.getElementById('z_mark_status').value) || 1;
+  const ids = checked.map(c => _executions[parseInt(c.dataset.idx)]?.id).filter(Boolean);
+  zLog(`⟳  Bulk marking ${ids.length} execution(s)…`, 'info');
+  const res = await fetch('/api/zephyr/executions/bulk', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ executions: ids, status: statusId, testStepStatusChangeFlag: document.getElementById('z_mark_steps')?.value === 'true', stepStatus: statusId, clearDefectMappingFlag: false }),
+  });
+  const data = await res.json().catch(() => ({}));
+  if (res.ok) { zLog(`✓  Bulk update complete.`, 'passed'); await zLoadExecutions(); }
+  else { zLog('✗  ' + JSON.stringify(data.error || data), 'failed'); }
 }
 
 function zLog(msg, cls) {
