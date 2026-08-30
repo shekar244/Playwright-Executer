@@ -3864,22 +3864,42 @@ async function zCreateTestcasesGrouped() {
   form.append('versionId',  _zVersionId || '-1');
   form.append('linkType',   document.getElementById('z_link_type')?.value.trim() || 'Tests');
 
-  zLog(`⟳  Creating test cases from "${_createFile.name}" (grouped by Story)…`, 'info');
+  zLog(`⟳  Creating test cases from "${_createFile.name}"…`, 'info');
+  zLog(`  Project: ${_zProject}  Cycle: ${_zCycleId}  Folder: ${_zFolderId||'none'}  Version: ${_zVersionId||'-1'}`, 'info');
   try {
     const res  = await fetch('/api/zephyr/import-testcases-grouped', { method: 'POST', body: form });
-    const data = await res.json();
-    if (res.ok) {
-      zLog(`✓  Created: ${data.created}  Errors: ${data.errors}  Skipped: ${data.skipped}`, data.errors ? 'warning' : 'passed');
-      Object.entries(data.folders || {}).forEach(([story, f]) =>
-        zLog(`  📁 ${story} → folder ${f.id} (${f.created ? 'new' : 'existing'})`, 'info'));
-      (data.details?.created || []).slice(0, 20).forEach(t =>
-        zLog(`  ✓ ${t.key}  ${t.summary}  [story: ${t.story}]`, 'passed'));
-      (data.details?.errors || []).forEach(e =>
-        zLog(`  ✗ ${e.summary}: ${JSON.stringify(e.error)}`, 'failed'));
-    } else {
-      zLog('✗  ' + JSON.stringify(data.error || data), 'failed');
+    const data = await res.json().catch(() => ({}));
+
+    if (!res.ok) {
+      zLog(`✗  Server error (${res.status}): ${JSON.stringify(data?.error || data)}`, 'failed');
+      btn.disabled = false; btn.textContent = 'Create Test Cases by Story → Add to Cycle';
+      return;
     }
-  } catch (err) { zLog('✗  ' + err.message, 'failed'); }
+
+    zLog(`✓  Created: ${data.created}  Errors: ${data.errors}  Skipped: ${data.skipped}`, data.errors ? 'warning' : 'passed');
+
+    // Folders
+    Object.entries(data.folders || {}).forEach(([story, f]) =>
+      zLog(`  📁 ${story} → folder id=${f.id} (${f.created ? 'NEW' : 'existing'})`, 'info'));
+
+    // Created tests
+    (data.details?.created || []).slice(0, 30).forEach(t =>
+      zLog(`  ✓ ${t.key}  "${t.summary}"  steps=${t.steps_ok}/${t.steps}  linked=${t.linked}  enrolled=${t.enrolled}`, 'passed'));
+
+    // Errors — show full detail
+    (data.details?.errors || []).forEach(e => {
+      const errDetail = e.error?.errorMessages?.join(' ')
+                     || e.error?.errors ? JSON.stringify(e.error.errors) : ''
+                     || JSON.stringify(e.error).slice(0, 300);
+      zLog(`  ✗ [${e.story||''}] ${e.summary||'folder'}: ${errDetail}`, 'failed');
+    });
+
+    if (data.errors > 0) {
+      zLog('  ℹ  Check: correct Issue Type name in Field Mapping? Correct project permissions? Numeric project ID resolved?', 'warning');
+    }
+  } catch (err) {
+    zLog('✗  Network error: ' + err.message, 'failed');
+  }
   btn.disabled = false; btn.textContent = 'Create Test Cases by Story → Add to Cycle';
 }
 

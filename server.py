@@ -1276,6 +1276,23 @@ def jira_search():
     return jsonify(data), code
 
 
+@app.route("/api/jira/project-info")
+def jira_project_info():
+    """Return project details + issue types — useful for debugging field mapping."""
+    key = request.args.get("key", "").strip() or _z_cfg().get("project_key","")
+    if not key:
+        return jsonify({"error": "key param required"}), 400
+    data, code = _jira_call("GET", f"/project/{key}")
+    if code != 200:
+        return jsonify({"error": data}), code
+    return jsonify({
+        "id":   data.get("id"),
+        "key":  data.get("key"),
+        "name": data.get("name"),
+        "issueTypes": [{"id": t["id"], "name": t["name"]} for t in data.get("issueTypes", [])],
+    })
+
+
 @app.route("/api/jira/link-types")
 def jira_link_types():
     data, code = _jira_call("GET", "/issueLinkType")
@@ -1330,11 +1347,19 @@ def import_testcases_grouped():
     rows    = list(csv.DictReader(io.StringIO(content)))
     vi      = int(version_id) if str(version_id).lstrip("-").isdigit() else -1
 
-    # Resolve numeric Jira project ID (Zephyr folder/cycle APIs require numeric, not key)
-    numeric_pid = project_key   # fallback to key if lookup fails
+    # Resolve numeric project ID + issue type ID (Zephyr/Jira both need numeric IDs)
+    numeric_pid    = project_key   # fallback
+    issue_type_id  = None          # will use name if ID not found
     proj_data, proj_code = _jira_call("GET", f"/project/{project_key}")
-    if proj_code == 200 and proj_data.get("id"):
-        numeric_pid = str(proj_data["id"])
+    if proj_code == 200:
+        if proj_data.get("id"):
+            numeric_pid = str(proj_data["id"])
+        # Find the issue type ID by name (case-insensitive)
+        target_name = (col_type or "Test").strip().lower()
+        for it in proj_data.get("issueTypes", []):
+            if it.get("name", "").lower() == target_name:
+                issue_type_id = str(it["id"])
+                break
 
     def _row_step(row: dict) -> dict | None:
         """Extract ONE step from a CSV row using mapped column names."""
@@ -1414,10 +1439,10 @@ def import_testcases_grouped():
         for test_name, test_rows in test_cases.items():
             primary = test_rows[0]   # first row has the issue metadata
 
-            # Build Jira fields
+            # Build Jira fields — use numeric IDs where available (more reliable)
             fields: dict = {
-                "project":   {"key": project_key},
-                "issuetype": {"name": col_type or "Test"},
+                "project":   {"id": numeric_pid} if numeric_pid != project_key else {"key": project_key},
+                "issuetype": {"id": issue_type_id} if issue_type_id else {"name": col_type or "Test"},
                 "summary":   test_name,
             }
             if col_desc and primary.get(col_desc):
