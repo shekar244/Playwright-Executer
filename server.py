@@ -1234,12 +1234,10 @@ def _jira_search_jql(jql: str, max_results: int = 200) -> tuple:
     hdrs = {"Authorization": f"Basic {creds}",
             "Content-Type": "application/json", "Accept": "application/json"}
 
-    # ── GET /rest/api/latest/search/jql?jql=...&fields=*all ──────────────────
-    qs  = urllib.parse.urlencode({
-        "jql":        jql,
-        "maxResults": max_results,
-        "fields":     "*all",
-    })
+    fields = "summary,issuetype,status,priority,assignee,key,id"
+
+    # ── GET /rest/api/latest/search/jql?jql=... (Atlassian Cloud current) ────
+    qs  = urllib.parse.urlencode({"jql": jql, "maxResults": max_results, "fields": fields})
     url = f"{jira_url}/rest/api/latest/search/jql?{qs}"
     try:
         req = urllib.request.Request(url, headers=hdrs, method="GET")
@@ -1254,11 +1252,7 @@ def _jira_search_jql(jql: str, max_results: int = 200) -> tuple:
         pass
 
     # ── Fallback: GET /rest/api/2/search (Jira Server) ───────────────────────
-    return _jira_call("GET", "/search", {
-        "jql":        jql,
-        "maxResults": max_results,
-        "fields":     "*all",
-    })
+    return _jira_call("GET", "/search", {"jql": jql, "maxResults": max_results, "fields": fields})
 
 
 @app.route("/api/jira/search")

@@ -3496,10 +3496,12 @@ async function loadZephyrCycles() {
       .filter(c => c.name);
   }
 
+  // Reverse so newest cycles appear first
+  const sortedCycles = [...cycles].reverse();
   const sel = document.getElementById('z_cycle');
   sel.innerHTML = '<option value="">— select cycle —</option>' +
-    cycles.map(c => `<option value="${escHtml(String(c.id))}">${escHtml(c.name)}</option>`).join('');
-  zLog(`✓  Loaded ${cycles.length} cycle(s).`, 'passed');
+    sortedCycles.map(c => `<option value="${escHtml(String(c.id))}">${escHtml(c.name)}</option>`).join('');
+  zLog(`✓  Loaded ${cycles.length} cycle(s) — newest first.`, 'passed');
 
   // Reset folder tree
   document.getElementById('zFolderTree').innerHTML =
@@ -3725,11 +3727,17 @@ function setImportMode(mode) {
 }
 
 function onIssueKeysChange() {
-  const raw = document.getElementById('z_issue_keys').value;
-  const keys = raw.split('\n').map(k => k.trim()).filter(k => /[A-Z]+-\d+/i.test(k));
+  const raw  = document.getElementById('z_issue_keys').value;
+  // Accept any non-empty line as a potential key — validate at submit time
+  const keys = raw.split('\n').map(k => k.trim()).filter(Boolean);
   _importKeys = keys.map(k => ({ key: k.toUpperCase(), summary: '' }));
+
+  // Enable the button immediately so the user isn't blocked
+  const btn = document.getElementById('zAddTestsBtn');
+  if (btn) btn.disabled = keys.length === 0;
+
   renderImportPreview();
-  if (keys.length) fetchImportSummaries();  // auto-fetch summaries
+  if (keys.length) fetchImportSummaries();
 }
 
 async function onImportCsvLoaded(file) {
@@ -3854,7 +3862,9 @@ async function zFetchFilterIssues() {
 
   if (!res.ok) {
     statusEl.textContent = '✗ Failed';
-    zLog('✗  Jira search error: ' + JSON.stringify(data.error || data), 'failed');
+    const errMsg = data?.error?.errorMessages?.join(' ') || data?.error?.message
+                || JSON.stringify(data?.error || data).slice(0, 200);
+    zLog(`✗  Jira search failed (${res.status}): ${errMsg}`, 'failed');
     return;
   }
 
@@ -4333,35 +4343,27 @@ async function zLoadExecutions() {
   if (_executions.length) {
     const sample = _executions[0];
     zLog(`  ℹ  Fields: ${Object.keys(sample).join(', ')}`, 'info');
-    zLog(`  ℹ  executionStatus="${sample.executionStatus}"  issueSummary="${sample.issueSummary}"  assigneeDisplay="${sample.assigneeDisplay}"`, 'info');
+    zLog(`  ℹ  status.name="${sample.status?.name}"  status.id="${sample.status?.id}"  issueSummary="${sample.issueSummary}"  assignedToDisplayName="${sample.assignedToDisplayName}"`, 'info');
   }
 
   document.getElementById('zExecTbody').innerHTML = _executions.length
     ? _executions.map((e, i) => {
 
-        /* ── Status: Zephyr returns executionStatus as a plain string like "-1","1","2"
-           OR as an object {id,name,color} OR sometimes as a numeric status name string ── */
-        const rawStat = e.executionStatus ?? e.status ?? e.statusId ?? -1;
-        let sid, sName;
-        if (rawStat !== null && typeof rawStat === 'object') {
-          sid   = String(rawStat.id ?? -1);
-          sName = rawStat.name || STAT[sid] || sid;
-        } else {
-          sid   = String(rawStat).trim();
-          // Handle name strings like "PASS","FAIL" returned by some Zephyr versions
-          const nameToId = { 'PASS':'1','FAIL':'2','WIP':'3','BLOCKED':'4','UNEXECUTED':'-1' };
-          if (nameToId[sid]) { sName = sid; sid = nameToId[sid]; }
-          else               { sName = STAT[sid] || sid; }
-        }
-        const sCls  = STAT_CLS[sid]   || '';
-        const sIcon = STAT_ICON[sid]  || '';
+        /* ── Status: confirmed nested object {id, name, desc, color, type}
+           Use status.name as the display label; map to CSS class via id ── */
+        const statusObj = e.status || {};
+        const sName = statusObj.name || e.executionStatus || '—';
+        const sid   = String(statusObj.id ?? e.executionStatus ?? -1);
+        const sCls  = STAT_CLS[sid]  || '';
+        const sIcon = STAT_ICON[sid] || '';
 
-        /* ── Summary: Zephyr uses issueSummary, label, or summary ── */
+        /* ── Summary: issueSummary confirmed working; others as fallback ── */
         const summary  = e.issueSummary || e.label || e.summary || e.issueLabel || '';
 
-        /* ── Assignee: Zephyr uses assigneeDisplay, executedByDisplay, assigneeUserName ── */
-        const assignee = e.assigneeDisplay || e.executedByDisplay || e.assigneeUserName
-                       || e.executor || e.executedBy || '';
+        /* ── Assignee: user confirmed field is "assignedToDisplayName" ── */
+        const assignee = e.assignedToDisplayName   // confirmed field from live response
+                      || e.assigneeDisplay || e.executedByDisplay
+                      || e.assigneeUserName || e.executor || '';
 
         return `<tr>
           <td style="width:32px;"><input type="checkbox" class="z-exec-cb" data-idx="${i}" /></td>
