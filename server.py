@@ -2,6 +2,7 @@
 Playwright Test Executor — Web Server
 Serves the browser UI and streams test output via Server-Sent Events.
 """
+from __future__ import annotations  # enables X | Y type hints on Python 3.7+
 
 import base64
 import csv
@@ -884,6 +885,63 @@ def _multipart(fields: dict, file_field: str, filename: str, file_bytes: bytes, 
                  + file_bytes + b"\r\n")
     parts.append(b"--" + boundary + b"--\r\n")
     return b"".join(parts), f"multipart/form-data; boundary={boundary.decode()}"
+
+
+# ── Debug / connection test ────────────────────────────────────────────────────
+
+@app.route("/api/zephyr/debug")
+def zephyr_debug():
+    """Return exactly what would be sent to Zephyr + raw response for diagnosis."""
+    cfg = _z_cfg()
+    path   = "/public/rest/api/1.0/cycles/search"
+    params = {"projectId": "10000", "versionId": "-1"}   # dummy values to test auth
+
+    ak = cfg.get("access_key", "")
+    sk = cfg.get("secret_key", "")
+    ai = cfg.get("account_id", "")
+
+    missing = [k for k, v in {"access_key": ak, "secret_key": sk, "account_id": ai}.items() if not v]
+    if missing:
+        return jsonify({"error": f"Missing config fields: {', '.join(missing)}"}), 400
+
+    try:
+        token = _zephyr_jwt(ak, sk, ai, "GET", path, params)
+    except Exception as ex:
+        return jsonify({"error": f"JWT generation failed: {ex}"}), 500
+
+    # Test Jira REST too
+    jira_url  = cfg.get("jira_url", "").rstrip("/")
+    jira_user = cfg.get("username", "")
+    jira_tok  = cfg.get("api_token", "")
+    jira_configured = bool(jira_url and jira_user and jira_tok)
+
+    # Test ZAPI
+    data, code = _z_call("GET", "/public/rest/api/1.0/cycles/search",
+                          {"projectId": "DUMMY", "versionId": "-1"})
+
+    return jsonify({
+        "config_present": {
+            "jira_url":   bool(jira_url),
+            "username":   bool(jira_user),
+            "api_token":  bool(jira_tok),
+            "access_key": bool(ak),
+            "secret_key": bool(sk),
+            "account_id": bool(ai),
+        },
+        "jwt_generated": bool(token),
+        "jwt_preview": token[:40] + "…" if token else None,
+        "zapi_base": ZAPI_BASE,
+        "zapi_test_status": code,
+        "zapi_test_response": data,
+        "jira_url": jira_url or "(not set)",
+    })
+
+
+@app.route("/api/zephyr/test-jira")
+def test_jira():
+    """Test Jira REST connectivity independently."""
+    data, code = _jira_call("GET", "/myself")
+    return jsonify({"status": code, "response": data})
 
 
 # ── Config ────────────────────────────────────────────────────────────────────
