@@ -1348,19 +1348,24 @@ def import_testcases_grouped():
     rows    = list(csv.DictReader(io.StringIO(content)))
     vi      = int(version_id) if str(version_id).lstrip("-").isdigit() else -1
 
-    # Resolve numeric project ID + issue type ID (Zephyr/Jira both need numeric IDs)
-    numeric_pid    = project_key   # fallback
-    issue_type_id  = None          # will use name if ID not found
+    # Resolve numeric project ID + issue type ID
+    numeric_pid   = project_key
+    issue_type_id = None
     proj_data, proj_code = _jira_call("GET", f"/project/{project_key}")
+    _proj_debug = {"proj_code": proj_code, "proj_id": None,
+                   "issueTypes": [], "issue_type_id": None}
     if proj_code == 200:
         if proj_data.get("id"):
             numeric_pid = str(proj_data["id"])
-        # Find the issue type ID by name (case-insensitive) — avoids Jira name-matching issues
+            _proj_debug["proj_id"] = numeric_pid
+        its = proj_data.get("issueTypes", [])
+        _proj_debug["issueTypes"] = [{"id": t.get("id"), "name": t.get("name")} for t in its]
         target_name = (issue_type_name or "Test").strip().lower()
-        for it in proj_data.get("issueTypes", []):
-            if it.get("name", "").lower() == target_name:
+        for it in its:
+            if it.get("name", "").strip().lower() == target_name:
                 issue_type_id = str(it["id"])
                 break
+        _proj_debug["issue_type_id"] = issue_type_id
 
     def _row_step(row: dict) -> dict | None:
         """Extract ONE step from a CSV row using mapped column names."""
@@ -1408,7 +1413,8 @@ def import_testcases_grouped():
             story_tests[story][summary] = []
         story_tests[story][summary].append(row)
 
-    results: dict = {"created": [], "errors": [], "skipped": [], "folders": {}}
+    results: dict = {"created": [], "errors": [], "skipped": [], "folders": {},
+                     "_debug": _proj_debug}
 
     for story_id, test_cases in story_tests.items():
 
@@ -1479,7 +1485,13 @@ def import_testcases_grouped():
 
             issue_data, issue_code = _jira_call("POST", "/issue", body={"fields": fields})
             if issue_code not in (200, 201):
-                results["errors"].append({"summary": test_name, "story": story_id, "error": issue_data})
+                results["errors"].append({
+                    "summary":    test_name,
+                    "story":      story_id,
+                    "error":      issue_data,
+                    "sent_fields": {k: v for k, v in fields.items()
+                                    if k in ("project","issuetype","summary")},
+                })
                 continue
 
             issue_key = issue_data.get("key", "")

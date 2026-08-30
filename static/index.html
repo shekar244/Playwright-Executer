@@ -3876,6 +3876,13 @@ async function zCreateTestcasesGrouped() {
       return;
     }
 
+    // Show debug info about project/issuetype resolution
+    if (data._debug) {
+      const d = data._debug;
+      zLog(`  ℹ  Project resolved: id=${d.proj_id}  IssueType id=${d.issue_type_id||'NOT FOUND'}`, 'info');
+      if (d.issueTypes?.length) zLog(`  ℹ  Available types: ${d.issueTypes.map(t=>t.name).join(', ')}`, 'info');
+    }
+
     zLog(`✓  Created: ${data.created}  Errors: ${data.errors}  Skipped: ${data.skipped}`, data.errors ? 'warning' : 'passed');
 
     // Folders
@@ -3889,9 +3896,9 @@ async function zCreateTestcasesGrouped() {
     // Errors — show full detail
     (data.details?.errors || []).forEach(e => {
       const errDetail = e.error?.errorMessages?.join(' ')
-                     || e.error?.errors ? JSON.stringify(e.error.errors) : ''
-                     || JSON.stringify(e.error).slice(0, 300);
+                     || JSON.stringify(e.error?.errors || e.error).slice(0, 400);
       zLog(`  ✗ [${e.story||''}] ${e.summary||'folder'}: ${errDetail}`, 'failed');
+      if (e.sent_fields) zLog(`     Sent to Jira: ${JSON.stringify(e.sent_fields)}`, 'warning');
     });
 
     if (data.errors > 0) {
