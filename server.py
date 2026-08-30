@@ -804,6 +804,26 @@ def _urlopen(req: urllib.request.Request, timeout: int = 20) -> object:
     verify = _z_cfg().get("verify_ssl", False)
     return urllib.request.urlopen(req, timeout=timeout, context=_ssl_ctx(verify))
 
+
+def _parse_response(raw: bytes, status: int) -> tuple:
+    """Parse HTTP response bytes → (dict, status_code). Handles empty, JSON, and plain-text bodies."""
+    if not raw or not raw.strip():
+        return {"ok": True}, status
+    text = raw.decode("utf-8", errors="replace").strip()
+    try:
+        return json.loads(text), status
+    except (json.JSONDecodeError, ValueError):
+        # Plain integer / plain string / HTML — wrap safely
+        return {"raw": text, "ok": True}, status
+
+
+def _parse_error(e: urllib.error.HTTPError) -> tuple:
+    """Parse an HTTPError response body → (error_dict, status_code)."""
+    raw_err = e.read()
+    try:    err = json.loads(raw_err.decode("utf-8", errors="replace"))
+    except: err = {"message": raw_err.decode("utf-8", errors="replace") or str(e)}
+    return {"error": err}, e.code
+
 STATUS_MAP = {
     "pass": 1, "passed": 1, "p": 1,
     "fail": 2, "failed": 2, "f": 2,
@@ -925,12 +945,9 @@ def _z_call(method: str, path: str, params: dict | None = None, body=None) -> tu
     try:
         req = urllib.request.Request(url, data=data, headers=hdrs, method=method.upper())
         with _urlopen(req, timeout=20) as resp:
-            raw = resp.read()
-            return (json.loads(raw) if raw else {}), resp.status
+            return _parse_response(resp.read(), resp.status)
     except urllib.error.HTTPError as e:
-        try:    err = json.loads(e.read().decode())
-        except: err = {"message": str(e)}
-        return {"error": err}, e.code
+        return _parse_error(e)
     except Exception as ex:
         return {"error": str(ex)}, 500
 
@@ -952,11 +969,10 @@ def _jira_call(method: str, path: str, params: dict | None = None, body=None) ->
     try:
         req = urllib.request.Request(url, data=data, headers=hdrs, method=method.upper())
         with _urlopen(req, timeout=20) as resp:
-            raw = resp.read()
-            return (json.loads(raw) if raw else {}), resp.status
+            return _parse_response(resp.read(), resp.status)
     except urllib.error.HTTPError as e:
-        try:    err = json.loads(e.read().decode())
-        except: err = {"message": str(e)}
+        err = _parse_error(e)
+        return err  # already a tuple
         return {"error": err}, e.code
     except Exception as ex:
         return {"error": str(ex)}, 500
@@ -1201,25 +1217,58 @@ def zephyr_attach():
 
 # ── Jira search / filter / links ──────────────────────────────────────────────
 
+def _jira_search_jql(jql: str, max_results: int = 200) -> tuple:
+    """Run a JQL search using REST API v3 (POST /rest/api/3/search/jql).
+    Falls back to v2 GET if v3 returns 404 (older Jira Server installs)."""
+    body = {
+        "jql":        jql,
+        "maxResults": max_results,
+        "fields":     ["summary", "issuetype", "status", "priority", "assignee", "key"],
+    }
+    # Try v3 first (Jira Cloud)
+    cfg      = _z_cfg()
+    jira_url = cfg.get("jira_url", "").rstrip("/")
+    if not jira_url:
+        return {"error": "Jira URL not configured"}, 400
+    creds = base64.b64encode(
+        f"{cfg.get('username','')}:{cfg.get('api_token','')}".encode()
+    ).decode()
+    hdrs = {"Authorization": f"Basic {creds}", "Content-Type": "application/json", "Accept": "application/json"}
+
+    # POST /rest/api/3/search/jql  (Jira Cloud v3)
+    url = f"{jira_url}/rest/api/3/search/jql"
+    try:
+        req = urllib.request.Request(url, data=json.dumps(body).encode(), headers=hdrs, method="POST")
+        with _urlopen(req, timeout=20) as resp:
+            return _parse_response(resp.read(), resp.status)
+    except urllib.error.HTTPError as e:
+        if e.code == 404:
+            # Jira Server / older Cloud — fall back to v2 GET
+            return _jira_call("GET", "/search", {"jql": jql, "maxResults": max_results,
+                                                  "fields": "summary,issuetype,status,priority,assignee,key"})
+        return _parse_error(e)
+    except Exception as ex:
+        return {"error": str(ex)}, 500
+
+
 @app.route("/api/jira/search")
 def jira_search():
-    """Search Jira issues by JQL or filter ID."""
+    """Search Jira issues by JQL or saved filter ID (uses REST API v3)."""
     jql         = request.args.get("jql", "").strip()
     filter_id   = request.args.get("filterId", "").strip()
     max_results = min(int(request.args.get("maxResults", 200)), 500)
 
     if filter_id:
+        # Jira filters API is the same path in v2 and v3
         f_data, f_code = _jira_call("GET", f"/filter/{filter_id}")
         if f_code != 200:
-            return jsonify({"error": f_data}), f_code
+            return jsonify({"error": f"Filter lookup failed ({f_code}): {f_data}"}), f_code
         jql = f_data.get("jql", "")
+
     if not jql:
         return jsonify({"error": "jql or filterId required"}), 400
 
-    data, code = _jira_call("GET", "/search", {
-        "jql": jql, "maxResults": max_results,
-        "fields": "summary,issuetype,status,priority,assignee,key",
-    })
+    data, code = _jira_search_jql(jql, max_results)
     return jsonify(data), code
 
 

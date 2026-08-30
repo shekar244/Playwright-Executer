@@ -3691,9 +3691,10 @@ function setImportMode(mode) {
 
 function onIssueKeysChange() {
   const raw = document.getElementById('z_issue_keys').value;
-  const keys = raw.split('\n').map(k => k.trim()).filter(Boolean);
-  _importKeys = keys.map(k => ({ key: k, summary: '' }));
+  const keys = raw.split('\n').map(k => k.trim()).filter(k => /[A-Z]+-\d+/i.test(k));
+  _importKeys = keys.map(k => ({ key: k.toUpperCase(), summary: '' }));
   renderImportPreview();
+  if (keys.length) fetchImportSummaries();  // auto-fetch summaries
 }
 
 async function onImportCsvLoaded(file) {
@@ -3714,14 +3715,24 @@ async function onImportCsvLoaded(file) {
 
 async function fetchImportSummaries() {
   if (!_importKeys.length) return;
+
+  // Optimistically show "fetching…" while loading
+  const countEl = document.getElementById('zKeysCount');
+  if (countEl) countEl.textContent = `${_importKeys.length} issue(s) — fetching summaries…`;
+
   const jql = `issueKey in (${_importKeys.map(r => r.key).join(',')})`;
-  const res = await fetch(`/api/jira/search?jql=${encodeURIComponent(jql)}&maxResults=${_importKeys.length}`);
-  if (!res.ok) return;
-  const data = await res.json();
-  const byKey = {};
-  (data.issues || []).forEach(i => { byKey[i.key] = i.fields?.summary || ''; });
-  _importKeys.forEach(r => { if (byKey[r.key]) r.summary = byKey[r.key]; });
-  renderImportPreview();
+  try {
+    const res  = await fetch(`/api/jira/search?jql=${encodeURIComponent(jql)}&maxResults=${_importKeys.length}`);
+    const data = await res.json().catch(() => ({}));
+    if (res.ok && data.issues) {
+      const byKey = {};
+      data.issues.forEach(i => { byKey[i.key] = i.fields?.summary || ''; });
+      _importKeys.forEach(r => { if (byKey[r.key]) r.summary = byKey[r.key]; });
+    }
+    // If Jira search fails, summaries stay blank — no error shown, just '—'
+  } catch (_) { /* silent — summaries will show as '—' */ }
+
+  renderImportPreview();  // re-render with summaries (or '—' if unavailable)
 }
 
 function renderImportPreview() {
@@ -3859,21 +3870,17 @@ async function zAddFilterTests() {
   const btn = document.getElementById('zAddFilterBtn');
   btn.disabled = true; btn.textContent = 'Adding…';
 
-  const body = {
-    issues: keys, method: 1, cycleId: _zCycleId,
-    projectId: _zProjectId || _zProject, versionId: parseInt(_zVersionId) || -1,
+  zLog(`⟳  Adding ${keys.length} issue(s) from Jira filter in chunks of 50…`, 'info');
+
+  const baseBody = {
+    method: 1, cycleId: _zCycleId,
+    projectId: _zProjectId || _zProject,
+    versionId: parseInt(_zVersionId) || -1,
     assigneeType: 'currentUser',
   };
-  if (_zFolderId) body.folderId = _zFolderId;
 
-  zLog(`⟳  Adding ${keys.length} issue(s) from Jira filter to cycle…`, 'info');
-  const res  = await fetch('/api/zephyr/executions/add', {
-    method: 'POST', headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(body),
-  });
-  const data = await res.json().catch(() => ({}));
-  if (res.ok) { zLog(`✓  Added ${keys.length} issue(s). ${data.message||''}`, 'passed'); }
-  else        { zLog('✗  ' + JSON.stringify(data.error || data), 'failed'); }
+  const { added, errors } = await _addKeysToTarget(keys, baseBody);
+  zLog(`✓  Done — ${added} added, ${errors} errors`, errors ? 'warning' : 'passed');
   btn.disabled = false;
   zFilterUpdateBtn();
 }
@@ -4153,6 +4160,41 @@ async function _zApiCall(method, path, params = {}, body = null) {
   });
 }
 
+// ── Chunk helper — Zephyr limit: 50 issues per add request ───────────────────
+function _chunks(arr, size = 50) {
+  const out = [];
+  for (let i = 0; i < arr.length; i += size) out.push(arr.slice(i, i + size));
+  return out;
+}
+
+async function _addKeysToTarget(keys, baseBody) {
+  /** Bulk-add keys to cycle/folder in ≤50-key chunks. Returns {added, errors}. */
+  const chunks = _chunks(keys, 50);
+  let added = 0, errors = 0;
+  for (const chunk of chunks) {
+    const body = { ...baseBody, issues: chunk };
+    const endpoint = _zFolderId
+      ? `/api/zephyr/executions/add`
+      : `/api/zephyr/executions/add`;
+    if (_zFolderId) body.folderId = _zFolderId;
+    const res  = await fetch('/api/zephyr/executions/add', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+    const data = await res.json().catch(() => ({}));
+    // Treat any 2xx as success; also treat {"raw":...,"ok":true} (plain-int Zephyr response) as success
+    if (res.ok || data?.ok) {
+      added += chunk.length;
+      zLog(`  ✓ Chunk ${chunks.indexOf(chunk)+1}/${chunks.length}: added ${chunk.length} test(s)`, 'passed');
+    } else {
+      errors += chunk.length;
+      const errMsg = data?.error?.message || data?.error || data?.raw || JSON.stringify(data);
+      zLog(`  ✗ Chunk ${chunks.indexOf(chunk)+1}/${chunks.length} failed: ${errMsg}`, 'failed');
+    }
+  }
+  return { added, errors };
+}
+
 // ── Add Tests to Cycle (import tab) ──────────────────────────────────────────
 async function zAddTests() {
   if (!_zProject) { zLog('✗  No project configured.', 'failed'); return; }
@@ -4161,43 +4203,24 @@ async function zAddTests() {
   const btn = document.getElementById('zAddTestsBtn');
   btn.disabled = true; btn.textContent = 'Adding…';
 
-  // Collect keys from textarea or CSV
-  let keys = [];
-  const textarea = document.getElementById('z_issue_keys').value.trim();
-  if (textarea) {
-    keys = textarea.split('\n').map(k => k.trim()).filter(Boolean);
-  } else {
-    const csvFile = _zFiles['zImportFile'];
-    if (csvFile) {
-      const text = await csvFile.text();
-      const lines = text.split('\n').filter(l => l.trim());
-      const headers = _parseCsvLine(lines[0]);
-      const keyCol = headers.findIndex(h => /issue.?key|test.?id|jira.?id/i.test(h));
-      if (keyCol >= 0) {
-        keys = lines.slice(1).map(l => _parseCsvLine(l)[keyCol]?.trim()).filter(Boolean);
-      }
-    }
-  }
+  // Collect keys from textarea or preview list
+  let keys = _importKeys.length
+    ? _importKeys.map(r => r.key)
+    : document.getElementById('z_issue_keys').value.trim().split('\n').map(k => k.trim()).filter(Boolean);
+
   if (!keys.length) { zLog('✗  No issue keys found.', 'failed'); btn.disabled = false; btn.textContent = 'Add Tests to Cycle'; return; }
 
-  zLog(`⟳  Adding ${keys.length} test(s) to cycle…`, 'info');
+  zLog(`⟳  Adding ${keys.length} test(s) in chunks of 50…`, 'info');
 
-  const body = {
-    issues: keys, method: 1,
+  const baseBody = {
+    method: 1, cycleId: _zCycleId,
     projectId: _zProjectId || _zProject,
     versionId: parseInt(_zVersionId) || -1,
     assigneeType: document.getElementById('z_assignee_type')?.value || 'currentUser',
-    cycleId: _zCycleId,
   };
 
-  const folderId = _zFolderId;
-  const res = await fetch(folderId ? '/api/zephyr/executions/add' : '/api/zephyr/executions/add', {
-    method: 'POST', headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(folderId ? { ...body, folderId, cycleId: _zCycleId } : body),
-  });
-  const data = await res.json().catch(() => ({}));
-  if (res.ok) { zLog(`✓  Added ${keys.length} test(s) to cycle. ${data.message || ''}`, 'passed'); }
-  else { zLog('✗  Failed: ' + JSON.stringify(data.error || data), 'failed'); }
+  const { added, errors } = await _addKeysToTarget(keys, baseBody);
+  zLog(`✓  Done — ${added} added, ${errors} errors`, errors ? 'warning' : 'passed');
   btn.disabled = false; btn.textContent = 'Add Tests to Cycle';
 }
 
@@ -4218,16 +4241,22 @@ async function zLoadExecutions() {
   const data = await res.json().catch(() => ({}));
   if (!res.ok) { zLog('✗  ' + JSON.stringify(data.error || data), 'failed'); return; }
 
-  const STAT = { '-1':'UNEXECUTED', '1':'PASS', '2':'FAIL', '3':'WIP', '4':'BLOCKED' };
-  const STAT_CLS = { '1':'pass','2':'fail','3':'broken','4':'skip' };
+  const STAT     = { '-1':'UNEXECUTED', '1':'PASS', '2':'FAIL', '3':'WIP', '4':'BLOCKED' };
+  const STAT_CLS = { '1':'pass', '2':'fail', '3':'broken', '4':'skip', '-1':'' };
   _executions = data.searchObjectList || data.executions || [];
   zLog(`✓  Loaded ${_executions.length} execution(s).`, 'passed');
 
   document.getElementById('zExecTbody').innerHTML = _executions.length
     ? _executions.map((e, i) => {
-        const sid = String(e.status?.id || e.statusId || -1);
-        const sName = STAT[sid] || sid;
-        const sCls  = STAT_CLS[sid] || '';
+        // Zephyr Squad Cloud returns status in various shapes — normalise all of them
+        const rawStat = e.executionStatus ?? e.status ?? e.statusId ?? -1;
+        const sid = typeof rawStat === 'object' && rawStat !== null
+          ? String(rawStat.id ?? -1)
+          : String(rawStat);
+        const sName = typeof rawStat === 'object' && rawStat?.name
+          ? rawStat.name
+          : (STAT[sid] || sid);
+        const sCls = STAT_CLS[sid] || '';
         return `<tr>
           <td style="width:32px;"><input type="checkbox" class="z-exec-cb" data-idx="${i}" /></td>
           <td style="font-family:'JetBrains Mono',monospace;font-size:11px;font-weight:600;color:var(--accent);">${escHtml(e.issueKey||'')}</td>
