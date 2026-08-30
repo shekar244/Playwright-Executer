@@ -42,12 +42,9 @@
     "components": "COMPONENT",
     "issue_type_name": "Test",
     "steps_format": "rows",
-    "step_action_prefix": "Test Step",
-    "step_data_prefix": "Test Data",
-    "step_expected_prefix": "Test Result",
-    "row_step": "Step",
-    "row_data": "Data",
-    "row_expected": "Expected",
+    "step_action_prefix": "Step",
+    "step_data_prefix": "Data",
+    "step_expected_prefix": "Expected",
     "step_single_column": "Steps"
   },
   "zephyr_results_mapping": {

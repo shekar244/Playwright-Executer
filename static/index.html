@@ -1150,11 +1150,7 @@
             <div class="field"><label>Step Data prefix</label><input type="text" id="m_step_data" placeholder="Step Data" /></div>
             <div class="field"><label>Expected Result prefix</label><input type="text" id="m_step_expected" placeholder="Expected Result" /></div>
           </div>
-          <div id="m_rows_fields" style="display:none;grid-template-columns:1fr 1fr 1fr;gap:8px;">
-            <div class="field"><label>Step column</label><input type="text" id="m_row_step" placeholder="Step" /></div>
-            <div class="field"><label>Data column</label><input type="text" id="m_row_data" placeholder="Data" /></div>
-            <div class="field"><label>Expected column</label><input type="text" id="m_row_expected" placeholder="Expected" /></div>
-          </div>
+          <!-- row_* removed — unified into step_action_prefix etc. -->
           <div id="m_single_col_fields" style="display:none;">
             <div class="field"><label>Steps column</label><input type="text" id="m_step_single" placeholder="Steps" /></div>
           </div>
@@ -3129,9 +3125,10 @@ let _createFile   = null;  // File object for create-from-CSV
 
 function onMappingStepsFormatChange() {
   const fmt = document.getElementById('m_steps_format').value;
-  document.getElementById('m_columns_fields').style.display  = fmt === 'columns'    ? 'grid' : 'none';
-  document.getElementById('m_rows_fields').style.display     = fmt === 'rows'       ? 'grid' : 'none';
-  document.getElementById('m_single_col_fields').style.display = fmt === 'single_col' ? 'block' : 'none';
+  // "columns" shows numbered-column prefix inputs; "single_col" shows one column name
+  // "rows" uses the same step prefix fields as "columns" — no separate section needed
+  document.getElementById('m_columns_fields').style.display    = fmt !== 'single_col' && fmt !== 'none' ? 'grid'  : 'none';
+  document.getElementById('m_single_col_fields').style.display = fmt === 'single_col'                   ? 'block' : 'none';
 }
 
 async function loadMappingConfig() {
@@ -3155,9 +3152,6 @@ async function loadMappingConfig() {
   s('m_step_action',   tc.step_action_prefix  || 'Step Action');
   s('m_step_data',     tc.step_data_prefix    || 'Step Data');
   s('m_step_expected', tc.step_expected_prefix|| 'Expected Result');
-  s('m_row_step',      tc.row_step            || 'Step');
-  s('m_row_data',      tc.row_data            || 'Data');
-  s('m_row_expected',  tc.row_expected        || 'Expected');
   s('m_step_single',   tc.step_single_column  || 'Steps');
   const fmtEl = document.getElementById('m_steps_format');
   if (fmtEl) { fmtEl.value = tc.steps_format || 'columns'; onMappingStepsFormatChange(); }
@@ -3230,9 +3224,6 @@ async function saveTcMapping() {
     step_action_prefix:   v('m_step_action')   || 'Step Action',
     step_data_prefix:     v('m_step_data')     || 'Step Data',
     step_expected_prefix: v('m_step_expected') || 'Expected Result',
-    row_step:             v('m_row_step')      || 'Step',
-    row_data:             v('m_row_data')      || 'Data',
-    row_expected:         v('m_row_expected')  || 'Expected',
     step_single_column:   v('m_step_single')  || 'Steps',
     custom_fields: _customFieldRows.filter(r => r.csv_col && r.jira_field),
   };
@@ -3316,7 +3307,7 @@ async function previewCreateCsv(file) {
   const m = _csvMapping;
   const mappedFields  = new Set([m.summary, m.description, m.priority, m.labels, m.components].filter(Boolean));
   const stepPfxs = [m.step_action_prefix, m.step_data_prefix, m.step_expected_prefix,
-                    m.row_step, m.row_data, m.row_expected, m.step_single_column].filter(Boolean);
+                    m.step_single_column].filter(Boolean);
   const isStep = h => stepPfxs.some(p => h.startsWith(p));
 
   // Build table header

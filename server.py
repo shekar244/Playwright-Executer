@@ -1340,10 +1340,11 @@ def import_testcases_grouped():
     col_type        = issue_type_name
     # Custom field mappings: [{csv_col, jira_field, field_type}]
     custom_fields = mapping.get("custom_fields", [])
-    # Zephyr UI names for steps: "Test Step", "Test Data", "Test Result"
-    step_act    = mapping.get("step_action_prefix",   "Test Step")
-    step_dat    = mapping.get("step_data_prefix",     "Test Data")
-    step_exp    = mapping.get("step_expected_prefix", "Test Result")
+    steps_fmt = mapping.get("steps_format", "rows")
+    # Single unified column name mapping — same fields used for all step formats
+    step_act  = mapping.get("step_action_prefix",   "Step")
+    step_dat  = mapping.get("step_data_prefix",     "Data")
+    step_exp  = mapping.get("step_expected_prefix", "Expected")
 
     content = file.read().decode("utf-8-sig")
     rows    = list(csv.DictReader(io.StringIO(content)))
