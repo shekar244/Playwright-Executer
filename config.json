@@ -30,7 +30,9 @@
       ]
     }
   ],
-  "zephyr": {},
+  "zephyr": {
+    "project_name": ""
+  },
   "zephyr_tc_mapping": {
     "story_id": "",
     "summary": "TESTNAME",

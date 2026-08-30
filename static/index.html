@@ -1194,10 +1194,17 @@
       <div class="field"><label>Zephyr Access Key</label><input type="password" id="z_access_key" placeholder="zapiAccessKey from Zephyr app" /></div>
       <div class="field"><label>Zephyr Secret Key</label><input type="password" id="z_secret_key" placeholder="Secret key from Zephyr app" /></div>
       <div class="field"><label>Atlassian Account ID</label><input type="text" id="z_account_id" placeholder="e.g. 5b10a2844c20165700ede21g" /></div>
-      <div class="field">
-        <label>Project Key</label>
-        <input type="text" id="z_project_key" placeholder="e.g. JIRAPROJECTID, PROJ, QA" style="text-transform:uppercase;" />
-        <div class="hint">Jira project key — used for all Zephyr operations</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
+        <div class="field">
+          <label>Project Key</label>
+          <input type="text" id="z_project_key" placeholder="e.g. BBX, PROJ, QA" style="text-transform:uppercase;" />
+          <div class="hint">Short key — used in Zephyr API &amp; issue creation</div>
+        </div>
+        <div class="field">
+          <label>Project Name</label>
+          <input type="text" id="z_project_name" placeholder="e.g. BBX QA Automation" />
+          <div class="hint">Full display name shown in context banners</div>
+        </div>
       </div>
       <div class="field">
         <label class="checkbox-label" style="gap:8px;">
@@ -3323,11 +3330,12 @@ async function loadZephyrConfig() {
   set('z_access_key',  cfg.access_key  || '');
   set('z_secret_key',  cfg.secret_key  || '');
   set('z_account_id',  cfg.account_id  || '');
-  set('z_project_key', cfg.project_key || '');
+  set('z_project_key',  cfg.project_key  || '');
+  set('z_project_name', cfg.project_name || '');
   const sslEl = document.getElementById('z_verify_ssl');
   // Default SSL verify = false (works for most corporate Jira setups)
   if (sslEl) sslEl.checked = cfg.verify_ssl === true;
-  // Sync project key into the Zephyr tab display
+  // Sync project key + name into the Zephyr tab display
   _syncProjectDisplay(cfg.project_key || '');
   // Update connection status badge on the Zephyr tab
   if (cfg.access_key) {
@@ -3341,18 +3349,20 @@ async function saveZephyrConfig() {
     const el = document.getElementById(id);
     return el ? el.value.trim() : '';
   };
-  const projectKey = val('z_project_key').toUpperCase();
-  const sslEl      = document.getElementById('z_verify_ssl');
+  const projectKey  = val('z_project_key').toUpperCase();
+  const projectName = val('z_project_name');
+  const sslEl       = document.getElementById('z_verify_ssl');
 
   const cfg = {
-    jira_url:    val('z_jira_url'),
-    username:    val('z_username'),
-    api_token:   val('z_api_token'),
-    access_key:  val('z_access_key'),
-    secret_key:  val('z_secret_key'),
-    account_id:  val('z_account_id'),
-    project_key: projectKey,
-    verify_ssl:  sslEl ? sslEl.checked : false,
+    jira_url:     val('z_jira_url'),
+    username:     val('z_username'),
+    api_token:    val('z_api_token'),
+    access_key:   val('z_access_key'),
+    secret_key:   val('z_secret_key'),
+    account_id:   val('z_account_id'),
+    project_key:  projectKey,
+    project_name: projectName,
+    verify_ssl:   sslEl ? sslEl.checked : false,
   };
 
   console.log('[Zephyr] saving config:', Object.keys(cfg), 'project_key:', projectKey);
@@ -3972,6 +3982,13 @@ function _updateZephyrContextBanners() {
   const fName = _zFolderId
                   ? (fEl?.querySelector('span:last-child')?.textContent || _zFolderId) : '';
 
+  // Resolve project name from config
+  const zCfg = {};
+  try { const r = await fetch('/api/zephyr/config'); Object.assign(zCfg, await r.json()); } catch(_){}
+  const projDisplay = zCfg.project_name
+    ? `${zCfg.project_name} (${_zProject || zCfg.project_key || ''})`
+    : (_zProject || zCfg.project_key || '');
+
   const chip = (label, value, color) =>
     `<span style="font-size:10px;color:var(--text-dim);margin-right:2px;">${label}:</span>` +
     `<span style="font-weight:700;color:${color};margin-right:8px;">${escHtml(value)}</span>`;
@@ -3981,12 +3998,14 @@ function _updateZephyrContextBanners() {
 
   let html;
   if (!_zCycleId) {
-    html = warn('No cycle selected — use Steps 2 &amp; 3 on the left: Version → Cycle → Folder');
+    html = (projDisplay ? chip('Project', projDisplay, 'var(--purple)') : '') +
+           warn('No cycle selected — use Steps 2 &amp; 3 on the left: Version → Cycle → Folder');
   } else {
     html = '<span style="color:var(--text-dim);font-size:10px;margin-right:6px;">TARGET</span>' +
+           (projDisplay ? chip('Project', projDisplay, 'var(--purple)') : '') +
            (vName ? chip('Version', vName, 'var(--text-muted)') : '') +
            chip('Cycle', cName || _zCycleId, 'var(--accent)') +
-           (fName ? chip('Folder', fName, 'var(--teal)') : warn('No folder selected — tests will go to cycle root'));
+           (fName ? chip('Folder', fName, 'var(--teal)') : warn('No folder — tests go to cycle root'));
   }
 
   ['zImportContext', 'zResultsContext', 'zExecContext'].forEach(id => {
@@ -4103,9 +4122,16 @@ async function zUploadResults() {
 
   zLog(`⟳  Uploading results from "${csvFile.name}" to cycle (${_resultsCsvRows.length} rows)…`, 'info');
 
+  zLog(`  📋 cycleId=${_zCycleId}  folderId=${_zFolderId||'—'}  projectId=${_zProjectId||_zProject||'—'}  versionId=${_zVersionId||'-1'}`, 'info');
+
   try {
     const res  = await fetch('/api/zephyr/bulk-results', { method: 'POST', body: form });
-    const data = await res.json();
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      zLog(`✗  API error (${res.status}): ${JSON.stringify(data.error || data)}`, 'failed');
+      btn.disabled = false; btn.textContent = 'Upload Results to Cycle';
+      return;
+    }
     if (res.ok) {
       const s = data.success || 0, e = data.errors || 0, nf = data.not_found || 0;
       zLog(`✓  Processed ${data.processed} rows — Success: ${s}  Errors: ${e}  Not found: ${nf}`,

@@ -1218,10 +1218,10 @@ def zephyr_attach():
 # ── Jira search / filter / links ──────────────────────────────────────────────
 
 def _jira_search_jql(jql: str, max_results: int = 200) -> tuple:
-    """Run a JQL search using the current Atlassian REST API v3 endpoint.
+    """Run a JQL search.
 
-    Primary:  GET /rest/api/3/search/jql?jql=...  (Atlassian Cloud current)
-    Fallback: GET /rest/api/2/search?jql=...       (Jira Server / old Cloud)
+    Primary:  GET /rest/api/latest/search/jql?jql=...&fields=*all  (Atlassian Cloud)
+    Fallback: GET /rest/api/2/search?jql=...                        (Jira Server)
     """
     cfg      = _z_cfg()
     jira_url = cfg.get("jira_url", "").rstrip("/")
@@ -1233,26 +1233,32 @@ def _jira_search_jql(jql: str, max_results: int = 200) -> tuple:
     ).decode()
     hdrs = {"Authorization": f"Basic {creds}",
             "Content-Type": "application/json", "Accept": "application/json"}
-    fields = "summary,issuetype,status,priority,assignee,key"
 
-    # ── GET /rest/api/3/search/jql?jql= (Atlassian Cloud v3) ─────────────────
-    qs  = urllib.parse.urlencode({"jql": jql, "maxResults": max_results, "fields": fields})
-    url = f"{jira_url}/rest/api/3/search/jql?{qs}"
+    # ── GET /rest/api/latest/search/jql?jql=...&fields=*all ──────────────────
+    qs  = urllib.parse.urlencode({
+        "jql":        jql,
+        "maxResults": max_results,
+        "fields":     "*all",
+    })
+    url = f"{jira_url}/rest/api/latest/search/jql?{qs}"
     try:
         req = urllib.request.Request(url, headers=hdrs, method="GET")
         with _urlopen(req, timeout=20) as resp:
             data, code = _parse_response(resp.read(), resp.status)
             if isinstance(data, dict) and "issues" in data:
                 return data, code
-            # Endpoint exists but returned unexpected body — fall through
     except urllib.error.HTTPError as e:
         if e.code not in (404, 405, 410):
-            return _parse_error(e)   # auth / bad JQL — stop, don't retry
+            return _parse_error(e)   # auth / bad JQL — stop
     except Exception:
         pass
 
-    # ── Fallback: GET /rest/api/2/search?jql= (Jira Server / old Cloud) ──────
-    return _jira_call("GET", "/search", {"jql": jql, "maxResults": max_results, "fields": fields})
+    # ── Fallback: GET /rest/api/2/search (Jira Server) ───────────────────────
+    return _jira_call("GET", "/search", {
+        "jql":        jql,
+        "maxResults": max_results,
+        "fields":     "*all",
+    })
 
 
 @app.route("/api/jira/search")
@@ -1663,6 +1669,79 @@ def import_testcases():
 
 # ── Bulk Results Upload ───────────────────────────────────────────────────────
 
+def _z_get_execution_id(issue_id: str, project_id: str, version_id: str,
+                        folder_id: str = "", cycle_id: str = "") -> str | None:
+    """Find the Zephyr execution ID for a given Jira issue.
+
+    Mirrors the working ZephyrSquadCloudClient.get_execution_id logic:
+    GET /public/rest/api/1.0/executions?issueId=...&projectId=...&versionId=...
+    Response: {"executions": [{"execution": {"id": "...", "folderId": "..."}, ...}], "totalCount": N}
+    """
+    offset, limit = 0, 50
+    while True:
+        params: dict = {
+            "issueId":   issue_id,
+            "projectId": project_id,
+            "versionId": version_id,
+            "offset":    offset,
+            "limit":     limit,
+        }
+        data, code = _z_call("GET", "/public/rest/api/1.0/executions", params)
+        if code != 200:
+            break
+        executions = data.get("executions", [])
+        if not executions:
+            break
+        for wrapper in executions:
+            exec_obj      = wrapper.get("execution", wrapper)   # some versions have nested, some flat
+            current_folder = str(exec_obj.get("folderId", "") or "")
+            if folder_id:
+                if current_folder == str(folder_id):
+                    return str(exec_obj.get("id", ""))
+            else:
+                return str(exec_obj.get("id", ""))
+        total = int(data.get("totalCount", 0))
+        offset += limit
+        if offset >= total:
+            break
+    return None
+
+
+def _z_update_execution(exec_id: str, issue_id: str, project_id: str,
+                        status_id: int, cycle_id: str, version_id: str,
+                        comment: str = "") -> tuple:
+    """Update execution status — sends projectId/issueId as BOTH query params AND body
+    (mirrors working implementation that passes query=... and json_body=...)."""
+    api_path = f"/public/rest/api/1.0/execution/{exec_id}"
+    # Query params on the URL
+    url_params = {"projectId": project_id, "issueId": issue_id}
+    # Body
+    body = {
+        "status":    {"id": str(status_id)},
+        "issueId":   issue_id,
+        "projectId": project_id,
+        "cycleId":   cycle_id,
+        "versionId": int(version_id) if str(version_id).lstrip("-").isdigit() else -1,
+        "comment":   comment,
+        "testStepStatusChangeFlag": False,   # handled separately
+    }
+    cfg    = _z_cfg()
+    ak     = cfg.get("access_key",""); sk = cfg.get("secret_key",""); ai = cfg.get("account_id","")
+    verify = cfg.get("verify_ssl", False)
+    token  = _zephyr_jwt(ak, sk, ai, "PUT", api_path, url_params, expires_in=60)
+    hdrs   = {"Authorization": f"JWT {token}", "zapiAccessKey": ak,
+              "Content-Type": "application/json", "Accept": "application/json"}
+    url = ZAPI_BASE + api_path + "?" + urllib.parse.urlencode(url_params)
+    try:
+        req = urllib.request.Request(url, data=json.dumps(body).encode(), headers=hdrs, method="PUT")
+        with urllib.request.urlopen(req, timeout=20, context=_ssl_ctx(verify)) as resp:
+            return _parse_response(resp.read(), resp.status)
+    except urllib.error.HTTPError as e:
+        return _parse_error(e)
+    except Exception as ex:
+        return {"error": str(ex)}, 500
+
+
 def _z_get_all_executions(path: str, base_params: dict, page_size: int = 50) -> list[dict]:
     """Paginate through Zephyr execution search results (max 50 per page) and return all."""
     all_execs: list[dict] = []
@@ -1714,13 +1793,24 @@ def _update_exec_steps(exec_id: str, issue_id: int | str, status_id: int) -> lis
 def _attach_file_to_exec(exec_id: str, issue_id: int | str, cycle_id: str,
                           project_id: str, version_id: str,
                           file_bytes: bytes, filename: str) -> bool:
-    """Upload a file as an attachment to a Zephyr execution. Returns True on success."""
+    """Upload attachment to a Zephyr execution — mirrors working upload_execution_attachment.
+
+    Query uses lowercase entityName/entityType + executionId field (matching the
+    Java client that works in production).
+    """
     cfg = _z_cfg()
     path_att = "/public/rest/api/1.0/attachment"
-    params   = {
-        "projectId":  project_id, "issueId": str(issue_id),
-        "versionId":  version_id, "cycleId": cycle_id,
-        "entityId":   exec_id,    "entityName": "EXECUTION",
+    # Params match the working implementation exactly
+    params = {
+        "comment":     "test result",
+        "cycleId":     cycle_id,
+        "entityId":    exec_id,
+        "entityName":  "execution",      # lowercase — matches working code
+        "entityType":  "execution",      # extra field from working code
+        "executionId": exec_id,          # extra field from working code
+        "issueId":     str(issue_id),
+        "projectId":   project_id,
+        "versionId":   version_id,
     }
     tok = _zephyr_jwt(cfg.get("access_key",""), cfg.get("secret_key",""),
                       cfg.get("account_id",""), "POST", path_att, params)
@@ -1770,25 +1860,24 @@ def bulk_results_upload():
     col_attach   = res_map.get("attachment_path", "Attachment Path")
     update_steps = res_map.get("update_steps",  True)
 
-    # Load all executions paginated (Zephyr limit: 50 per page)
-    base_params: dict = {"versionId": version_id}
-    if project_id: base_params["projectId"] = project_id
-    if folder_id:
-        exec_path = f"/public/rest/api/1.0/executions/search/folder/{folder_id}"
-        base_params["cycleId"] = cycle_id
-    else:
-        exec_path = f"/public/rest/api/1.0/executions/search/cycle/{cycle_id}"
-
-    exec_list = _z_get_all_executions(exec_path, base_params, page_size=50)
-    if not exec_list and not rows:
-        return jsonify({"error": "Could not load executions from cycle/folder"}), 400
-
-    exec_by_key = {e.get("issueKey", ""): e for e in exec_list}
-    exec_by_id  = {str(e.get("issueId", "")): e for e in exec_list}
+    # Pre-fetch Jira issue IDs for all keys in one JQL call (efficient)
+    all_keys = [
+        (row.get(col_key) or row.get("Issue Key") or row.get("Test ID")
+         or row.get("Jira ID") or row.get("issueKey") or "").strip()
+        for row in rows
+    ]
+    all_keys = [k for k in all_keys if k]
+    jira_id_map: dict[str, str] = {}   # issueKey → numeric issueId
+    if all_keys:
+        jql_resp, _ = _jira_search_jql(
+            f"issueKey in ({','.join(all_keys)})", max_results=len(all_keys)
+        )
+        for iss in jql_resp.get("issues", []):
+            jira_id_map[iss.get("key","")] = str(iss.get("id",""))
 
     results: dict = {"success": [], "errors": [], "not_found": []}
 
-    for row_num, row in enumerate(rows, start=2):   # row 2 = first data row (header = 1)
+    for row_num, row in enumerate(rows, start=2):
         issue_key = (row.get(col_key) or row.get("Issue Key") or row.get("Test ID")
                      or row.get("Jira ID") or row.get("issueKey") or "").strip()
         if not issue_key:
@@ -1802,34 +1891,33 @@ def bulk_results_upload():
             status_str = (row.get(col_status) or row.get("Status") or row.get("Result") or "pass").strip().lower()
             status_id  = STATUS_MAP.get(status_str, 1)
 
-        comment = (row.get(col_comment) or row.get("Comment") or "").strip()
+        comment         = (row.get(col_comment) or row.get("Comment") or "").strip()
         row_attach_path = (row.get(col_attach) or row.get("Attachment Path") or "").strip()
 
-        # Find execution
-        exec_obj = exec_by_key.get(issue_key) or exec_by_id.get(issue_key)
-        if not exec_obj:
+        # Get numeric Jira issue ID
+        issue_id = jira_id_map.get(issue_key, "")
+        if not issue_id:
             results["not_found"].append({"row": row_num, "issue": issue_key,
-                                          "error": f"'{issue_key}' not found in cycle/folder"})
-            continue   # always process all rows
+                                          "error": "Jira issue not found"})
+            continue
 
-        exec_id  = str(exec_obj.get("id") or exec_obj.get("executionId", ""))
-        issue_id = exec_obj.get("issueId", "")
+        # Find Zephyr execution ID using working pattern (per-issue lookup)
+        exec_id = _z_get_execution_id(
+            issue_id=issue_id, project_id=project_id,
+            version_id=version_id, folder_id=folder_id,
+            cycle_id=cycle_id,
+        )
+        if not exec_id:
+            results["not_found"].append({"row": row_num, "issue": issue_key,
+                                          "error": f"Execution not found in cycle/folder for {issue_key}"})
+            continue
 
-        # 1. Update execution status
-        update_body = {
-            "status":    {"id": status_id},
-            "id":         exec_id,
-            "issueId":    issue_id,
-            "cycleId":    cycle_id,
-            "versionId":  int(version_id) if str(version_id).lstrip("-").isdigit() else -1,
-            "comment":    comment,
-            # step flag: we handle steps manually below for full detail
-            "testStepStatusChangeFlag": False,
-        }
-        if project_id.isdigit():
-            update_body["projectId"] = int(project_id)
-
-        upd, upd_code = _z_call("PUT", f"/public/rest/api/1.0/execution/{exec_id}", body=update_body)
+        # 1. Update execution — uses query params + body (matches working implementation)
+        upd, upd_code = _z_update_execution(
+            exec_id=exec_id, issue_id=issue_id, project_id=project_id,
+            status_id=status_id, cycle_id=cycle_id, version_id=version_id,
+            comment=comment,
+        )
         if upd_code not in (200, 201):
             results["errors"].append({"row": row_num, "issue": issue_key,
                                        "error": f"Execution update failed ({upd_code}): {upd}"})
