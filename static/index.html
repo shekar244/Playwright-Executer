@@ -1095,6 +1095,13 @@
         <div class="field"><label>Zephyr Access Key</label><input type="password" id="z_access_key" placeholder="zapiAccessKey from Zephyr app" /></div>
         <div class="field"><label>Zephyr Secret Key</label><input type="password" id="z_secret_key" placeholder="Secret key from Zephyr app" /></div>
         <div class="field"><label>Atlassian Account ID</label><input type="text" id="z_account_id" placeholder="e.g. 5b10a2844c20165700ede21g" /></div>
+        <div class="field">
+          <label class="checkbox-label" style="gap:8px;">
+            <input type="checkbox" id="z_verify_ssl" checked />
+            Verify SSL certificate
+          </label>
+          <div class="hint">Uncheck if you get SSL certificate errors (corporate proxy / self-signed cert)</div>
+        </div>
         <div class="action-row">
           <button class="btn btn-sm" onclick="saveZephyrConfig()">💾 Save</button>
           <button class="btn btn-sm" onclick="testZephyrConnection()">⚡ Test</button>
@@ -2732,6 +2739,8 @@ async function loadZephyrConfig() {
   set('z_access_key', cfg.access_key || '');
   set('z_secret_key', cfg.secret_key || '');
   set('z_account_id', cfg.account_id || '');
+  const sslEl = document.getElementById('z_verify_ssl');
+  if (sslEl) sslEl.checked = cfg.verify_ssl !== false;
   // Update connection status badge on the Zephyr tab
   if (cfg.access_key) {
     const dot = document.getElementById('zConnectStatus');
@@ -2741,6 +2750,7 @@ async function loadZephyrConfig() {
 
 async function saveZephyrConfig() {
   const get = id => { const el = document.getElementById(id); return el ? el.value.trim() : ''; };
+  const sslEl = document.getElementById('z_verify_ssl');
   const cfg = {
     jira_url:   get('z_jira_url'),
     username:   get('z_username'),
@@ -2748,6 +2758,7 @@ async function saveZephyrConfig() {
     access_key: get('z_access_key'),
     secret_key: get('z_secret_key'),
     account_id: get('z_account_id'),
+    verify_ssl: sslEl ? sslEl.checked : true,
   };
   const res = await fetch('/api/zephyr/config', {
     method: 'POST', headers: { 'Content-Type': 'application/json' },

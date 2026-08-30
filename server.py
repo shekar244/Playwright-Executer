@@ -769,6 +769,24 @@ def clear_report_history():
 ZAPI_BASE = "https://prod-api.zephyr4jiracloud.com/connect"
 JIRA_REST = "/rest/api/2"
 
+import ssl as _ssl
+
+def _ssl_ctx(verify: bool = True) -> _ssl.SSLContext:
+    """Return an SSL context.  verify=False skips cert check (corp proxies / self-signed certs)."""
+    if not verify:
+        ctx = _ssl.create_default_context()
+        ctx.check_hostname = False
+        ctx.verify_mode    = _ssl.CERT_NONE
+        return ctx
+    # Try certifi bundle first (most reliable cross-platform)
+    try:
+        import certifi
+        return _ssl.create_default_context(cafile=certifi.where())
+    except ImportError:
+        pass
+    # Fall back to system default
+    return _ssl.create_default_context()
+
 STATUS_MAP = {
     "pass": 1, "passed": 1, "p": 1,
     "fail": 2, "failed": 2, "f": 2,
@@ -831,9 +849,10 @@ def _z_call(method: str, path: str, params: dict | None = None, body=None) -> tu
     if params:
         url += "?" + urllib.parse.urlencode({k: v for k, v in params.items() if v is not None})
     data = json.dumps(body).encode() if body is not None else None
+    verify = cfg.get("verify_ssl", True)
     try:
         req = urllib.request.Request(url, data=data, headers=hdrs, method=method.upper())
-        with urllib.request.urlopen(req, timeout=20) as resp:
+        with urllib.request.urlopen(req, timeout=20, context=_ssl_ctx(verify)) as resp:
             raw = resp.read()
             return (json.loads(raw) if raw else {}), resp.status
     except urllib.error.HTTPError as e:
@@ -858,9 +877,10 @@ def _jira_call(method: str, path: str, params: dict | None = None, body=None) ->
     if params:
         url += "?" + urllib.parse.urlencode(params)
     data = json.dumps(body).encode() if body is not None else None
+    verify = cfg.get("verify_ssl", True)
     try:
         req = urllib.request.Request(url, data=data, headers=hdrs, method=method.upper())
-        with urllib.request.urlopen(req, timeout=20) as resp:
+        with urllib.request.urlopen(req, timeout=20, context=_ssl_ctx(verify)) as resp:
             raw = resp.read()
             return (json.loads(raw) if raw else {}), resp.status
     except urllib.error.HTTPError as e:
