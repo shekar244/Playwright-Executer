@@ -3431,9 +3431,11 @@ async function loadZephyrVersionsAndCycles() {
     // Store numeric projectId from first version for ZAPI calls
     if (arr.length && arr[0].projectId) _zProjectId = String(arr[0].projectId);
     const sel = document.getElementById('z_version');
+    // Reverse so the latest release/version appears at the top
+    const sortedVersions = [...arr].reverse();
     sel.innerHTML = '<option value="-1">Unscheduled</option>' +
-      arr.map(v => `<option value="${escHtml(String(v.id))}">${escHtml(v.name)}</option>`).join('');
-    zLog(`✓  Loaded ${arr.length} version(s).`, 'passed');
+      sortedVersions.map(v => `<option value="${escHtml(String(v.id))}">${escHtml(v.name)}</option>`).join('');
+    zLog(`✓  Loaded ${arr.length} version(s) — newest first.`, 'passed');
   } else {
     zLog('⚠  Could not load versions — will use Unscheduled.', 'warning');
   }
@@ -3496,12 +3498,10 @@ async function loadZephyrCycles() {
       .filter(c => c.name);
   }
 
-  // Reverse so newest cycles appear first
-  const sortedCycles = [...cycles].reverse();
   const sel = document.getElementById('z_cycle');
   sel.innerHTML = '<option value="">— select cycle —</option>' +
-    sortedCycles.map(c => `<option value="${escHtml(String(c.id))}">${escHtml(c.name)}</option>`).join('');
-  zLog(`✓  Loaded ${cycles.length} cycle(s) — newest first.`, 'passed');
+    cycles.map(c => `<option value="${escHtml(String(c.id))}">${escHtml(c.name)}</option>`).join('');
+  zLog(`✓  Loaded ${cycles.length} cycle(s).`, 'passed');
 
   // Reset folder tree
   document.getElementById('zFolderTree').innerHTML =
