@@ -34,3 +34,4 @@ last_run.json
 # Tool artifacts — never commit
 .claude-flow/
 .claude/
+.firecrawl/

@@ -1,0 +1,28 @@
+[
+  {
+    "ts": 1788105025950,
+    "date": "2026-08-30 11:50",
+    "repo": "p13n-marketing-experiences-qa-automation",
+    "status": "passed",
+    "stats": {
+      "passed": 1,
+      "failed": 0,
+      "broken": 0,
+      "skipped": 0,
+      "total": 1
+    }
+  },
+  {
+    "ts": 1788103186336,
+    "date": "2026-08-30 11:19",
+    "repo": "p13n-marketing-experiences-qa-automation",
+    "status": "failed:1",
+    "stats": {
+      "passed": 1,
+      "failed": 0,
+      "broken": 2,
+      "skipped": 0,
+      "total": 3
+    }
+  }
+]

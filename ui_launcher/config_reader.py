@@ -21,6 +21,7 @@ _DEFAULTS: dict = {
     ],
     "default_workers": 1,
     "auto_open_report": False,
+    "allure_results_dir": "allure/results",
     "report_individual_dir": "allure/reports",
     "report_consolidated_dir": "allure/reports/history",
     # Each entry: {"label", "flag", "type": "dropdown"|"checkbox",

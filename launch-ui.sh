@@ -56,11 +56,39 @@ if ! grep -q "playwright-executor" /etc/hosts 2>/dev/null; then
 fi
 
 # ----------------------------------------------------------
+# Free port 7777 if already in use
+# ----------------------------------------------------------
+PORT=7777
+
+_kill_port() {
+    # Try both lsof syntaxes macOS uses (tcp:N and :N)
+    local pids
+    pids=$(lsof -ti tcp:$PORT 2>/dev/null; lsof -ti :$PORT 2>/dev/null)
+    pids=$(echo "$pids" | sort -u | tr '\n' ' ')
+    if [ -n "$pids" ]; then
+        echo "[INFO] Port $PORT in use (PIDs: $pids) — killing..."
+        # shellcheck disable=SC2086
+        kill -9 $pids 2>/dev/null || true
+        return 0
+    fi
+    return 1
+}
+
+if _kill_port; then
+    # Wait until the port is actually released (up to 3 s)
+    for i in 1 2 3 4 5 6; do
+        sleep 0.5
+        lsof -ti tcp:$PORT &>/dev/null || { echo "[INFO] Port $PORT freed."; break; }
+        [ "$i" -eq 6 ] && echo "[WARN] Port $PORT may still be in use."
+    done
+fi
+
+# ----------------------------------------------------------
 # Launch the web server
 # ----------------------------------------------------------
 cd "$EXECUTER_ROOT"
 
-echo "[INFO] Starting server at http://playwright-executor:7777"
+echo "[INFO] Starting server at http://playwright-executor:$PORT"
 echo "[INFO] Press Ctrl+C to stop."
 echo ""
 exec "$PYTHON" server.py

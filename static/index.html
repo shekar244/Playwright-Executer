@@ -4,37 +4,47 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Playwright Test Executor</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" crossorigin>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
     :root {
-      --bg: #1e1e2e;
-      --surface: #27273a;
-      --border: #383850;
-      --text: #cdd6f4;
-      --text-dim: #6c7086;
-      --text-muted: #9399b2;
-      --accent: #89b4fa;
-      --green: #a6e3a1;
-      --red: #f38ba8;
-      --yellow: #f9e2af;
-      --teal: #94e2d5;
-      --purple: #cba6f7;
-      --mauve: #cba6f7;
-      --header-bg: #181825;
-      --input-bg: #313244;
-      --input-border: #45475a;
-      --btn-run: #a6e3a1;
-      --btn-run-text: #1e1e2e;
-      --btn-stop: #f38ba8;
-      --btn-stop-text: #1e1e2e;
-      --log-bg: #11111b;
-      --sep: #45475a;
-      --radius: 6px;
+      /* Core palette — Dark Pro theme, high contrast */
+      --bg:           #16161e;
+      --surface:      #1f1f2e;
+      --surface2:     #2a2a3d;
+      --border:       #383854;
+      --border-focus: rgba(137,180,250,0.4);
+      --text:         #cdd6f4;
+      --text-dim:     #808099;
+      --text-muted:   #a6adc8;
+      --accent:       #89b4fa;
+      --accent-glow:  rgba(137,180,250,0.15);
+      --green:        #a6e3a1;
+      --green-glow:   rgba(166,227,161,0.15);
+      --red:          #f38ba8;
+      --red-glow:     rgba(243,139,168,0.15);
+      --yellow:       #f9e2af;
+      --yellow-glow:  rgba(249,226,175,0.15);
+      --teal:         #94e2d5;
+      --purple:       #cba6f7;
+      --mauve:        #cba6f7;
+      --peach:        #fab387;
+      --header-bg:    #0f0f1a;
+      --input-bg:     #222233;
+      --input-border: #44445e;
+      --log-bg:       #0d0d17;
+      --sep:          #383854;
+      --radius:       7px;
+      --radius-lg:    11px;
+      --shadow-sm:    0 1px 4px rgba(0,0,0,0.5);
+      --shadow-md:    0 4px 16px rgba(0,0,0,0.5);
+      --shadow-lg:    0 8px 32px rgba(0,0,0,0.6);
     }
 
     body {
-      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
       font-size: 13px;
       background: var(--bg);
       color: var(--text);
@@ -42,33 +52,88 @@
       display: flex;
       flex-direction: column;
       overflow: hidden;
+      -webkit-font-smoothing: antialiased;
     }
 
     /* ── Header ── */
     header {
       background: var(--header-bg);
-      padding: 12px 20px;
+      padding: 0 20px;
+      height: 52px;
       display: flex;
       align-items: center;
       gap: 12px;
       border-bottom: 1px solid var(--border);
       flex-shrink: 0;
+      position: relative;
     }
-    header h1 { font-size: 16px; font-weight: 600; color: var(--text); }
-    header span { color: var(--text-dim); font-size: 12px; }
-    .version { margin-left: auto; color: var(--text-dim); font-size: 11px; }
-    .help-link {
-      margin-left: 14px;
+    header::after {
+      content: '';
+      position: absolute;
+      bottom: 0; left: 0; right: 0;
+      height: 1px;
+      background: linear-gradient(90deg, var(--accent) 0%, transparent 60%);
+      opacity: 0.4;
+    }
+
+    .header-logo {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    .logo-mark {
+      width: 28px; height: 28px;
+      background: linear-gradient(135deg, var(--accent) 0%, var(--purple) 100%);
+      border-radius: 7px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 14px;
+      box-shadow: 0 0 12px rgba(137,180,250,0.3);
+      flex-shrink: 0;
+    }
+    header h1 {
+      font-size: 14px; font-weight: 700;
+      color: var(--text);
+      letter-spacing: -0.01em;
+    }
+    header h1 span { color: var(--accent); }
+    .repo-subtitle {
       color: var(--text-dim);
-      font-size: 11px;
+      font-size: 12px;
+      padding: 3px 10px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 20px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      max-width: 300px;
+    }
+    .header-right { margin-left: auto; display: flex; align-items: center; gap: 10px; }
+    .version-badge {
+      font-size: 10px; font-weight: 600; color: var(--text-dim);
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: 20px; padding: 2px 9px;
+      letter-spacing: 0.03em;
+    }
+    .help-link {
+      color: var(--text-dim);
+      font-size: 11px; font-weight: 600;
       text-decoration: none;
       border: 1px solid var(--border);
       border-radius: var(--radius);
-      padding: 3px 9px;
-      transition: color 0.15s, border-color 0.15s;
+      padding: 5px 12px;
+      transition: all 0.15s;
+      background: var(--surface);
     }
-    .help-link:hover { color: var(--accent); border-color: var(--accent); }
-    .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--accent); }
+    .help-link:hover {
+      color: var(--accent);
+      border-color: var(--accent);
+      background: var(--accent-glow);
+      box-shadow: 0 0 8px var(--accent-glow);
+    }
+
+    /* pulse dot — replaced by logo-mark */
+    .dot { display: none; }
 
     /* ── Body layout ── */
     .body {
@@ -87,88 +152,149 @@
       display: flex;
       flex-direction: column;
       overflow-y: auto;
-      padding: 16px;
-      gap: 14px;
+      padding: 16px 14px;
+      gap: 12px;
     }
 
+    /* Section block */
+    .section-block {
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-lg);
+      flex-shrink: 0;
+    }
     .section-title {
       font-size: 10px;
       font-weight: 700;
       text-transform: uppercase;
-      letter-spacing: 0.08em;
-      color: var(--text-dim);
-      padding-bottom: 6px;
+      letter-spacing: 0.1em;
+      color: var(--text-muted);
+      padding: 9px 14px 8px;
+      background: rgba(255,255,255,0.03);
       border-bottom: 1px solid var(--border);
-      margin-bottom: 2px;
+      border-radius: var(--radius-lg) var(--radius-lg) 0 0;
+      display: flex;
+      align-items: center;
+      gap: 6px;
     }
+    .section-title .stitle-icon { font-size: 12px; }
+    .section-content { padding: 12px 14px; display: flex; flex-direction: column; gap: 10px; }
 
-    .field { display: flex; flex-direction: column; gap: 4px; }
-    .field label { font-size: 11px; color: var(--text-muted); font-weight: 500; }
+    .field { display: flex; flex-direction: column; gap: 5px; }
+    .field label {
+      font-size: 11px; color: var(--text-muted);
+      font-weight: 600; letter-spacing: 0.02em;
+    }
     .field-row { display: flex; gap: 6px; align-items: center; }
     .field-row input, .field-row select { flex: 1; }
-    .hint { font-size: 10px; color: var(--text-dim); margin-top: 2px; }
+    .hint { font-size: 10px; color: var(--text-dim); margin-top: 2px; line-height: 1.4; }
 
-    input[type="text"], input[type="number"], select {
+    input[type="text"], input[type="number"], input[type="password"], select {
       background: var(--input-bg);
       border: 1px solid var(--input-border);
       border-radius: var(--radius);
       color: var(--text);
-      padding: 6px 9px;
+      padding: 7px 10px;
       font-size: 12px;
-      font-family: inherit;
+      font-family: 'Inter', inherit;
       width: 100%;
       outline: none;
-      transition: border-color 0.15s;
+      transition: border-color 0.15s, box-shadow 0.15s;
     }
-    input[type="text"]:focus, input[type="number"]:focus, select:focus {
+    input[type="text"]:focus,
+    input[type="number"]:focus,
+    input[type="password"]:focus,
+    select:focus {
       border-color: var(--accent);
+      box-shadow: 0 0 0 3px var(--accent-glow);
     }
-    select option { background: var(--input-bg); }
+    select option { background: #1e1e30; }
+    input[type="number"] { width: 72px; }
 
-    input[type="number"] { width: 70px; }
-
-    .checkboxes { display: flex; gap: 14px; flex-wrap: wrap; }
+    .checkboxes { display: flex; gap: 12px; flex-wrap: wrap; }
     .checkbox-label {
-      display: flex; align-items: center; gap: 5px;
+      display: flex; align-items: center; gap: 6px;
       font-size: 12px; color: var(--text-muted); cursor: pointer;
-      user-select: none;
+      user-select: none; font-weight: 500;
     }
-    .checkbox-label input[type="checkbox"] { accent-color: var(--accent); cursor: pointer; }
+    .checkbox-label input[type="checkbox"] {
+      accent-color: var(--accent); cursor: pointer;
+      width: 14px; height: 14px;
+    }
 
     /* ── Buttons ── */
     .btn {
-      padding: 8px 20px;
+      padding: 7px 18px;
       border: none;
       border-radius: var(--radius);
-      font-size: 13px;
+      font-size: 12px;
       font-weight: 600;
       cursor: pointer;
-      transition: opacity 0.15s, transform 0.1s;
-      font-family: inherit;
+      transition: all 0.15s;
+      font-family: 'Inter', inherit;
+      letter-spacing: 0.01em;
+      display: inline-flex; align-items: center; gap: 6px;
     }
     .btn:active { transform: scale(0.97); }
-    .btn:disabled { opacity: 0.4; cursor: not-allowed; transform: none; }
+    .btn:disabled { opacity: 0.38; cursor: not-allowed; transform: none; }
 
-    .btn-run  { background: var(--btn-run);  color: var(--btn-run-text); }
-    .btn-stop { background: var(--btn-stop); color: var(--btn-stop-text); }
-    .btn-sm   { background: var(--input-bg); color: var(--text-muted); padding: 6px 12px; font-size: 11px; font-weight: 500; border: 1px solid var(--input-border); }
-    .btn-sm:hover { border-color: var(--accent); color: var(--text); }
+    .btn-run {
+      background: linear-gradient(135deg, #a6e3a1 0%, #74c7a0 100%);
+      color: #0d1117;
+      box-shadow: 0 0 0 0 var(--green-glow);
+    }
+    .btn-run:hover:not(:disabled) {
+      box-shadow: 0 0 14px var(--green-glow);
+      transform: translateY(-1px);
+    }
+    .btn-stop {
+      background: linear-gradient(135deg, #f38ba8 0%, #e06c8a 100%);
+      color: #0d1117;
+      box-shadow: 0 0 0 0 var(--red-glow);
+    }
+    .btn-stop:hover:not(:disabled) {
+      box-shadow: 0 0 14px var(--red-glow);
+      transform: translateY(-1px);
+    }
+    .btn-sm {
+      background: var(--surface2);
+      color: var(--text-muted);
+      padding: 5px 12px;
+      font-size: 11px;
+      font-weight: 600;
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+    }
+    .btn-sm:hover:not(:disabled) {
+      border-color: var(--accent);
+      color: var(--accent);
+      background: var(--accent-glow);
+    }
+    .btn-accent {
+      background: linear-gradient(135deg, var(--accent) 0%, #6fa3e8 100%);
+      color: #0d1117;
+    }
+    .btn-accent:hover:not(:disabled) {
+      box-shadow: 0 0 14px var(--accent-glow);
+      transform: translateY(-1px);
+    }
 
     .browse-btn {
-      background: var(--input-bg);
+      background: var(--surface2);
       border: 1px solid var(--input-border);
       border-radius: var(--radius);
       color: var(--text-muted);
-      padding: 6px 10px;
+      padding: 7px 11px;
       font-size: 11px;
+      font-weight: 600;
       cursor: pointer;
       white-space: nowrap;
-      font-family: inherit;
-      transition: border-color 0.15s;
+      font-family: 'Inter', inherit;
+      transition: all 0.15s;
     }
-    .browse-btn:hover { border-color: var(--accent); color: var(--text); }
+    .browse-btn:hover { border-color: var(--accent); color: var(--accent); }
 
-    .action-row { display: flex; gap: 8px; align-items: center; margin-top: 4px; }
+    .action-row { display: flex; gap: 8px; align-items: center; }
 
     /* ── Report box ── */
     .report-box {
@@ -179,8 +305,15 @@
       display: flex;
       flex-direction: column;
       gap: 8px;
+      transition: border-color 0.15s;
     }
-    .report-path { font-size: 11px; color: var(--text-dim); word-break: break-all; }
+    .report-box:has(.report-path.found) { border-color: rgba(166,227,161,0.25); }
+    .report-label {
+      font-size: 10px; font-weight: 700; text-transform: uppercase;
+      letter-spacing: 0.08em; color: var(--text-dim);
+      display: flex; align-items: center; gap: 5px;
+    }
+    .report-path { font-size: 11px; color: var(--text-dim); word-break: break-all; font-family: 'JetBrains Mono', monospace; }
     .report-path.found { color: var(--green); }
 
     /* ── Right panel (log) ── */
@@ -193,40 +326,46 @@
     }
 
     .log-header {
-      padding: 8px 14px;
+      padding: 9px 16px;
       border-bottom: 1px solid var(--border);
       display: flex;
       align-items: center;
       gap: 10px;
       flex-shrink: 0;
+      background: rgba(255,255,255,0.02);
     }
-    .log-title { font-size: 11px; color: var(--text-dim); font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; }
+    .log-title {
+      font-size: 10px; color: var(--text-dim);
+      font-weight: 700; text-transform: uppercase;
+      letter-spacing: 0.1em; display: flex; align-items: center; gap: 6px;
+    }
     .log-actions { margin-left: auto; display: flex; gap: 6px; }
 
     #log {
       flex: 1;
       overflow-y: auto;
-      padding: 12px 16px;
-      font-family: "Menlo", "Monaco", "Consolas", monospace;
-      font-size: 12px;
-      line-height: 1.6;
+      padding: 14px 18px;
+      font-family: 'JetBrains Mono', "Menlo", "Monaco", monospace;
+      font-size: 11.5px;
+      line-height: 1.65;
       white-space: pre-wrap;
       word-break: break-all;
     }
 
-    .log-line { display: block; }
-    .log-cmd     { color: #cba6f7; }
-    .log-sep     { color: #45475a; }
+    .log-line { display: block; padding: 0.5px 0; }
+    .log-cmd     { color: #cba6f7; font-weight: 500; }
+    .log-sep     { color: #2e2e45; }
     .log-passed  { color: #a6e3a1; }
     .log-failed  { color: #f38ba8; }
     .log-warning { color: #f9e2af; }
     .log-info    { color: #89dceb; }
-    .log-highlight { color: #f9e2af; }
-    .log-default { color: #cdd6f4; }
+    .log-highlight { color: #fab387; }
+    .log-default { color: #9399b2; }
 
     /* ── Status bar ── */
     .statusbar {
-      padding: 5px 14px;
+      padding: 0 16px;
+      height: 30px;
       background: var(--header-bg);
       border-top: 1px solid var(--border);
       display: flex;
@@ -238,72 +377,505 @@
     .status-dot {
       width: 7px; height: 7px; border-radius: 50%;
       background: var(--text-dim);
-      transition: background 0.2s;
+      transition: background 0.2s, box-shadow 0.2s;
     }
-    .status-dot.running { background: var(--yellow); }
-    .status-dot.passed  { background: var(--green); }
-    .status-dot.failed  { background: var(--red); }
-    .status-label { font-weight: 600; color: var(--text-muted); }
-    .status-cmd { color: var(--text-dim); font-family: monospace; font-size: 10px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .status-dot.running {
+      background: var(--yellow);
+      box-shadow: 0 0 6px var(--yellow-glow);
+      animation: pulse-dot 1.2s ease-in-out infinite;
+    }
+    .status-dot.passed  { background: var(--green); box-shadow: 0 0 6px var(--green-glow); }
+    .status-dot.failed  { background: var(--red); box-shadow: 0 0 6px var(--red-glow); }
+    @keyframes pulse-dot {
+      0%, 100% { opacity: 1; transform: scale(1); }
+      50% { opacity: 0.6; transform: scale(1.3); }
+    }
+    .status-label { font-weight: 700; color: var(--text-muted); font-size: 10px; letter-spacing: 0.06em; text-transform: uppercase; }
+    .status-cmd { color: var(--text-dim); font-family: 'JetBrains Mono', monospace; font-size: 10px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
     /* ── Test name list ── */
     .test-name-item {
-      display: flex; align-items: center; gap: 6px;
-      padding: 3px 2px; border-radius: 3px; cursor: pointer;
+      display: flex; align-items: center; gap: 7px;
+      padding: 4px 6px; border-radius: 5px; cursor: pointer;
+      transition: background 0.1s;
     }
     .test-name-item:hover { background: var(--border); }
-    .test-name-item input[type="checkbox"] { accent-color: var(--accent); cursor: pointer; flex-shrink:0; }
-    .test-name-item label { font-size: 11px; font-family: Menlo, monospace; cursor: pointer; color: var(--text); word-break:break-all; }
+    .test-name-item input[type="checkbox"] { accent-color: var(--accent); cursor: pointer; flex-shrink: 0; }
+    .test-name-item label {
+      font-size: 11px;
+      font-family: 'JetBrains Mono', monospace;
+      cursor: pointer; color: var(--text); word-break: break-all;
+    }
 
     /* ── Scrollbar ── */
-    ::-webkit-scrollbar { width: 6px; }
+    ::-webkit-scrollbar { width: 5px; height: 5px; }
     ::-webkit-scrollbar-track { background: transparent; }
-    ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
-    ::-webkit-scrollbar-thumb:hover { background: var(--sep); }
+    ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
+    ::-webkit-scrollbar-thumb:hover { background: var(--text-dim); }
+
+    /* ── Tab nav ── */
+    .tab-nav {
+      background: var(--header-bg);
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      gap: 2px;
+      flex-shrink: 0;
+      padding: 6px 12px 0;
+    }
+    .tab-btn {
+      padding: 6px 16px;
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--text-dim);
+      background: transparent;
+      border: 1px solid transparent;
+      border-bottom: none;
+      border-radius: 7px 7px 0 0;
+      cursor: pointer;
+      font-family: 'Inter', inherit;
+      letter-spacing: 0.02em;
+      transition: all 0.15s;
+      display: flex; align-items: center; gap: 6px;
+      margin-bottom: -1px;
+    }
+    .tab-btn:hover:not(.active) { color: var(--text); background: rgba(255,255,255,0.04); }
+    .tab-btn.active {
+      color: var(--accent);
+      background: var(--surface);
+      border-color: var(--border);
+      border-bottom-color: var(--surface);
+    }
+    .tab-icon { font-size: 13px; line-height: 1; }
+
+    /* ── Features page ── */
+    #page-features {
+      display: none; flex: 1; min-height: 0;
+    }
+    #page-features.active { display: flex; }
+
+    .features-left {
+      width: 420px;
+      flex-shrink: 0;
+      background: var(--surface);
+      border-right: 1px solid var(--border);
+      display: flex;
+      flex-direction: column;
+      overflow-y: auto;
+      padding: 16px 14px;
+      gap: 12px;
+    }
+    .features-right {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      min-width: 0;
+      background: var(--log-bg);
+    }
+    .feature-card {
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 12px 14px;
+      cursor: pointer;
+      transition: border-color 0.15s, box-shadow 0.15s;
+      flex-shrink: 0;
+    }
+    .feature-card:hover { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent-glow); }
+    .feature-card.selected { border-color: var(--accent); background: rgba(137,180,250,0.06); }
+    .feature-card-top {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 5px;
+    }
+    .feature-card-name { font-size: 13px; font-weight: 700; color: var(--text); flex: 1; }
+    .feature-card-desc { font-size: 11px; color: var(--text-dim); margin-bottom: 6px; line-height: 1.4; }
+    .feature-card-script { font-size: 10px; font-family: 'JetBrains Mono', monospace; color: var(--text-muted); word-break: break-all; margin-bottom: 6px; }
+    .feature-card-actions { display: flex; gap: 6px; }
+    .badge-python { background: rgba(249,226,175,0.15); color: #f9e2af; }
+    .badge-node   { background: rgba(166,227,161,0.15); color: #a6e3a1; }
+    .badge-shell  { background: rgba(148,226,213,0.15); color: #94e2d5; }
+
+    .feat-form {
+      background: var(--surface2);
+      border: 1px solid var(--accent);
+      border-radius: var(--radius-lg);
+      padding: 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      box-shadow: 0 0 20px var(--accent-glow);
+    }
+    .feat-form h3 {
+      font-size: 11px; font-weight: 700; color: var(--accent);
+      text-transform: uppercase; letter-spacing: 0.08em;
+    }
+    .feat-form-actions { display: flex; gap: 8px; justify-content: flex-end; }
+
+    /* ── Tools page ── */
+    #page-tools {
+      display: none; flex: 1; flex-direction: column; overflow: hidden;
+    }
+    #page-tools.active { display: flex; }
+    #page-executor { display: flex; flex: 1; min-height: 0; }
+    #page-executor.hidden { display: none; }
+
+    .tools-layout { display: flex; flex: 1; min-height: 0; gap: 0; }
+    .tools-panel {
+      width: 100%; max-width: 720px; margin: 0 auto;
+      padding: 24px 28px; overflow-y: auto;
+      display: flex; flex-direction: column; gap: 16px;
+    }
+    .tools-header { display: flex; align-items: center; gap: 12px; }
+    .tools-header h2 { font-size: 16px; font-weight: 700; color: var(--text); }
+    .tools-header .hint { margin: 0; }
+
+    .tool-card {
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-lg);
+      padding: 14px 16px;
+      display: flex;
+      align-items: flex-start;
+      gap: 14px;
+      transition: border-color 0.15s;
+    }
+    .tool-card:hover { border-color: rgba(137,180,250,0.3); }
+    .tool-card-icon {
+      width: 36px; height: 36px; border-radius: 9px;
+      background: var(--accent-glow); border: 1px solid rgba(137,180,250,0.2);
+      display: flex; align-items: center; justify-content: center;
+      font-size: 16px; flex-shrink: 0;
+    }
+    .tool-card-info { flex: 1; min-width: 0; }
+    .tool-card-label { font-size: 13px; font-weight: 700; color: var(--text); }
+    .tool-card-flag {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 11px; color: var(--accent); margin-top: 3px;
+    }
+    .tool-card-meta { font-size: 11px; color: var(--text-dim); margin-top: 3px; }
+    .tool-card-actions { display: flex; gap: 6px; flex-shrink: 0; }
+
+    .tool-form {
+      background: var(--surface2);
+      border: 1px solid var(--accent);
+      border-radius: var(--radius-lg);
+      padding: 18px 20px;
+      display: flex; flex-direction: column; gap: 14px;
+      box-shadow: 0 0 20px var(--accent-glow);
+    }
+    .tool-form h3 {
+      font-size: 12px; font-weight: 700; color: var(--accent);
+      text-transform: uppercase; letter-spacing: 0.08em;
+    }
+    .tool-form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+    .tool-form-grid .field.full { grid-column: 1 / -1; }
+    .tool-form-actions { display: flex; gap: 8px; justify-content: flex-end; }
+
+    .empty-state {
+      text-align: center; color: var(--text-dim);
+      font-size: 12px; padding: 40px 0;
+      display: flex; flex-direction: column; align-items: center; gap: 8px;
+    }
+    .empty-state-icon { font-size: 32px; opacity: 0.4; }
+
+    .badge {
+      display: inline-flex; align-items: center;
+      font-size: 10px; padding: 2px 7px;
+      border-radius: 20px; font-weight: 700; margin-left: 6px;
+      letter-spacing: 0.02em;
+    }
+    .badge-checkbox { background: rgba(148,226,213,0.15); color: var(--teal); }
+    .badge-dropdown { background: rgba(203,166,247,0.15); color: var(--purple); }
+
+    /* ── Dashboard page ── */
+    #page-dashboard {
+      display: none; flex: 1; flex-direction: column;
+      overflow-y: auto; background: var(--bg);
+    }
+    #page-dashboard.active { display: flex; }
+    .dash-body {
+      padding: 22px 24px;
+      display: flex; flex-direction: column; gap: 20px; flex: 1;
+    }
+    .dash-title {
+      font-size: 16px; font-weight: 700; color: var(--text);
+      display: flex; align-items: center; gap: 10px;
+      letter-spacing: -0.01em;
+    }
+    .dash-title .dash-sub { font-size: 12px; font-weight: 400; color: var(--text-dim); }
+    .dash-charts {
+      display: grid;
+      grid-template-columns: 270px 270px 1fr;
+      gap: 16px;
+      align-items: start;
+    }
+    .dash-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-lg);
+      padding: 16px 18px;
+      display: flex; flex-direction: column; gap: 12px;
+      box-shadow: var(--shadow-sm);
+    }
+    .dash-card-title {
+      font-size: 10px; font-weight: 700; text-transform: uppercase;
+      letter-spacing: 0.1em; color: var(--text-muted);
+      display: flex; align-items: center; gap: 6px;
+    }
+    .dash-card-title::before {
+      content: '';
+      display: block; width: 3px; height: 14px;
+      background: linear-gradient(to bottom, var(--accent), var(--purple));
+      border-radius: 2px;
+    }
+    .dash-chart-wrap {
+      position: relative; height: 190px;
+      display: flex; align-items: center; justify-content: center;
+    }
+    .dash-legend { display: flex; flex-direction: column; gap: 5px; }
+    .dash-legend-item {
+      display: flex; align-items: center; gap: 8px;
+      font-size: 11.5px; color: var(--text-muted);
+      padding: 3px 0;
+    }
+    .dash-legend-dot {
+      width: 9px; height: 9px; border-radius: 50%; flex-shrink: 0;
+    }
+    .dash-legend-val {
+      margin-left: auto; font-weight: 700;
+      color: var(--text); font-size: 12px;
+      font-family: 'JetBrains Mono', monospace;
+    }
+
+    /* Summary stats row */
+    .dash-stats { display: flex; gap: 12px; flex-wrap: wrap; }
+    .stat-pill {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-lg);
+      padding: 14px 18px;
+      display: flex; flex-direction: column; gap: 4px;
+      min-width: 110px; flex: 1;
+      box-shadow: var(--shadow-sm);
+      transition: border-color 0.15s, box-shadow 0.15s;
+      position: relative; overflow: hidden;
+    }
+    .stat-pill::before {
+      content: '';
+      position: absolute; top: 0; left: 0; right: 0;
+      height: 2px;
+    }
+    .stat-pill.s-total::before  { background: linear-gradient(90deg, var(--accent), var(--purple)); }
+    .stat-pill.s-passed::before { background: var(--green); }
+    .stat-pill.s-failed::before { background: var(--red); }
+    .stat-pill.s-broken::before { background: var(--yellow); }
+    .stat-pill.s-skipped::before { background: var(--accent); }
+    .stat-pill:hover { border-color: rgba(137,180,250,0.3); box-shadow: var(--shadow-md); }
+    .stat-pill-label {
+      font-size: 10px; text-transform: uppercase;
+      letter-spacing: 0.08em; color: var(--text-dim); font-weight: 600;
+    }
+    .stat-pill-value { font-size: 28px; font-weight: 700; line-height: 1; font-family: 'Inter', sans-serif; }
+    .stat-pill-value.passed  { color: var(--green); }
+    .stat-pill-value.failed  { color: var(--red); }
+    .stat-pill-value.broken  { color: var(--yellow); }
+    .stat-pill-value.skipped { color: var(--accent); }
+    .stat-pill-value.total   { color: var(--text); }
+
+    /* History table */
+    .dash-table-wrap {
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: var(--radius-lg); overflow: hidden;
+      box-shadow: var(--shadow-sm);
+    }
+    .dash-table-header {
+      padding: 12px 18px; display: flex; align-items: center; gap: 10px;
+      border-bottom: 1px solid var(--border);
+      background: rgba(255,255,255,0.025);
+    }
+    .dash-table-header h3 { font-size: 13px; font-weight: 700; color: var(--text); }
+    table.history-tbl { width: 100%; border-collapse: collapse; font-size: 12px; }
+    table.history-tbl th {
+      background: var(--bg); color: var(--text-dim); font-weight: 700;
+      text-transform: uppercase; font-size: 10px; letter-spacing: 0.08em;
+      padding: 10px 14px; text-align: left; border-bottom: 1px solid var(--border);
+    }
+    table.history-tbl td {
+      padding: 9px 14px; border-bottom: 1px solid rgba(46,46,69,0.5);
+      color: var(--text-muted); vertical-align: middle;
+    }
+    table.history-tbl tr:last-child td { border-bottom: none; }
+    table.history-tbl tbody tr:hover td { background: rgba(137,180,250,0.04); }
+    .mini-spark { font-size: 18px; line-height: 1; }
+    .tbl-status-badge {
+      display: inline-flex; align-items: center;
+      font-size: 10px; font-weight: 700;
+      padding: 3px 10px; border-radius: 20px; gap: 4px;
+    }
+    .tbl-status-badge.passed   { background: rgba(166,227,161,0.12); color: var(--green); border: 1px solid rgba(166,227,161,0.2); }
+    .tbl-status-badge.failed   { background: rgba(243,139,168,0.12); color: var(--red); border: 1px solid rgba(243,139,168,0.2); }
+    .tbl-status-badge.cancelled { background: rgba(249,226,175,0.12); color: var(--yellow); border: 1px solid rgba(249,226,175,0.2); }
+    .tbl-num { font-family: 'JetBrains Mono', monospace; font-size: 12px; font-weight: 600; }
+    .tbl-num.pass   { color: var(--green); }
+    .tbl-num.fail   { color: var(--red); }
+    .tbl-num.skip   { color: var(--accent); }
+    .tbl-num.broken { color: var(--yellow); }
+
+    /* ── Zephyr page ── */
+    #page-zephyr { display: none; flex: 1; min-height: 0; }
+    #page-zephyr.active { display: flex; }
+    .zephyr-left {
+      width: 390px; flex-shrink: 0;
+      background: var(--surface); border-right: 1px solid var(--border);
+      display: flex; flex-direction: column; overflow-y: auto;
+      padding: 16px 14px; gap: 12px;
+    }
+    .zephyr-right {
+      flex: 1; display: flex; flex-direction: column;
+      min-width: 0; background: var(--log-bg);
+    }
+    .zephyr-log {
+      flex: 1; overflow-y: auto; padding: 16px 18px;
+      font-family: 'JetBrains Mono', monospace; font-size: 11.5px;
+      line-height: 1.7; white-space: pre-wrap; word-break: break-all;
+    }
+    .zephyr-step {
+      background: var(--surface2); border: 1px solid var(--border);
+      border-radius: var(--radius-lg); padding: 14px 16px;
+      display: flex; flex-direction: column; gap: 10px;
+      flex-shrink: 0;
+    }
+    .zephyr-step-title {
+      font-size: 11px; font-weight: 700; color: var(--text);
+      letter-spacing: 0.05em;
+      display: flex; align-items: center; gap: 10px;
+    }
+    .zephyr-step-num {
+      background: linear-gradient(135deg, var(--accent), var(--purple));
+      color: #0d1117;
+      min-width: 22px; height: 22px; border-radius: 50%;
+      display: inline-flex; align-items: center; justify-content: center;
+      font-size: 11px; font-weight: 800; flex-shrink: 0;
+      box-shadow: 0 0 8px var(--accent-glow);
+    }
+    .zephyr-breadcrumb {
+      font-size: 11px; color: var(--text-dim);
+      display: flex; flex-wrap: wrap; gap: 5px; align-items: center;
+      background: var(--input-bg); border: 1px solid var(--border);
+      border-radius: var(--radius); padding: 7px 10px;
+    }
+    .zephyr-breadcrumb span { color: var(--text-muted); }
+    .zephyr-breadcrumb .crumb { color: var(--accent); font-weight: 600; }
+    .folder-tree {
+      display: flex; flex-direction: column; gap: 2px;
+      max-height: 160px; overflow-y: auto;
+      background: var(--input-bg); border: 1px solid var(--border);
+      border-radius: var(--radius); padding: 4px;
+    }
+    .folder-item {
+      display: flex; align-items: center; gap: 7px;
+      padding: 6px 9px; border-radius: 6px; cursor: pointer;
+      font-size: 12px; color: var(--text-muted); border: 1px solid transparent;
+      transition: all 0.1s;
+    }
+    .folder-item:hover { background: var(--surface); color: var(--text); }
+    .folder-item.selected {
+      background: var(--accent-glow); border-color: rgba(137,180,250,0.3);
+      color: var(--accent); font-weight: 600;
+    }
+    .folder-item .folder-icon { flex-shrink: 0; font-size: 13px; }
+    .folder-children { margin-left: 16px; }
+    .drop-zone {
+      border: 2px dashed var(--input-border); border-radius: var(--radius-lg);
+      padding: 24px 16px; text-align: center; cursor: pointer;
+      transition: all 0.15s;
+      color: var(--text-dim); font-size: 12px;
+      background: var(--input-bg);
+    }
+    .drop-zone:hover, .drop-zone.drag-over {
+      border-color: var(--accent);
+      background: var(--accent-glow);
+      color: var(--accent);
+    }
+    .drop-zone input[type="file"] { display: none; }
+    .drop-zone-icon { font-size: 28px; margin-bottom: 8px; display: block; opacity: 0.6; }
+    .z-file-info {
+      background: rgba(166,227,161,0.08); border: 1px solid rgba(166,227,161,0.2);
+      border-radius: var(--radius); padding: 9px 12px;
+      font-size: 11px; color: var(--green); display: none;
+      align-items: center; gap: 8px;
+    }
+    .z-file-info.visible { display: flex; }
+    .connect-dot {
+      width: 8px; height: 8px; border-radius: 50%;
+      background: var(--text-dim); display: inline-block; margin-right: 4px;
+      transition: background 0.2s, box-shadow 0.2s;
+    }
+    .connect-dot.ok  { background: var(--green); box-shadow: 0 0 6px var(--green-glow); }
+    .connect-dot.err { background: var(--red); box-shadow: 0 0 6px var(--red-glow); }
+    .ztab-btn { border-radius: var(--radius) !important; transition: all 0.15s; }
+    .ztab-btn.active { background: var(--accent) !important; color: #0d1117 !important; border-color: var(--accent) !important; font-weight: 700; }
   </style>
 </head>
 <body>
 
 <header>
-  <div class="dot"></div>
-  <h1>Playwright Test Executor</h1>
-  <span id="repoSubtitle">— select a repo to begin</span>
-  <span class="version">v1.0.0</span>
-  <a href="/readme" target="_blank" class="help-link" title="Open documentation">? Help</a>
+  <div class="header-logo">
+    <div class="logo-mark">🎭</div>
+    <h1>Playwright <span>Executor</span></h1>
+  </div>
+  <div class="repo-subtitle" id="repoSubtitle">select a repo to begin</div>
+  <div class="header-right">
+    <span class="version-badge">v1.0.0</span>
+    <a href="/readme" target="_blank" class="help-link" title="Open documentation">? Help</a>
+  </div>
 </header>
 
-<div class="body">
+<!-- Tab navigation -->
+<nav class="tab-nav">
+  <button type="button" class="tab-btn active" onclick="switchTab('executor')"><span class="tab-icon">⚡</span>Executor</button>
+  <button type="button" class="tab-btn" onclick="switchTab('tools')"><span class="tab-icon">⚙️</span>Config</button>
+  <button type="button" class="tab-btn" onclick="switchTab('dashboard')"><span class="tab-icon">📊</span>Reports Dashboard</button>
+  <button type="button" class="tab-btn" onclick="switchTab('zephyr')"><span class="tab-icon">🔷</span>Test Management</button>
+</nav>
+
+<!-- ── Executor page ── -->
+<div id="page-executor" class="body">
 
   <!-- ── Left panel ── -->
   <div class="panel-left">
 
     <!-- Repo root -->
-    <div>
-      <div class="section-title">Repository</div>
-      <div class="field" style="margin-top:10px;">
-        <label>Select Local Repo</label>
-        <div class="field-row">
-          <select id="repoSelect" onchange="onRepoSelect()" style="flex:1;">
-            <option value="">— scanning… —</option>
-          </select>
-          <button class="browse-btn" onclick="scanRepos()" title="Re-scan for repos">⟳</button>
+    <div class="section-block">
+      <div class="section-title"><span class="stitle-icon">📁</span>Repository</div>
+      <div class="section-content">
+        <div class="field">
+          <label>Select Local Repo</label>
+          <div class="field-row">
+            <select id="repoSelect" onchange="onRepoSelect()">
+              <option value="">— scanning… —</option>
+            </select>
+            <button class="browse-btn" onclick="scanRepos()" title="Re-scan for repos">⟳</button>
+          </div>
         </div>
-      </div>
-      <div class="field" style="margin-top:8px;">
-        <label>Or enter path manually</label>
-        <div class="field-row">
-          <input type="text" id="repo" placeholder="/path/to/your-playwright-repo" />
-          <button class="browse-btn" onclick="browseRepo()">Browse…</button>
+        <div class="field">
+          <label>Or enter path manually</label>
+          <div class="field-row">
+            <input type="text" id="repo" placeholder="/path/to/your-playwright-repo" />
+            <button class="browse-btn" onclick="browseRepo()">Browse…</button>
+          </div>
+          <div class="hint">Must contain a <code>tests/</code> folder and pytest config</div>
         </div>
-        <div class="hint">Root must contain a <code>tests/</code> folder and pytest config</div>
+        <button class="btn btn-sm" onclick="discoverTests()">↻ Discover Tests</button>
       </div>
-      <button class="btn btn-sm" style="margin-top:8px;" onclick="discoverTests()">↻ Discover Tests</button>
     </div>
 
     <!-- Test selection -->
-    <div>
-      <div class="section-title">Test Selection</div>
-      <div style="display:flex; flex-direction:column; gap:10px; margin-top:10px;">
+    <div class="section-block">
+      <div class="section-title"><span class="stitle-icon">🧪</span>Test Selection</div>
+      <div class="section-content">
         <div class="field">
           <label>Suite / Folder</label>
           <select id="suite" onchange="onSuiteChange()">
@@ -317,30 +889,27 @@
           </select>
         </div>
         <div class="field" id="nameFilterSection">
-          <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px;">
+          <div style="display:flex;align-items:center;gap:8px;margin-bottom:2px;">
             <label style="margin:0;">Test Name Filter (-k)</label>
             <label class="checkbox-label" style="margin-left:auto;font-size:10px;">
               <input type="checkbox" id="manualKToggle" onchange="toggleKMode()" />
               manual
             </label>
           </div>
-          <!-- Dynamic list (shown when a specific file is selected) -->
           <div id="testNameList" style="display:none;max-height:140px;overflow-y:auto;
                background:var(--input-bg);border:1px solid var(--input-border);
                border-radius:var(--radius);padding:6px 8px;gap:4px;
                display:none;flex-direction:column;"></div>
-          <!-- Manual free-text -->
-          <input type="text" id="k_filter" placeholder="e.g. test_login or test_checkout"
-                 style="display:none;" />
+          <input type="text" id="k_filter" placeholder="e.g. test_login or test_checkout" style="display:none;" />
           <div class="hint" id="kHint">Select a specific test file to pick individual tests</div>
         </div>
       </div>
     </div>
 
     <!-- Execution options -->
-    <div>
-      <div class="section-title">Execution Options</div>
-      <div style="display:flex; flex-direction:column; gap:10px; margin-top:10px;">
+    <div class="section-block">
+      <div class="section-title"><span class="stitle-icon">⚙️</span>Execution Options</div>
+      <div class="section-content">
         <div class="field">
           <label>Browser</label>
           <select id="browser">
@@ -371,53 +940,38 @@
       </div>
     </div>
 
-    <!-- Custom Options (from config.json extra_options) -->
-    <div id="extraOptionsSection" style="display:none;">
-      <div class="section-title">Custom Options</div>
-      <div id="extraOptionsContainer" style="display:flex;flex-direction:column;gap:10px;margin-top:10px;"></div>
+    <!-- Custom Options -->
+    <div class="section-block" id="extraOptionsSection" style="display:none;">
+      <div class="section-title"><span class="stitle-icon">🎛️</span>Custom Options</div>
+      <div class="section-content" id="extraOptionsContainer"></div>
     </div>
 
     <!-- Actions -->
-    <div>
-      <div class="section-title">Actions</div>
-      <div class="action-row" style="margin-top:10px;">
-        <button class="btn btn-run" id="runBtn" onclick="runTests()">▶  RUN</button>
-        <button class="btn btn-stop" id="stopBtn" onclick="stopTests()" disabled>■  STOP</button>
-        <button class="btn btn-sm" onclick="clearLog()">Clear Log</button>
+    <div class="section-block">
+      <div class="section-title"><span class="stitle-icon">▶</span>Actions</div>
+      <div class="section-content">
+        <div class="action-row">
+          <button class="btn btn-run" id="runBtn" onclick="runTests()">▶ RUN</button>
+          <button class="btn btn-stop" id="stopBtn" onclick="stopTests()" disabled>■ STOP</button>
+          <button class="btn btn-sm" onclick="clearLog()">Clear Log</button>
+        </div>
       </div>
     </div>
 
-    <!-- Report -->
-    <div>
-      <div class="section-title">Reports</div>
-      <div style="display:flex;flex-direction:column;gap:8px;margin-top:10px;">
-
-        <!-- Individual -->
+    <!-- Reports -->
+    <div class="section-block">
+      <div class="section-title"><span class="stitle-icon">📋</span>Reports</div>
+      <div class="section-content">
         <div class="report-box">
-          <div style="font-size:10px;font-weight:700;text-transform:uppercase;
-                      letter-spacing:0.06em;color:var(--text-dim);margin-bottom:6px;">
-            Individual Run
-          </div>
+          <div class="report-label">📄 Individual Run</div>
           <div class="report-path" id="reportIndividualPath">No report found</div>
-          <div style="display:flex;gap:8px;margin-top:6px;">
-            <button class="btn btn-sm" id="openIndividualBtn"
-                    onclick="openReport('individual')" disabled>Open Latest</button>
-          </div>
+          <button class="btn btn-sm" id="openIndividualBtn" onclick="openReport('individual')" disabled>Open Latest</button>
         </div>
-
-        <!-- Consolidated -->
         <div class="report-box">
-          <div style="font-size:10px;font-weight:700;text-transform:uppercase;
-                      letter-spacing:0.06em;color:var(--text-dim);margin-bottom:6px;">
-            Consolidated
-          </div>
+          <div class="report-label">📚 Consolidated</div>
           <div class="report-path" id="reportConsolidatedPath">No report found</div>
-          <div style="display:flex;gap:8px;margin-top:6px;">
-            <button class="btn btn-sm" id="openConsolidatedBtn"
-                    onclick="openReport('consolidated')" disabled>Open Latest</button>
-          </div>
+          <button class="btn btn-sm" id="openConsolidatedBtn" onclick="openReport('consolidated')" disabled>Open Latest</button>
         </div>
-
         <button class="btn btn-sm" onclick="refreshReport()">↻ Refresh Reports</button>
       </div>
     </div>
@@ -437,6 +991,513 @@
 
 </div>
 
+<!-- ── Config page (merges Features + Tools + Zephyr config) ── -->
+<div id="page-tools">
+  <!-- Left: config sections -->
+  <div class="features-left" style="width:440px;">
+
+    <!-- Features section -->
+    <div class="section-block">
+      <div class="section-title" onclick="toggleConfigSection('cfgFeatures','cfgFeaturesArrow')" style="cursor:pointer;user-select:none;">
+        <span class="stitle-icon">🔌</span>Features
+        <span id="cfgFeaturesArrow" style="margin-left:auto;font-size:11px;color:var(--text-dim);">▼</span>
+      </div>
+      <div id="cfgFeatures" class="section-content" style="display:flex;flex-direction:column;gap:10px;">
+        <div class="hint">Run Python, Node.js, or shell scripts from the executor.</div>
+
+        <!-- Add / Edit form -->
+        <div class="feat-form" id="featForm" style="display:none;">
+          <h3 id="featFormTitle">Add Feature</h3>
+          <input type="hidden" id="ff_index" value="-1" />
+          <div class="field"><label>Name</label><input type="text" id="ff_name" placeholder="e.g. Seed Test Data" /></div>
+          <div class="field"><label>Description</label><input type="text" id="ff_desc" placeholder="(optional)" /></div>
+          <div class="field">
+            <label>Runtime</label>
+            <select id="ff_runtime">
+              <option value="python">Python</option>
+              <option value="node">Node.js</option>
+              <option value="shell">Shell / bash</option>
+            </select>
+          </div>
+          <div class="field"><label>Script Path</label><input type="text" id="ff_script" placeholder="/path/to/script.py" /></div>
+          <div class="field"><label>Working Directory</label><input type="text" id="ff_cwd" placeholder="(defaults to script folder)" /></div>
+          <div class="field"><label>Arguments</label><input type="text" id="ff_args" placeholder="e.g. --env=qa3 --dry-run" /></div>
+          <div class="feat-form-actions">
+            <button type="button" class="btn btn-sm" onclick="cancelFeatForm()">Cancel</button>
+            <button type="button" class="btn btn-run" onclick="saveFeatForm()" style="padding:6px 16px;font-size:12px;">Save</button>
+          </div>
+        </div>
+
+        <!-- Actions -->
+        <div class="action-row">
+          <button type="button" class="btn btn-run" id="featRunBtn" onclick="runFeature()" disabled>▶ RUN</button>
+          <button type="button" class="btn btn-stop" id="featStopBtn" onclick="stopTests()" disabled>■ STOP</button>
+          <button type="button" class="btn btn-sm" style="margin-left:auto;" onclick="showFeatAddForm()">+ Add</button>
+        </div>
+
+        <!-- Feature cards -->
+        <div id="featList" style="display:flex;flex-direction:column;gap:8px;"></div>
+      </div>
+    </div>
+
+    <!-- Custom CLI Tools section -->
+    <div class="section-block">
+      <div class="section-title" onclick="toggleConfigSection('cfgTools','cfgToolsArrow')" style="cursor:pointer;user-select:none;">
+        <span class="stitle-icon">🔧</span>Custom CLI Tools
+        <span style="font-size:10px;color:var(--text-dim);margin-left:6px;font-weight:400;text-transform:none;letter-spacing:0;">Executor tab controls</span>
+        <span id="cfgToolsArrow" style="margin-left:auto;font-size:11px;color:var(--text-dim);">▼</span>
+      </div>
+      <div id="cfgTools" class="section-content" style="display:flex;flex-direction:column;gap:10px;">
+        <div style="display:flex;align-items:center;gap:8px;">
+          <span class="hint" style="margin:0;">Become "Custom Options" controls on the Executor tab</span>
+          <button class="btn btn-sm" style="margin-left:auto;flex-shrink:0;" onclick="showAddForm()">+ Add Tool</button>
+        </div>
+
+        <!-- Add / Edit form -->
+        <div class="tool-form" id="toolForm" style="display:none;">
+          <h3 id="toolFormTitle">Add New Tool</h3>
+          <input type="hidden" id="toolFormIndex" value="-1" />
+          <div class="tool-form-grid">
+            <div class="field"><label>Label</label><input type="text" id="tf_label" placeholder="e.g. Environment" /></div>
+            <div class="field"><label>CLI Flag</label><input type="text" id="tf_flag" placeholder="e.g. --env" /></div>
+            <div class="field">
+              <label>Type</label>
+              <select id="tf_type" onchange="onToolTypeChange()">
+                <option value="checkbox">checkbox</option>
+                <option value="dropdown">dropdown</option>
+                <option value="text">text</option>
+              </select>
+            </div>
+            <div class="field" id="tf_default_wrap"><label>Default</label><input type="text" id="tf_default" placeholder="leave blank for none" /></div>
+            <div class="field full" id="tf_values_wrap" style="display:none;"><label>Values (comma-separated)</label><input type="text" id="tf_values" placeholder="e.g. qa3, qa4, int, prod" /></div>
+            <div class="field full" id="tf_placeholder_wrap" style="display:none;"><label>Placeholder</label><input type="text" id="tf_placeholder" placeholder="e.g. /path/to/file" /></div>
+          </div>
+          <div class="tool-form-actions">
+            <button type="button" class="btn btn-sm" onclick="cancelToolForm()">Cancel</button>
+            <button type="button" class="btn btn-run" onclick="saveToolForm()" style="padding:6px 16px;font-size:12px;">Save</button>
+          </div>
+        </div>
+
+        <div id="toolsList"></div>
+      </div>
+    </div>
+
+    <!-- Zephyr Configuration section -->
+    <div class="section-block">
+      <div class="section-title" onclick="toggleConfigSection('cfgZephyr','cfgZephyrArrow')" style="cursor:pointer;user-select:none;">
+        <span class="stitle-icon">🔷</span>Zephyr for Jira — Cloud
+        <span id="cfgZephyrArrow" style="margin-left:auto;font-size:11px;color:var(--text-dim);">▶ Configure</span>
+      </div>
+      <div id="cfgZephyr" class="section-content" style="display:none;flex-direction:column;gap:10px;">
+        <div class="field"><label>Jira Base URL</label><input type="text" id="z_jira_url" placeholder="https://yourcompany.atlassian.net" /></div>
+        <div class="field"><label>Jira Username (email)</label><input type="text" id="z_username" placeholder="you@company.com" /></div>
+        <div class="field"><label>Jira API Token</label><input type="password" id="z_api_token" placeholder="Jira API token (for projects/versions)" /></div>
+        <div class="field"><label>Zephyr Access Key</label><input type="password" id="z_access_key" placeholder="zapiAccessKey from Zephyr app" /></div>
+        <div class="field"><label>Zephyr Secret Key</label><input type="password" id="z_secret_key" placeholder="Secret key from Zephyr app" /></div>
+        <div class="field"><label>Atlassian Account ID</label><input type="text" id="z_account_id" placeholder="e.g. 5b10a2844c20165700ede21g" /></div>
+        <div class="action-row">
+          <button class="btn btn-sm" onclick="saveZephyrConfig()">💾 Save</button>
+          <button class="btn btn-sm" onclick="testZephyrConnection()">⚡ Test</button>
+          <span id="zConnectStatus" style="font-size:11px;color:var(--text-dim);margin-left:4px;"></span>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- Right: feature output log -->
+  <div class="features-right">
+    <div class="log-header">
+      <span class="log-title">Feature Output</span>
+      <div class="log-actions">
+        <button type="button" class="btn btn-sm" onclick="clearFeatLog()">Clear</button>
+        <button type="button" class="btn btn-sm" onclick="featScrollToBottom()">↓ Bottom</button>
+      </div>
+    </div>
+    <div id="features-log" style="flex:1;overflow-y:auto;padding:12px 16px;
+         font-family:'JetBrains Mono','Menlo',monospace;font-size:12px;
+         line-height:1.6;white-space:pre-wrap;word-break:break-all;"></div>
+  </div>
+</div>
+
+<!-- ── Dashboard page ── -->
+<div id="page-dashboard">
+  <div class="dash-body">
+
+    <!-- Header row -->
+    <div class="dash-title">
+      <span>📊</span> Test Dashboard
+      <span class="dash-sub" id="dashSubtitle">— select a repo and run tests to see results</span>
+      <div style="margin-left:auto;display:flex;gap:8px;align-items:center;">
+        <input type="text" id="dashSearch" placeholder="Search tests…" oninput="filterTests()"
+               style="width:200px;font-size:12px;" />
+        <select id="dashStatusFilter" onchange="filterTests()" style="width:120px;font-size:12px;">
+          <option value="">All Status</option>
+          <option value="passed">Passed</option>
+          <option value="failed">Failed</option>
+          <option value="broken">Broken</option>
+          <option value="skipped">Skipped</option>
+        </select>
+        <button class="btn btn-sm" onclick="loadDashboard()">⟳ Refresh</button>
+        <button class="btn btn-sm" style="color:var(--red);border-color:var(--red);" onclick="clearHistory()">Clear History</button>
+      </div>
+    </div>
+
+    <!-- Stat pills -->
+    <div class="dash-stats">
+      <div class="stat-pill s-total">
+        <div class="stat-pill-label">Total Tests</div>
+        <div class="stat-pill-value total" id="dashTotal">—</div>
+      </div>
+      <div class="stat-pill s-passed">
+        <div class="stat-pill-label">Passed</div>
+        <div class="stat-pill-value passed" id="dashPassed">—</div>
+      </div>
+      <div class="stat-pill s-failed">
+        <div class="stat-pill-label">Failed</div>
+        <div class="stat-pill-value failed" id="dashFailed">—</div>
+      </div>
+      <div class="stat-pill s-broken">
+        <div class="stat-pill-label">Broken</div>
+        <div class="stat-pill-value broken" id="dashBroken">—</div>
+      </div>
+      <div class="stat-pill s-skipped">
+        <div class="stat-pill-label">Skipped</div>
+        <div class="stat-pill-value skipped" id="dashSkipped">—</div>
+      </div>
+      <div class="stat-pill" style="border-left:2px solid var(--purple);">
+        <div class="stat-pill-label">Avg Duration</div>
+        <div class="stat-pill-value" style="color:var(--purple);font-size:22px;" id="dashAvgDur">—</div>
+      </div>
+      <div class="stat-pill" style="border-left:2px solid var(--teal);">
+        <div class="stat-pill-label">Pass Rate</div>
+        <div class="stat-pill-value" style="color:var(--teal);font-size:22px;" id="dashPassRate">—</div>
+      </div>
+    </div>
+
+    <!-- Charts row: Last 7 Days bar + Status donut + History trend -->
+    <div style="display:grid;grid-template-columns:1fr 220px 1fr;gap:16px;">
+      <div class="dash-card">
+        <div class="dash-card-title" id="dailyChartTitle">Tests Run by Day — Last 30 Days</div>
+        <div class="dash-chart-wrap" style="height:210px;">
+          <canvas id="chartDailyRuns"></canvas>
+        </div>
+      </div>
+      <div class="dash-card">
+        <div class="dash-card-title">Status Distribution</div>
+        <div class="dash-chart-wrap" style="height:160px;">
+          <canvas id="chartStatusDonut"></canvas>
+        </div>
+        <div class="dash-legend" id="legendStatus"></div>
+      </div>
+      <div class="dash-card">
+        <div class="dash-card-title">Run History Trend</div>
+        <div class="dash-chart-wrap" style="height:210px;">
+          <canvas id="chartRunTrend"></canvas>
+        </div>
+      </div>
+    </div>
+
+    <!-- Test case table -->
+    <div class="dash-table-wrap">
+      <div class="dash-table-header">
+        <h3>Test Cases — Current Run</h3>
+        <span style="font-size:11px;color:var(--text-dim);margin-left:auto;" id="dashTestCount">0 tests</span>
+      </div>
+      <div style="overflow-x:auto;max-height:420px;overflow-y:auto;">
+        <table class="history-tbl" id="dashTestTable">
+          <thead style="position:sticky;top:0;z-index:2;">
+            <tr>
+              <th style="cursor:pointer;" onclick="sortTests('suite')">Suite ↕</th>
+              <th style="cursor:pointer;" onclick="sortTests('name')">Test Name ↕</th>
+              <th>Status</th>
+              <th style="cursor:pointer;" onclick="sortTests('duration')">Duration ↕</th>
+              <th>Run At</th>
+              <th>History</th>
+            </tr>
+          </thead>
+          <tbody id="dashTestTbody">
+            <tr><td colspan="6" style="text-align:center;color:var(--text-dim);padding:32px;">
+              No Allure results found — run tests with <code>--alluredir</code> enabled
+            </td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Run history table -->
+    <div class="dash-table-wrap">
+      <div class="dash-table-header">
+        <h3>Run History</h3>
+        <span style="font-size:11px;color:var(--text-dim);margin-left:auto;" id="dashRecordCount">0 records</span>
+      </div>
+      <div style="overflow-x:auto;">
+        <table class="history-tbl">
+          <thead>
+            <tr>
+              <th>Date</th>
+              <th>Repo</th>
+              <th>Status</th>
+              <th>Passed</th>
+              <th>Failed</th>
+              <th>Broken</th>
+              <th>Skipped</th>
+              <th>Total</th>
+              <th>Pass %</th>
+            </tr>
+          </thead>
+          <tbody id="historyTbody">
+            <tr><td colspan="9" style="text-align:center;color:var(--text-dim);padding:24px;">No runs recorded yet</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<!-- ── Zephyr page ── -->
+<div id="page-zephyr">
+
+  <!-- Left nav panel -->
+  <div class="zephyr-left">
+
+    <!-- Config link (settings live in Config tab) -->
+    <div class="section-block">
+      <div class="section-title">
+        <span class="stitle-icon">🔑</span>Zephyr for Jira — Cloud
+        <span id="zConnectStatus" style="margin-left:auto;font-size:11px;color:var(--text-dim);"></span>
+        <button class="btn btn-sm" onclick="switchTab('tools');toggleConfigSection('cfgZephyr','cfgZephyrArrow')"
+                style="margin-left:8px;font-size:10px;padding:3px 9px;">⚙ Configure</button>
+      </div>
+    </div>
+
+    <!-- Step 1: Project -->
+    <div class="zephyr-step">
+      <div class="zephyr-step-title"><span class="zephyr-step-num">1</span>Project</div>
+      <div class="field">
+        <select id="z_project" onchange="onZephyrProjectChange()">
+          <option value="">— load projects —</option>
+        </select>
+      </div>
+      <button class="btn btn-sm" onclick="loadZephyrProjects()">Load Projects</button>
+    </div>
+
+    <!-- Step 2: Version / Release -->
+    <div class="zephyr-step">
+      <div class="zephyr-step-title"><span class="zephyr-step-num">2</span>Version / Release</div>
+      <div class="field">
+        <select id="z_version" onchange="onZephyrVersionChange()">
+          <option value="">— select project first —</option>
+        </select>
+      </div>
+    </div>
+
+    <!-- Step 3: Test Cycle -->
+    <div class="zephyr-step">
+      <div class="zephyr-step-title"><span class="zephyr-step-num">3</span>Test Cycle</div>
+      <div class="field">
+        <select id="z_cycle" onchange="onZephyrCycleChange()">
+          <option value="">— select version first —</option>
+        </select>
+      </div>
+      <div class="action-row">
+        <input type="text" id="z_new_cycle" placeholder="New cycle name" style="flex:1;" />
+        <button class="btn btn-sm" onclick="createZephyrCycle()">+ Cycle</button>
+      </div>
+    </div>
+
+    <!-- Step 4: Folder -->
+    <div class="zephyr-step">
+      <div class="zephyr-step-title"><span class="zephyr-step-num">4</span>Folder</div>
+      <div class="folder-tree" id="zFolderTree">
+        <div style="color:var(--text-dim);font-size:11px;padding:6px;">Select a cycle to browse folders</div>
+      </div>
+      <div class="action-row" style="margin-top:6px;">
+        <input type="text" id="z_new_folder" placeholder="New folder name" style="flex:1;" />
+        <button class="btn btn-sm" onclick="createZephyrFolder()">+ Folder</button>
+      </div>
+    </div>
+
+    <!-- Breadcrumb -->
+    <div class="zephyr-breadcrumb" id="zBreadcrumb" style="font-size:11px;">
+      Select project → version → cycle → folder above
+    </div>
+
+  </div>
+
+  <!-- Right panel: tabbed actions -->
+  <div class="zephyr-right">
+
+    <!-- Tab bar -->
+    <div class="log-header" style="gap:0;padding:0 12px;border-bottom:1px solid var(--border);">
+      <span class="log-title" style="margin-right:16px;">Zephyr Actions</span>
+      <button type="button" class="btn btn-sm ztab-btn active" onclick="switchZTab('import')" id="ztab-import">Import Tests</button>
+      <button type="button" class="btn btn-sm ztab-btn" onclick="switchZTab('results')" id="ztab-results">Upload Results</button>
+      <button type="button" class="btn btn-sm ztab-btn" onclick="switchZTab('executions')" id="ztab-executions">Executions</button>
+      <div class="log-actions"><button type="button" class="btn btn-sm" onclick="clearZephyrLog()">Clear Log</button></div>
+    </div>
+
+    <!-- Import Tests tab -->
+    <div id="zpanel-import" class="zpanel" style="padding:16px;display:flex;flex-direction:column;gap:12px;overflow-y:auto;">
+      <div style="font-size:12px;color:var(--text-muted);line-height:1.6;">
+        Add Jira issue keys to the selected test cycle/folder. Enter one key per line or upload a CSV with a <code>Issue Key</code> column.
+      </div>
+      <div class="field">
+        <label>Jira Issue Keys (one per line)</label>
+        <textarea id="z_issue_keys" placeholder="PROJ-1&#10;PROJ-2&#10;PROJ-3"
+                  style="height:100px;background:var(--input-bg);border:1px solid var(--input-border);
+                         border-radius:var(--radius);color:var(--text);padding:8px 10px;
+                         font-family:'JetBrains Mono',monospace;font-size:11px;resize:vertical;
+                         width:100%;outline:none;"></textarea>
+      </div>
+      <div style="text-align:center;color:var(--text-dim);font-size:11px;">— or upload CSV —</div>
+      <div class="drop-zone" id="zImportDropZone" onclick="document.getElementById('zImportFile').click()"
+           ondragover="event.preventDefault();this.classList.add('drag-over')"
+           ondragleave="this.classList.remove('drag-over')"
+           ondrop="onZDrop(event,'zImportFile','zImportFileInfo')">
+        <input type="file" id="zImportFile" accept=".csv" onchange="onZFileSelect(event,'zImportFileInfo')" />
+        <span class="drop-zone-icon" style="font-size:20px;">📄</span>
+        <div style="font-weight:600;font-size:12px;">CSV with Issue Key column</div>
+      </div>
+      <div class="z-file-info" id="zImportFileInfo">
+        <span>📄</span><span id="zImportFileName">—</span>
+        <button class="btn btn-sm" style="margin-left:auto;color:var(--red);" onclick="clearZFile('zImportFile','zImportFileInfo')">✕</button>
+      </div>
+      <div class="field">
+        <label>Assignee Type</label>
+        <select id="z_assignee_type">
+          <option value="currentUser">Current User</option>
+          <option value="assignee">Issue Assignee</option>
+        </select>
+      </div>
+      <button class="btn btn-run" id="zAddTestsBtn" onclick="zAddTests()">Add Tests to Cycle</button>
+    </div>
+
+    <!-- Upload Results tab -->
+    <div id="zpanel-results" class="zpanel" style="display:none;padding:16px;flex-direction:column;gap:12px;overflow-y:auto;">
+      <div style="font-size:12px;color:var(--text-muted);line-height:1.6;">
+        Upload a CSV to bulk-update execution statuses. Columns: <code>Issue Key</code>, <code>Status</code> (pass/fail/wip/blocked), <code>Comment</code> (optional).
+      </div>
+      <div class="drop-zone" id="zResultsDropZone" onclick="document.getElementById('zResultsFile').click()"
+           ondragover="event.preventDefault();this.classList.add('drag-over')"
+           ondragleave="this.classList.remove('drag-over')"
+           ondrop="onZDrop(event,'zResultsFile','zResultsFileInfo')">
+        <input type="file" id="zResultsFile" accept=".csv" onchange="onZFileSelect(event,'zResultsFileInfo')" />
+        <span class="drop-zone-icon" style="font-size:20px;">📊</span>
+        <div style="font-weight:600;font-size:12px;">Results CSV (Issue Key, Status, Comment)</div>
+      </div>
+      <div class="z-file-info" id="zResultsFileInfo">
+        <span>📄</span><span id="zResultsFileName">—</span>
+        <button class="btn btn-sm" style="margin-left:auto;color:var(--red);" onclick="clearZFile('zResultsFile','zResultsFileInfo')">✕</button>
+      </div>
+      <div class="field">
+        <label>Attach HTML/Document to each execution (optional)</label>
+        <div class="drop-zone" onclick="document.getElementById('zAttachFile').click()"
+             style="padding:12px;"
+             ondragover="event.preventDefault();this.classList.add('drag-over')"
+             ondragleave="this.classList.remove('drag-over')"
+             ondrop="onZDrop(event,'zAttachFile','zAttachFileInfo')">
+          <input type="file" id="zAttachFile" accept=".html,.pdf,.txt,.png,.jpg,.zip,.doc,.docx"
+                 onchange="onZFileSelect(event,'zAttachFileInfo')" />
+          <div style="font-size:12px;">📎 Drop report/document here</div>
+        </div>
+        <div class="z-file-info" id="zAttachFileInfo">
+          <span>📎</span><span id="zAttachFileName">—</span>
+          <button class="btn btn-sm" style="margin-left:auto;color:var(--red);" onclick="clearZFile('zAttachFile','zAttachFileInfo')">✕</button>
+        </div>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
+        <div class="field">
+          <label>Bulk Status Override</label>
+          <select id="z_bulk_status">
+            <option value="">Use CSV values</option>
+            <option value="1">Pass All</option>
+            <option value="2">Fail All</option>
+            <option value="3">WIP All</option>
+            <option value="4">Block All</option>
+          </select>
+        </div>
+        <div class="field">
+          <label>Update Test Steps</label>
+          <select id="z_step_flag">
+            <option value="true">Yes — match execution status</option>
+            <option value="false">No</option>
+          </select>
+        </div>
+      </div>
+      <button class="btn btn-run" id="zUploadResultsBtn" onclick="zUploadResults()">Upload Results</button>
+    </div>
+
+    <!-- Executions tab -->
+    <div id="zpanel-executions" class="zpanel" style="display:none;padding:16px;flex-direction:column;gap:12px;overflow-y:auto;">
+      <div class="action-row">
+        <button class="btn btn-sm" onclick="zLoadExecutions()">⟳ Load Executions</button>
+        <div style="display:flex;gap:6px;margin-left:auto;">
+          <select id="z_exec_status_filter" style="font-size:11px;width:130px;">
+            <option value="">All Status</option>
+            <option value="1">Pass</option>
+            <option value="2">Fail</option>
+            <option value="3">WIP</option>
+            <option value="4">Blocked</option>
+            <option value="-1">Unexecuted</option>
+          </select>
+          <button class="btn btn-sm" onclick="zBulkMark()" id="zBulkMarkBtn" disabled>Bulk Mark Selected</button>
+        </div>
+      </div>
+      <div style="overflow-x:auto;max-height:320px;overflow-y:auto;">
+        <table class="history-tbl" id="zExecTable">
+          <thead style="position:sticky;top:0;z-index:2;">
+            <tr>
+              <th style="width:32px;"><input type="checkbox" id="zSelectAll" onchange="zToggleAll(this)" /></th>
+              <th>Issue Key</th>
+              <th>Summary</th>
+              <th>Status</th>
+              <th>Assignee</th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+          <tbody id="zExecTbody">
+            <tr><td colspan="6" style="text-align:center;color:var(--text-dim);padding:24px;">Load executions to see test results</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;">
+        <div class="field">
+          <label>Mark selected as</label>
+          <select id="z_mark_status">
+            <option value="1">Pass</option>
+            <option value="2">Fail</option>
+            <option value="3">WIP</option>
+            <option value="4">Blocked</option>
+            <option value="-1">Unexecuted</option>
+          </select>
+        </div>
+        <div class="field">
+          <label>Comment</label>
+          <input type="text" id="z_mark_comment" placeholder="Optional comment" />
+        </div>
+        <div class="field">
+          <label>Also update steps</label>
+          <select id="z_mark_steps">
+            <option value="true">Yes</option>
+            <option value="false">No</option>
+          </select>
+        </div>
+      </div>
+      <div class="field">
+        <label>Attach file to each marked execution</label>
+        <input type="file" id="zExecAttachFile" style="font-size:11px;color:var(--text-muted);" />
+      </div>
+    </div>
+
+    <!-- Shared log -->
+    <div class="zephyr-log" id="zephyrLog" style="border-top:1px solid var(--border);max-height:220px;"></div>
+
+  </div>
+
+</div>
+
 <!-- Status bar -->
 <div class="statusbar">
   <div class="status-dot" id="statusDot"></div>
@@ -450,6 +1511,8 @@ let testTree = {};
 let lastReport = null;
 let eventSource = null;
 let autoScroll = true;
+let _runContext = 'executor'; // 'executor' | 'features'
+let _selectedFeat = null;
 
 // ── Init ─────────────────────────────────────────────────────────────────────
 async function init() {
@@ -510,6 +1573,12 @@ function renderExtraOptions(options) {
           <option value="">(none)</option>
           ${opts}
         </select>`;
+    } else if (type === 'text') {
+      wrap.innerHTML = `
+        <label>${label} <code style="font-size:10px;margin-left:4px;">${flag}</code></label>
+        <input type="text" id="${id}" data-flag="${flag}"
+               placeholder="${opt.placeholder || ''}"
+               value="${opt.default || ''}" />`;
     }
 
     container.appendChild(wrap);
@@ -525,8 +1594,11 @@ function collectExtraOptionValues() {
     if (!el) return;
     if (opt.type === 'checkbox') {
       values[flag] = el.checked;
+    } else if (opt.type === 'text') {
+      const v = el.value.trim();
+      if (v) values[flag] = v;
     } else {
-      // Only include dropdown value if something meaningful is selected
+      // dropdown — only include if something meaningful is selected
       const v = el.value.trim();
       if (v && v.toLowerCase() !== 'none' && v !== '(none)') values[flag] = v;
     }
@@ -566,9 +1638,8 @@ function onRepoSelect() {
 function applyRepo(path) {
   document.getElementById('repo').value = path;
   const name = path.split(/[/\\]/).filter(Boolean).pop() || path;
-  const subtitle = '— ' + name;
-  document.getElementById('repoSubtitle').textContent = subtitle;
-  document.title = 'Playwright Test Executor  ' + subtitle;
+  document.getElementById('repoSubtitle').textContent = '📁 ' + name;
+  document.title = 'Playwright Executor — ' + name;
   discoverTests();
 }
 
@@ -593,17 +1664,18 @@ function connectStream() {
     const s = JSON.parse(e.data);
     appendLine('─'.repeat(72), 'sep');
     if (s === 'passed') {
-      appendLine('✓  All tests passed!', 'passed');
+      appendLine(_runContext === 'features' ? '✓  Done.' : '✓  All tests passed!', 'passed');
       setStatus('passed', 'PASSED');
     } else if (s === 'cancelled') {
       appendLine('⚠  Execution cancelled by user.', 'warning');
       setStatus('idle', 'CANCELLED');
     } else {
       const code = s.split(':')[1] || '?';
-      appendLine(`✗  Tests finished with failures  (exit code ${code}).`, 'failed');
+      appendLine(`✗  Finished with failures  (exit code ${code}).`, 'failed');
       setStatus('failed', 'FAILED');
     }
     setRunning(false);
+    _runContext = 'executor';
   });
 
   eventSource.addEventListener('done', e => {
@@ -771,6 +1843,11 @@ async function stopTests() {
 function setRunning(running) {
   document.getElementById('runBtn').disabled = running;
   document.getElementById('stopBtn').disabled = !running;
+  // Feature buttons mirror the same global run lock
+  const fr = document.getElementById('featRunBtn');
+  const fs = document.getElementById('featStopBtn');
+  if (fr) fr.disabled = running || !_selectedFeat;
+  if (fs) fs.disabled = !running;
 }
 
 // ── Report ────────────────────────────────────────────────────────────────────
@@ -833,20 +1910,33 @@ function classifyLine(line) {
 }
 
 function appendLine(text, cls) {
-  const log = document.getElementById('log');
+  const logId = _runContext === 'features' ? 'features-log' : 'log';
+  const log = document.getElementById(logId);
   const span = document.createElement('span');
   span.className = 'log-line log-' + (cls || 'default');
   span.textContent = text;
   log.appendChild(span);
-  if (autoScroll) scrollToBottom();
+  if (autoScroll) {
+    if (_runContext === 'features') featScrollToBottom();
+    else scrollToBottom();
+  }
 }
 
 function clearLog() {
   document.getElementById('log').innerHTML = '';
 }
 
+function clearFeatLog() {
+  document.getElementById('features-log').innerHTML = '';
+}
+
 function scrollToBottom() {
   const log = document.getElementById('log');
+  log.scrollTop = log.scrollHeight;
+}
+
+function featScrollToBottom() {
+  const log = document.getElementById('features-log');
   log.scrollTop = log.scrollHeight;
 }
 
@@ -860,20 +1950,34 @@ function setStatus(state, label, cmd) {
 }
 
 // ── Browse helpers ────────────────────────────────────────────────────────────
-function browseRepo() {
-  const current = document.getElementById('repo').value;
-  const path = prompt('Enter the full path to the Playwright repo root:', current);
-  if (path && path.trim()) {
-    const p = path.trim();
+async function browseRepo() {
+  // Open the native OS folder picker (Finder on macOS, Explorer on Windows)
+  const btn = document.querySelector('button[onclick="browseRepo()"]');
+  const orig = btn ? btn.textContent : '';
+  if (btn) { btn.textContent = '…'; btn.disabled = true; }
+
+  try {
+    const current = document.getElementById('repo').value.trim();
+    const res = await fetch('/api/browse-folder', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ start: current || '' }),
+    });
+    const data = await res.json();
+    if (data.cancelled || !data.path) return;
+    const p = data.path;
     document.getElementById('repo').value = p;
-    // Add to dropdown as custom entry if not already there
     const sel = document.getElementById('repoSelect');
     if (!Array.from(sel.options).some(o => o.value === p)) {
-      const opt = new Option('📁 ' + p.split(/[/\\]/).pop() + ' (custom)', p);
+      const opt = new Option('📁 ' + p.split(/[/\\]/).pop(), p);
       sel.add(opt);
     }
     sel.value = p;
     applyRepo(p);
+  } catch (err) {
+    appendLine('✗  Folder picker error: ' + err.message, 'failed');
+  } finally {
+    if (btn) { btn.textContent = orig; btn.disabled = false; }
   }
 }
 
@@ -882,6 +1986,1007 @@ document.getElementById('log').addEventListener('scroll', function() {
   const el = this;
   autoScroll = el.scrollTop + el.clientHeight >= el.scrollHeight - 20;
 });
+
+// ── Features management ───────────────────────────────────────────────────────
+let _features = [];
+
+async function loadFeatures() {
+  const cfg = await fetch('/api/config').then(r => r.json()).catch(() => ({}));
+  _features = cfg.features || [];
+  renderFeatures();
+}
+
+function renderFeatures() {
+  const list = document.getElementById('featList');
+  if (!_features.length) {
+    list.innerHTML = '<div class="empty-state">No features yet — click "+ Add Feature" to create one.</div>';
+    return;
+  }
+
+  const runtimeBadge = { python: 'badge-python', node: 'badge-node', shell: 'badge-shell' };
+  list.innerHTML = _features.map((f, i) => {
+    const selected = _selectedFeat === i;
+    const bCls = runtimeBadge[f.runtime] || 'badge-checkbox';
+    return `
+      <div class="feature-card" id="feat-card-${i}"
+           style="border-color:${selected ? 'var(--accent)' : 'var(--border)'};cursor:pointer;"
+           onclick="selectFeat(${i})">
+        <div class="feature-card-top">
+          <span class="feature-card-name">${escHtml(f.name || 'Unnamed')}</span>
+          <span class="badge ${bCls}">${escHtml(f.runtime || 'python')}</span>
+        </div>
+        ${f.description ? `<div class="feature-card-desc">${escHtml(f.description)}</div>` : ''}
+        <div class="feature-card-script">${escHtml(f.script || '')}</div>
+        <div class="feature-card-actions">
+          <button type="button" class="btn btn-sm" onclick="event.stopPropagation();editFeat(${i})">Edit</button>
+          <button type="button" class="btn btn-sm" style="color:var(--red);border-color:var(--red);"
+                  onclick="event.stopPropagation();deleteFeat(${i})">Delete</button>
+        </div>
+      </div>`;
+  }).join('');
+}
+
+function selectFeat(i) {
+  _selectedFeat = i;
+  renderFeatures();
+  const fr = document.getElementById('featRunBtn');
+  if (fr) fr.disabled = false;
+}
+
+function showFeatAddForm() {
+  document.getElementById('ff_index').value = '-1';
+  document.getElementById('featFormTitle').textContent = 'Add Feature';
+  document.getElementById('ff_name').value    = '';
+  document.getElementById('ff_desc').value    = '';
+  document.getElementById('ff_runtime').value = 'python';
+  document.getElementById('ff_script').value  = '';
+  document.getElementById('ff_cwd').value     = '';
+  document.getElementById('ff_args').value    = '';
+  document.getElementById('featForm').style.display = '';
+  document.getElementById('ff_name').focus();
+}
+
+function editFeat(i) {
+  const f = _features[i];
+  document.getElementById('ff_index').value        = i;
+  document.getElementById('featFormTitle').textContent = 'Edit Feature';
+  document.getElementById('ff_name').value    = f.name        || '';
+  document.getElementById('ff_desc').value    = f.description || '';
+  document.getElementById('ff_runtime').value = f.runtime     || 'python';
+  document.getElementById('ff_script').value  = f.script      || '';
+  document.getElementById('ff_cwd').value     = f.cwd         || '';
+  document.getElementById('ff_args').value    = f.args        || '';
+  document.getElementById('featForm').style.display = '';
+  document.getElementById('ff_name').focus();
+}
+
+function cancelFeatForm() {
+  document.getElementById('featForm').style.display = 'none';
+}
+
+async function saveFeatForm() {
+  const name   = document.getElementById('ff_name').value.trim();
+  const script = document.getElementById('ff_script').value.trim();
+  if (!name)   { alert('Name is required.'); return; }
+  if (!script) { alert('Script Path is required.'); return; }
+
+  const feat = {
+    name,
+    description: document.getElementById('ff_desc').value.trim(),
+    runtime:     document.getElementById('ff_runtime').value,
+    script,
+    cwd:         document.getElementById('ff_cwd').value.trim(),
+    args:        document.getElementById('ff_args').value.trim(),
+  };
+
+  const idx = parseInt(document.getElementById('ff_index').value, 10);
+  if (idx >= 0) _features[idx] = feat;
+  else          _features.push(feat);
+
+  await persistFeatures();
+  cancelFeatForm();
+  renderFeatures();
+}
+
+async function deleteFeat(i) {
+  if (!confirm(`Delete "${_features[i].name}"?`)) return;
+  if (_selectedFeat === i) _selectedFeat = null;
+  else if (_selectedFeat > i) _selectedFeat--;
+  _features.splice(i, 1);
+  await persistFeatures();
+  renderFeatures();
+  const fr = document.getElementById('featRunBtn');
+  if (fr) fr.disabled = _selectedFeat === null;
+}
+
+async function persistFeatures() {
+  const res = await fetch('/api/config/features', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ features: _features }),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    alert('Save failed: ' + (err.error || 'unknown error'));
+  }
+}
+
+async function runFeature() {
+  if (_selectedFeat === null || _selectedFeat === undefined) return;
+  const feat = _features[_selectedFeat];
+  if (!feat) return;
+
+  clearFeatLog();
+  _runContext = 'features';
+  setRunning(true);
+
+  const res = await fetch('/api/features/run', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ feature: feat }),
+  });
+
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    appendLine('✗  ' + (err.error || 'Failed to start'), 'failed');
+    _runContext = 'executor';
+    setRunning(false);
+  }
+}
+
+// Reset run context to executor after a feature run finishes
+// (patched into existing stream status handler below)
+
+// ── Tools management ──────────────────────────────────────────────────────────
+let _tools = [];
+
+async function loadTools() {
+  const cfg = await fetch('/api/config').then(r => r.json()).catch(() => ({}));
+  _tools = cfg.extra_options || [];
+  renderTools();
+}
+
+function renderTools() {
+  const list = document.getElementById('toolsList');
+  if (!_tools.length) {
+    list.innerHTML = '<div class="empty-state"><div class="empty-state-icon">🔧</div>No custom tools yet — click "+ Add Tool" to create one.</div>';
+    return;
+  }
+
+  list.innerHTML = _tools.map((t, i) => {
+    const badge = t.type === 'dropdown'
+      ? '<span class="badge badge-dropdown">dropdown</span>'
+      : t.type === 'text'
+        ? '<span class="badge" style="background:#313244;color:#89b4fa;">text</span>'
+        : '<span class="badge badge-checkbox">checkbox</span>';
+    const meta  = t.type === 'dropdown'
+      ? `Values: ${(t.values || []).join(', ')} — Default: ${t.default || '(none)'}`
+      : t.type === 'text'
+        ? `Default: "${t.default || ''}"${t.placeholder ? ' — Placeholder: ' + t.placeholder : ''}`
+        : `Default: ${t.default ? 'checked' : 'unchecked'}`;
+    const iconMap = { checkbox: '☑', dropdown: '▾', text: '✏' };
+    return `
+      <div class="tool-card">
+        <div class="tool-card-icon">${iconMap[t.type] || '⚙'}</div>
+        <div class="tool-card-info">
+          <div class="tool-card-label">${escHtml(t.label || '')}${badge}</div>
+          <div class="tool-card-flag">${escHtml(t.flag || '')}</div>
+          <div class="tool-card-meta">${escHtml(meta)}</div>
+        </div>
+        <div class="tool-card-actions">
+          <button type="button" class="btn btn-sm" onclick="editTool(${i})">Edit</button>
+          <button type="button" class="btn btn-sm" style="color:var(--red);border-color:var(--red);"
+                  onclick="deleteTool(${i})">Delete</button>
+        </div>
+      </div>`;
+  }).join('');
+}
+
+function escHtml(s) {
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+function showAddForm() {
+  document.getElementById('toolFormIndex').value = '-1';
+  document.getElementById('toolFormTitle').textContent = 'Add New Tool';
+  document.getElementById('tf_label').value   = '';
+  document.getElementById('tf_flag').value    = '';
+  document.getElementById('tf_type').value    = 'checkbox';
+  document.getElementById('tf_default').value = '';
+  document.getElementById('tf_values').value       = '';
+  document.getElementById('tf_placeholder').value  = '';
+  onToolTypeChange();
+  document.getElementById('toolForm').style.display = '';
+  document.getElementById('tf_label').focus();
+}
+
+function editTool(i) {
+  const t = _tools[i];
+  document.getElementById('toolFormIndex').value   = i;
+  document.getElementById('toolFormTitle').textContent = 'Edit Tool';
+  document.getElementById('tf_label').value   = t.label  || '';
+  document.getElementById('tf_flag').value    = t.flag   || '';
+  document.getElementById('tf_type').value    = t.type   || 'checkbox';
+  document.getElementById('tf_default').value = t.default != null ? String(t.default) : '';
+  document.getElementById('tf_values').value       = (t.values || []).join(', ');
+  document.getElementById('tf_placeholder').value  = t.placeholder || '';
+  onToolTypeChange();
+  document.getElementById('toolForm').style.display = '';
+  document.getElementById('tf_label').focus();
+}
+
+function cancelToolForm() {
+  document.getElementById('toolForm').style.display = 'none';
+}
+
+function onToolTypeChange() {
+  const type = document.getElementById('tf_type').value;
+  document.getElementById('tf_values_wrap').style.display      = type === 'dropdown' ? '' : 'none';
+  document.getElementById('tf_placeholder_wrap').style.display = type === 'text'     ? '' : 'none';
+  // "Default" field label and meaning varies by type
+  const defWrap = document.getElementById('tf_default_wrap');
+  if (type === 'text') {
+    defWrap.querySelector('label').textContent = 'Default Value';
+  } else if (type === 'checkbox') {
+    defWrap.querySelector('label').textContent = 'Default (true/false)';
+  } else {
+    defWrap.querySelector('label').textContent = 'Default';
+  }
+}
+
+async function saveToolForm() {
+  const label = document.getElementById('tf_label').value.trim();
+  const flag  = document.getElementById('tf_flag').value.trim();
+  const type  = document.getElementById('tf_type').value;
+  const defRaw = document.getElementById('tf_default').value.trim();
+
+  if (!label) { alert('Label is required.'); return; }
+  if (!flag)  { alert('CLI Flag is required.'); return; }
+
+  const tool = { label, flag, type };
+
+  if (type === 'dropdown') {
+    tool.values  = document.getElementById('tf_values').value
+      .split(',').map(v => v.trim()).filter(Boolean);
+    tool.default = defRaw || '';
+  } else if (type === 'text') {
+    tool.default     = defRaw || '';
+    tool.placeholder = document.getElementById('tf_placeholder').value.trim();
+  } else {
+    tool.default = defRaw === 'true' || defRaw === '1' || defRaw === 'checked';
+  }
+
+  const idx = parseInt(document.getElementById('toolFormIndex').value, 10);
+  if (idx >= 0) {
+    _tools[idx] = tool;
+  } else {
+    _tools.push(tool);
+  }
+
+  await persistTools();
+  cancelToolForm();
+  renderTools();
+}
+
+async function deleteTool(i) {
+  if (!confirm(`Delete "${_tools[i].label}"?`)) return;
+  _tools.splice(i, 1);
+  await persistTools();
+  renderTools();
+}
+
+async function persistTools() {
+  const res = await fetch('/api/config/tools', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ extra_options: _tools }),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    alert('Save failed: ' + (err.error || 'unknown error'));
+  }
+}
+
+// ── Tab switcher (extended) ───────────────────────────────────────────────────
+function switchTab(tab) {
+  const pages = ['executor','tools','dashboard','zephyr'];
+  pages.forEach(p => {
+    const el = document.getElementById('page-' + p);
+    if (el) {
+      if (p === 'executor') { el.classList.toggle('hidden', p !== tab); }
+      else { el.classList.toggle('active', p === tab); }
+    }
+  });
+  document.querySelectorAll('.tab-btn').forEach((btn, i) => {
+    btn.classList.toggle('active', pages[i] === tab);
+  });
+  if (tab === 'tools')     { loadTools(); loadFeatures(); loadZephyrConfig(); }
+  if (tab === 'dashboard') loadDashboard();
+  if (tab === 'zephyr')    loadZephyrConfig();
+}
+
+// ── Dashboard ─────────────────────────────────────────────────────────────────
+const DC = {
+  passed:  '#a6e3a1',
+  failed:  '#f38ba8',
+  broken:  '#f9e2af',
+  skipped: '#89b4fa',
+  unknown: '#808099',
+};
+const CHART_GRID  = '#2e2e45';
+const CHART_LABEL = '#808099';
+
+let _dashTests      = [];  // raw tests from current allure results
+let _dashFiltered   = [];  // after search/filter
+let _dashSortKey    = 'suite';
+let _dashSortAsc    = true;
+
+async function loadDashboard() {
+  // Resolve repo from the text input, dropdown, or config
+  const repo = document.getElementById('repo').value.trim()
+            || document.getElementById('repoSelect').value.trim();
+  document.getElementById('dashSubtitle').textContent = repo ? '— loading…' : '— select a repo on the Executor tab first';
+  if (!repo) return;
+
+  const url = `/api/dashboard?repo=${encodeURIComponent(repo)}`;
+  const data = await fetch(url).then(r => r.json()).catch(e => {
+    console.error('Dashboard load error:', e);
+    return { tests: [], trend: [], summaries: [], run_history: [] };
+  });
+
+  _dashTests = data.tests || [];
+  const runHistory  = data.run_history || [];
+  const summaries   = data.summaries   || [];   // smart-reporter per-run history
+  const allureTrend = data.trend       || [];
+
+  // ── Stats from current allure results ──────────────────────────────────────
+  const counts = { passed: 0, failed: 0, broken: 0, skipped: 0 };
+  let totalDur = 0;
+  _dashTests.forEach(t => {
+    const s = t.status || 'unknown';
+    if (s in counts) counts[s]++;
+    totalDur += t.duration || 0;
+  });
+  const total = _dashTests.length;
+  const passRate = total ? ((counts.passed / total) * 100).toFixed(1) : '—';
+  const avgDur   = total ? _fmtDur(totalDur / total) : '—';
+
+  document.getElementById('dashTotal').textContent    = total;
+  document.getElementById('dashPassed').textContent   = counts.passed;
+  document.getElementById('dashFailed').textContent   = counts.failed;
+  document.getElementById('dashBroken').textContent   = counts.broken;
+  document.getElementById('dashSkipped').textContent  = counts.skipped;
+  document.getElementById('dashPassRate').textContent = passRate !== '—' ? passRate + '%' : '—';
+  document.getElementById('dashAvgDur').textContent   = avgDur;
+  document.getElementById('dashRecordCount').textContent = `${runHistory.length} records`;
+
+  const lastDate = _dashTests.length
+    ? new Date(_dashTests[0].start).toLocaleString()
+    : (runHistory[0]?.date || 'no runs yet');
+  document.getElementById('dashSubtitle').textContent =
+    `— ${total} tests  ·  last run: ${lastDate}`;
+
+  // ── Charts ─────────────────────────────────────────────────────────────────
+  _renderStatusDonut(counts);
+  _renderDailyChart(_dashTests, summaries, runHistory);
+  _renderRunTrend(summaries, allureTrend, runHistory);
+
+  // ── Build per-test history from summaries ──────────────────────────────────
+  // Map: testId → array of statuses (most recent last, up to 10)
+  window._testHistory = {};
+  summaries.slice(-10).forEach(s => {
+    (s.results || []).forEach(r => {
+      const id = r.testId || '';
+      if (!window._testHistory[id]) window._testHistory[id] = [];
+      let st = (r.status || 'unknown').toLowerCase();
+      if (st === 'expected' || st === 'pass') st = 'passed';
+      else if (st === 'unexpected' || st === 'fail') st = 'failed';
+      window._testHistory[id].push(st);
+    });
+  });
+
+  // ── Tables ─────────────────────────────────────────────────────────────────
+  filterTests();
+  _renderHistoryTable(runHistory);
+}
+
+function _fmtDur(ms) {
+  if (!ms) return '0ms';
+  if (ms < 1000) return Math.round(ms) + 'ms';
+  if (ms < 60000) return (ms / 1000).toFixed(1) + 's';
+  return Math.floor(ms / 60000) + 'm ' + Math.round((ms % 60000) / 1000) + 's';
+}
+
+// Status donut chart
+function _renderStatusDonut(counts) {
+  const id = 'chartStatusDonut';
+  const ch = Chart.getChart(id); if (ch) ch.destroy();
+  const vals   = [counts.passed, counts.failed, counts.broken, counts.skipped];
+  const labels = ['Passed', 'Failed', 'Broken', 'Skipped'];
+  const colors = [DC.passed, DC.failed, DC.broken, DC.skipped];
+  new Chart(document.getElementById(id).getContext('2d'), {
+    type: 'doughnut',
+    data: { labels, datasets: [{ data: vals, backgroundColor: colors, borderWidth: 2, borderColor: '#1f1f2e', hoverOffset: 5 }] },
+    options: {
+      cutout: '66%', animation: { duration: 500 },
+      plugins: {
+        legend: { display: false },
+        tooltip: { callbacks: { label: c => ` ${c.label}: ${c.raw}` } },
+      },
+    },
+  });
+  const total = vals.reduce((a, b) => a + b, 0) || 1;
+  document.getElementById('legendStatus').innerHTML = labels.map((l, i) =>
+    `<div class="dash-legend-item">
+       <span class="dash-legend-dot" style="background:${colors[i]}"></span>
+       <span>${l}</span>
+       <span class="dash-legend-val">${vals[i]} <span style="color:var(--text-dim);font-size:10px;">(${(vals[i]/total*100).toFixed(0)}%)</span></span>
+     </div>`).join('');
+}
+
+// Daily stacked bar — auto-scales window to cover all available data
+function _renderDailyChart(tests, summaries, runHistory) {
+  const id = 'chartDailyRuns';
+  const ch = Chart.getChart(id); if (ch) ch.destroy();
+
+  // Gather all timestamps to determine date range
+  const allTs = [];
+  if (summaries.length) summaries.forEach(s => { if (s.startTime) allTs.push(s.startTime); });
+  else if (tests.length) tests.forEach(t => { if (t.start) allTs.push(t.start); });
+  else runHistory.forEach(r => { if (r.ts) allTs.push(r.ts); });
+
+  // Pick window: at least 7 days, expand to cover all data up to 60 days
+  const now = Date.now();
+  const oldestTs = allTs.length ? Math.min(...allTs) : now;
+  const daysDiff = Math.ceil((now - oldestTs) / 86400000);
+  const windowDays = Math.min(60, Math.max(7, daysDiff + 1));
+
+  const days = [], labels = [];
+  for (let i = windowDays - 1; i >= 0; i--) {
+    const d = new Date(); d.setHours(0, 0, 0, 0); d.setDate(d.getDate() - i);
+    days.push(d);
+    // Only label every N days to avoid crowding
+    const step = windowDays <= 14 ? 1 : windowDays <= 30 ? 2 : 5;
+    labels.push(i % step === 0
+      ? d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+      : '');
+  }
+  const N = days.length;
+  const byDay = {
+    passed:  new Array(N).fill(0), failed:  new Array(N).fill(0),
+    broken:  new Array(N).fill(0), skipped: new Array(N).fill(0),
+  };
+
+  const bucket = (ts, status) => {
+    const date = new Date(ts); date.setHours(0, 0, 0, 0);
+    const idx = days.findIndex(d => d.getTime() === date.getTime());
+    if (idx >= 0 && status in byDay) byDay[status][idx]++;
+  };
+  const normalise = st => {
+    st = (st || 'unknown').toLowerCase();
+    if (st === 'expected' || st === 'pass') return 'passed';
+    if (st === 'unexpected' || st === 'fail') return 'failed';
+    return st;
+  };
+
+  if (summaries.length) {
+    summaries.forEach(s => {
+      const ts = s.startTime || 0;
+      (s.results || []).forEach(r => bucket(ts, normalise(r.status)));
+    });
+  } else if (tests.length) {
+    tests.forEach(t => { if (t.start) bucket(t.start, t.status || 'unknown'); });
+  } else {
+    runHistory.forEach(r => {
+      const ts = r.ts || 0; if (!ts) return;
+      const date = new Date(ts); date.setHours(0, 0, 0, 0);
+      const idx = days.findIndex(d => d.getTime() === date.getTime());
+      if (idx < 0) return;
+      const s = r.stats || {};
+      byDay.passed[idx]  += s.passed  || 0;
+      byDay.failed[idx]  += s.failed  || 0;
+      byDay.broken[idx]  += s.broken  || 0;
+      byDay.skipped[idx] += s.skipped || 0;
+    });
+  }
+
+  const bar = c => ({ borderColor: c, backgroundColor: c + '44', borderWidth: 2, borderRadius: 3, borderSkipped: false });
+  const titleEl = document.getElementById('dailyChartTitle');
+  if (titleEl) titleEl.textContent = `Tests Run by Day — Last ${windowDays} Days`;
+
+  new Chart(document.getElementById(id).getContext('2d'), {
+    type: 'bar',
+    data: {
+      labels,
+      datasets: [
+        { label: 'Passed',  data: byDay.passed,  ...bar(DC.passed)  },
+        { label: 'Failed',  data: byDay.failed,  ...bar(DC.failed)  },
+        { label: 'Broken',  data: byDay.broken,  ...bar(DC.broken)  },
+        { label: 'Skipped', data: byDay.skipped, ...bar(DC.skipped) },
+      ],
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      scales: {
+        x: { stacked: true, ticks: { color: CHART_LABEL, font: { size: 10 }, maxRotation: 40 }, grid: { color: CHART_GRID } },
+        y: { stacked: true, ticks: { color: CHART_LABEL, font: { size: 10 } }, grid: { color: CHART_GRID }, beginAtZero: true },
+      },
+      plugins: {
+        legend: { labels: { color: '#a6adc8', font: { size: 11 }, boxWidth: 11, padding: 12 }, position: 'bottom' },
+        tooltip: { mode: 'index', intersect: false },
+      },
+      animation: { duration: 500 },
+    },
+  });
+}
+
+// Run-level history trend — prioritises smart-reporter summaries
+function _renderRunTrend(summaries, allureTrend, runHistory) {
+  const id = 'chartRunTrend';
+  const ch = Chart.getChart(id); if (ch) ch.destroy();
+
+  let labels, passed, failed, broken, skipped;
+
+  if (summaries.length) {
+    // Smart-reporter: each summary = one run, aggregate per-run counts
+    const slice = summaries.slice(-20);
+    labels  = slice.map((s, i) => {
+      const d = new Date(s.startTime || 0);
+      return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) + '\n' +
+             d.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
+    });
+    passed = []; failed = []; broken = []; skipped = [];
+    slice.forEach(s => {
+      const c = { passed: 0, failed: 0, broken: 0, skipped: 0 };
+      (s.results || []).forEach(r => {
+        let st = (r.status || 'unknown').toLowerCase();
+        if (st === 'expected' || st === 'pass') st = 'passed';
+        else if (st === 'unexpected' || st === 'fail') st = 'failed';
+        if (st in c) c[st]++;
+      });
+      passed.push(c.passed); failed.push(c.failed);
+      broken.push(c.broken); skipped.push(c.skipped);
+    });
+  } else if (allureTrend.length) {
+    const slice = [...allureTrend].reverse().slice(-20);
+    labels  = slice.map((_, i) => `Run #${i + 1}`);
+    passed  = slice.map(b => b.data?.passed  ?? b.passed  ?? 0);
+    failed  = slice.map(b => b.data?.failed  ?? b.failed  ?? 0);
+    broken  = slice.map(b => b.data?.broken  ?? b.broken  ?? 0);
+    skipped = slice.map(b => b.data?.skipped ?? b.skipped ?? 0);
+  } else {
+    const slice = [...runHistory].reverse().slice(-20);
+    labels  = slice.map(r => r.date?.slice(5, 16) || '');
+    passed  = slice.map(r => r.stats?.passed  || 0);
+    failed  = slice.map(r => r.stats?.failed  || 0);
+    broken  = slice.map(r => r.stats?.broken  || 0);
+    skipped = slice.map(r => r.stats?.skipped || 0);
+  }
+
+  new Chart(document.getElementById(id).getContext('2d'), {
+    type: 'line',
+    data: {
+      labels,
+      datasets: [
+        { label: 'Passed',  data: passed,  borderColor: DC.passed,  backgroundColor: DC.passed  + '18', tension: 0.35, fill: true, pointRadius: 4, borderWidth: 2 },
+        { label: 'Failed',  data: failed,  borderColor: DC.failed,  backgroundColor: DC.failed  + '18', tension: 0.35, fill: true, pointRadius: 4, borderWidth: 2 },
+        { label: 'Broken',  data: broken,  borderColor: DC.broken,  backgroundColor: DC.broken  + '10', tension: 0.35, pointRadius: 3, borderWidth: 1.5 },
+        { label: 'Skipped', data: skipped, borderColor: DC.skipped, backgroundColor: DC.skipped + '10', tension: 0.35, pointRadius: 3, borderWidth: 1.5 },
+      ],
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      scales: {
+        x: { ticks: { color: CHART_LABEL, font: { size: 9 }, maxRotation: 40 }, grid: { color: CHART_GRID } },
+        y: { ticks: { color: CHART_LABEL, font: { size: 10 } }, grid: { color: CHART_GRID }, beginAtZero: true },
+      },
+      plugins: {
+        legend: { labels: { color: '#a6adc8', font: { size: 11 }, boxWidth: 11, padding: 12 }, position: 'bottom' },
+        tooltip: { mode: 'index', intersect: false },
+      },
+      animation: { duration: 500 },
+    },
+  });
+}
+
+// Test case table — per test from allure results
+function filterTests() {
+  const q      = (document.getElementById('dashSearch').value || '').toLowerCase();
+  const status = document.getElementById('dashStatusFilter').value;
+  _dashFiltered = _dashTests.filter(t =>
+    (!q      || t.name.toLowerCase().includes(q) || (t.suite || '').toLowerCase().includes(q)) &&
+    (!status || t.status === status)
+  );
+  _sortAndRenderTests();
+}
+
+function sortTests(key) {
+  if (_dashSortKey === key) _dashSortAsc = !_dashSortAsc;
+  else { _dashSortKey = key; _dashSortAsc = true; }
+  _sortAndRenderTests();
+}
+
+function _sortAndRenderTests() {
+  const key = _dashSortKey;
+  const asc = _dashSortAsc;
+  _dashFiltered.sort((a, b) => {
+    let av = a[key] ?? '', bv = b[key] ?? '';
+    if (key === 'duration') { av = a.duration; bv = b.duration; }
+    if (av < bv) return asc ? -1 : 1;
+    if (av > bv) return asc ? 1 : -1;
+    return 0;
+  });
+  _renderTestTable(_dashFiltered);
+}
+
+function _renderTestTable(tests) {
+  const tbody = document.getElementById('dashTestTbody');
+  document.getElementById('dashTestCount').textContent = `${tests.length} tests`;
+
+  if (!tests.length) {
+    tbody.innerHTML = `<tr><td colspan="6" style="text-align:center;color:var(--text-dim);padding:32px;">
+      ${_dashTests.length ? 'No tests match the filter' : 'No Allure results found — run tests with <code>--alluredir</code> enabled'}
+    </td></tr>`;
+    return;
+  }
+
+  const SI = { passed: '✓', failed: '✗', broken: '!', skipped: '⊘', unknown: '?' };
+  const th = window._testHistory || {};
+
+  tbody.innerHTML = tests.map(t => {
+    const s     = t.status || 'unknown';
+    const runAt = t.start
+      ? new Date(t.start).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })
+      : '—';
+    const suite = escHtml(t.suite || t.fullName?.split('::').slice(-2,-1)[0] || '—');
+    const name  = escHtml(t.name  || t.fullName || '—');
+
+    // Build history dots — match by fullName or name
+    const histKey = t.fullName || ('::' + t.suite + '::' + t.name);
+    const histArr = th[histKey] || th[Object.keys(th).find(k => k.includes(t.name) || k.includes(t.fullName || '')) || ''] || [];
+    const dots = histArr.slice(-10).map(hs =>
+      `<span title="${hs}" style="display:inline-block;width:9px;height:9px;border-radius:50%;margin:0 1px;background:${DC[hs] || DC.unknown};opacity:0.9;"></span>`
+    ).join('');
+    const histCell = dots || `<span style="color:var(--text-dim);font-size:10px;">no history</span>`;
+
+    return `<tr>
+      <td style="color:var(--text-dim);font-size:11px;max-width:130px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${suite}">${suite}</td>
+      <td style="max-width:340px;" title="${name}"><span style="font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--text);">${name}</span></td>
+      <td><span class="tbl-status-badge ${s}">${SI[s] || '?'} ${s}</span></td>
+      <td class="tbl-num" style="color:var(--text-muted);">${_fmtDur(t.duration)}</td>
+      <td style="font-size:11px;color:var(--text-dim);white-space:nowrap;">${runAt}</td>
+      <td style="white-space:nowrap;">${histCell}</td>
+    </tr>`;
+  }).join('');
+}
+
+function _renderHistoryTable(records) {
+  const tbody = document.getElementById('historyTbody');
+  if (!records.length) {
+    tbody.innerHTML = '<tr><td colspan="9" style="text-align:center;color:var(--text-dim);padding:24px;">No runs recorded yet — run some tests first</td></tr>';
+    return;
+  }
+  tbody.innerHTML = records.slice(0, 50).map(r => {
+    const s = r.stats || {};
+    const total = s.total || 0;
+    const pct = total ? ((s.passed || 0) / total * 100).toFixed(1) : '—';
+    const statusCls = (r.status || '').startsWith('failed') ? 'failed' : (r.status || 'cancelled');
+    const statusLabel = (r.status || '').startsWith('failed') ? 'failed' : (r.status || '—');
+    return `<tr>
+      <td>${escHtml(r.date || '—')}</td>
+      <td>${escHtml(r.repo || '—')}</td>
+      <td><span class="tbl-status-badge ${statusCls}">${statusLabel}</span></td>
+      <td class="tbl-num pass">${s.passed || 0}</td>
+      <td class="tbl-num fail">${s.failed || 0}</td>
+      <td class="tbl-num broken">${s.broken || 0}</td>
+      <td class="tbl-num skip">${s.skipped || 0}</td>
+      <td class="tbl-num">${total}</td>
+      <td class="tbl-num ${pct !== '—' && parseFloat(pct) === 100 ? 'pass' : ''}">${pct !== '—' ? pct + '%' : '—'}</td>
+    </tr>`;
+  }).join('');
+}
+
+async function clearHistory() {
+  if (!confirm('Clear all run history? This cannot be undone.')) return;
+  await fetch('/api/report/history/clear', { method: 'POST' });
+  loadDashboard();
+}
+
+// ── Zephyr Scale Integration ──────────────────────────────────────────────────
+let _zProject = '';
+let _zCycleId = '';
+let _zFolderId = '';
+let _zFile = null;
+
+// ── Config section accordion ──────────────────────────────────────────────────
+function toggleConfigSection(bodyId, arrowId) {
+  const body  = document.getElementById(bodyId);
+  const arrow = document.getElementById(arrowId);
+  if (!body) return;
+  const open = body.style.display === 'none' || body.style.display === '';
+  // cfgZephyr starts closed (display:none), others start open
+  const isClosed = body.style.display === 'none';
+  body.style.display  = isClosed ? 'flex' : 'none';
+  if (arrow) arrow.textContent = isClosed ? '▼' : '▶ Configure';
+}
+
+// ── Zephyr sub-tabs (Import / Upload Results / Executions) ────────────────────
+function switchZTab(tab) {
+  const tabs   = ['import', 'results', 'executions'];
+  tabs.forEach(t => {
+    const btn   = document.getElementById('ztab-' + t);
+    const panel = document.getElementById('zpanel-' + t);
+    const active = t === tab;
+    if (btn)   btn.classList.toggle('active', active);
+    if (panel) panel.style.display = active ? 'flex' : 'none';
+  });
+}
+
+// ── Zephyr config ─────────────────────────────────────────────────────────────
+async function loadZephyrConfig() {
+  const cfg = await fetch('/api/zephyr/config').then(r => r.json()).catch(() => ({}));
+  const set = (id, val) => { const el = document.getElementById(id); if (el) el.value = val || ''; };
+  set('z_jira_url',   cfg.jira_url   || '');
+  set('z_username',   cfg.username   || '');
+  set('z_api_token',  cfg.api_token  || '');
+  set('z_access_key', cfg.access_key || '');
+  set('z_secret_key', cfg.secret_key || '');
+  set('z_account_id', cfg.account_id || '');
+  // Update connection status badge on the Zephyr tab
+  if (cfg.access_key) {
+    const dot = document.getElementById('zConnectStatus');
+    if (dot) dot.innerHTML = '<span class="connect-dot" style="background:var(--text-dim);width:7px;height:7px;border-radius:50%;display:inline-block;margin-right:3px;"></span>Configured';
+  }
+}
+
+async function saveZephyrConfig() {
+  const get = id => { const el = document.getElementById(id); return el ? el.value.trim() : ''; };
+  const cfg = {
+    jira_url:   get('z_jira_url'),
+    username:   get('z_username'),
+    api_token:  get('z_api_token'),
+    access_key: get('z_access_key'),
+    secret_key: get('z_secret_key'),
+    account_id: get('z_account_id'),
+  };
+  const res = await fetch('/api/zephyr/config', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(cfg),
+  });
+  if (res.ok) { zLog('✓  Zephyr config saved.', 'passed'); }
+  else { zLog('✗  Failed to save Zephyr config.', 'failed'); }
+}
+
+async function testZephyrConnection() {
+  const dot = document.getElementById('zConnectStatus');
+  if (dot) dot.innerHTML = '<span class="connect-dot" style="background:var(--yellow);width:7px;height:7px;border-radius:50%;display:inline-block;margin-right:3px;"></span>Testing…';
+  const res = await fetch('/api/zephyr/projects');
+  if (res.ok) {
+    const data = await res.json();
+    const count = Array.isArray(data) ? data.length : '?';
+    if (dot) dot.innerHTML = '<span class="connect-dot ok"></span> Connected · ' + count + ' projects';
+    zLog(`✓  Connection successful — ${count} project(s) found.`, 'passed');
+  } else {
+    const err = await res.json().catch(() => ({}));
+    if (dot) dot.innerHTML = '<span class="connect-dot err"></span> Failed';
+    zLog('✗  Connection failed: ' + JSON.stringify(err.error || err), 'failed');
+  }
+}
+
+async function loadZephyrProjects() {
+  zLog('⟳  Loading projects…', 'info');
+  const res = await fetch('/api/zephyr/proxy', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ endpoint: 'projects', method: 'GET', params: { maxResults: 100 } }),
+  });
+  if (!res.ok) { const e = await res.json(); zLog('✗  ' + JSON.stringify(e.error || e), 'failed'); return; }
+
+  const data = await res.json();
+  const projects = data.values || data || [];
+  const sel = document.getElementById('z_project');
+  sel.innerHTML = '<option value="">— select —</option>' +
+    projects.map(p => `<option value="${escHtml(p.key)}">${escHtml(p.name || p.key)} (${escHtml(p.key)})</option>`).join('');
+  zLog(`✓  Loaded ${projects.length} project(s).`, 'passed');
+}
+
+async function onZephyrProjectChange() {
+  _zProject = document.getElementById('z_project').value;
+  _zCycleId = '';
+  _zFolderId = '';
+  updateZephyrBreadcrumb();
+  if (!_zProject) return;
+
+  // Load test cycles
+  zLog(`⟳  Loading test cycles for ${_zProject}…`, 'info');
+  const res = await fetch('/api/zephyr/proxy', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ endpoint: 'testcycles', method: 'GET', params: { projectKey: _zProject, maxResults: 200 } }),
+  });
+  if (!res.ok) { const e = await res.json(); zLog('✗  ' + JSON.stringify(e.error || e), 'failed'); return; }
+
+  const data = await res.json();
+  const cycles = data.values || data || [];
+  const sel = document.getElementById('z_cycle');
+  sel.innerHTML = '<option value="">— select cycle —</option>' +
+    cycles.map(c => `<option value="${escHtml(String(c.id))}">${escHtml(c.name || String(c.id))}</option>`).join('');
+  zLog(`✓  Loaded ${cycles.length} test cycle(s).`, 'passed');
+
+  // Load folders
+  loadZephyrFolders();
+}
+
+function onZephyrCycleChange() {
+  _zCycleId = document.getElementById('z_cycle').value;
+  updateZephyrBreadcrumb();
+}
+
+async function loadZephyrFolders() {
+  if (!_zProject) return;
+  zLog('⟳  Loading folders…', 'info');
+  const res = await fetch('/api/zephyr/proxy', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ endpoint: 'folders', method: 'GET', params: { projectKey: _zProject, folderType: 'TEST_CASE', maxResults: 200 } }),
+  });
+  if (!res.ok) { const e = await res.json(); zLog('✗  ' + JSON.stringify(e.error || e), 'failed'); return; }
+
+  const data = await res.json();
+  const folders = data.values || data || [];
+  renderFolderTree(folders);
+  zLog(`✓  Loaded ${folders.length} folder(s).`, 'passed');
+}
+
+function renderFolderTree(folders) {
+  const tree = document.getElementById('zFolderTree');
+  if (!folders.length) {
+    tree.innerHTML = '<div style="color:var(--text-dim);font-size:11px;padding:4px;">No folders found</div>';
+    return;
+  }
+
+  // Build hierarchy
+  const byId = {};
+  const roots = [];
+  folders.forEach(f => { byId[f.id] = { ...f, children: [] }; });
+  folders.forEach(f => {
+    if (f.parentId && byId[f.parentId]) byId[f.parentId].children.push(byId[f.id]);
+    else roots.push(byId[f.id]);
+  });
+
+  tree.innerHTML = roots.map(f => renderFolderNode(f, 0)).join('');
+}
+
+function renderFolderNode(f, depth) {
+  const indent = depth * 14;
+  const children = f.children.map(c => renderFolderNode(c, depth + 1)).join('');
+  return `
+    <div class="folder-item" id="zf_${f.id}" onclick="selectZephyrFolder('${f.id}', '${escHtml(f.name)}')"
+         style="padding-left:${8 + indent}px;">
+      <span class="folder-icon">${f.children.length ? '📂' : '📁'}</span>
+      <span>${escHtml(f.name)}</span>
+    </div>
+    ${children ? '<div class="folder-children">' + children + '</div>' : ''}`;
+}
+
+function selectZephyrFolder(id, name) {
+  _zFolderId = id;
+  document.querySelectorAll('.folder-item').forEach(el => el.classList.remove('selected'));
+  const el = document.getElementById('zf_' + id);
+  if (el) el.classList.add('selected');
+  updateZephyrBreadcrumb();
+  zLog(`✓  Selected folder: ${name} (id: ${id})`, 'passed');
+}
+
+async function createZephyrFolder() {
+  if (!_zProject) { zLog('✗  Select a project first.', 'failed'); return; }
+  const name = document.getElementById('z_new_folder').value.trim();
+  if (!name) { zLog('✗  Enter a folder name.', 'failed'); return; }
+
+  const body = { name, projectKey: _zProject, folderType: 'TEST_CASE' };
+  if (_zFolderId) body.parentId = parseInt(_zFolderId);
+
+  zLog(`⟳  Creating folder "${name}"…`, 'info');
+  const res = await fetch('/api/zephyr/proxy', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ endpoint: 'folders', method: 'POST', body }),
+  });
+  if (!res.ok) { const e = await res.json(); zLog('✗  ' + JSON.stringify(e.error || e), 'failed'); return; }
+
+  const created = await res.json();
+  zLog(`✓  Folder created: ${created.name} (id: ${created.id})`, 'passed');
+  document.getElementById('z_new_folder').value = '';
+  loadZephyrFolders();
+}
+
+function updateZephyrBreadcrumb() {
+  const bc = document.getElementById('zImportBreadcrumb');
+  const parts = [];
+  if (_zProject) parts.push(`<span class="crumb">Project: ${escHtml(_zProject)}</span>`);
+  if (_zCycleId) {
+    const cycleEl = document.getElementById('z_cycle');
+    const cycleName = cycleEl.options[cycleEl.selectedIndex]?.text || _zCycleId;
+    parts.push('<span>›</span>', `<span class="crumb">Cycle: ${escHtml(cycleName)}</span>`);
+  }
+  if (_zFolderId) {
+    const folderEl = document.getElementById('zf_' + _zFolderId);
+    const folderName = folderEl ? folderEl.querySelector('span:last-child').textContent : _zFolderId;
+    parts.push('<span>›</span>', `<span class="crumb">Folder: ${escHtml(folderName)}</span>`);
+  }
+  bc.innerHTML = parts.length ? parts.join(' ') : 'Select project, cycle and folder above';
+  checkZephyrImportReady();
+}
+
+function checkZephyrImportReady() {
+  const ready = !!(_zProject && _zFile);
+  document.getElementById('zImportBtn').disabled = !ready;
+}
+
+function onZephyrFileSelect(e) {
+  _zFile = e.target.files[0] || null;
+  _showZephyrFile();
+}
+
+function onZephyrFileDrop(e) {
+  e.preventDefault();
+  document.getElementById('zDropZone').classList.remove('drag-over');
+  _zFile = e.dataTransfer.files[0] || null;
+  _showZephyrFile();
+}
+
+function _showZephyrFile() {
+  const info = document.getElementById('zFileInfo');
+  if (_zFile) {
+    document.getElementById('zFileName').textContent = `${_zFile.name}  (${(_zFile.size / 1024).toFixed(1)} KB)`;
+    info.classList.add('visible');
+    document.getElementById('zDropZone').style.display = 'none';
+  }
+  checkZephyrImportReady();
+}
+
+function clearZephyrFile() {
+  _zFile = null;
+  document.getElementById('zFileInput').value = '';
+  document.getElementById('zFileInfo').classList.remove('visible');
+  document.getElementById('zDropZone').style.display = '';
+  checkZephyrImportReady();
+}
+
+async function runZephyrImport() {
+  if (!_zProject || !_zFile) return;
+
+  zLog(`⟳  Importing "${_zFile.name}" to project ${_zProject}…`, 'info');
+  document.getElementById('zImportBtn').disabled = true;
+
+  const form = new FormData();
+  form.append('projectKey', _zProject);
+  if (_zFolderId) form.append('folderId', _zFolderId);
+  form.append('file', _zFile);
+
+  try {
+    const res = await fetch('/api/zephyr/import', { method: 'POST', body: form });
+    const data = await res.json();
+    if (res.ok) {
+      zLog('✓  Import successful!', 'passed');
+      zLog(JSON.stringify(data, null, 2), 'default');
+    } else {
+      zLog('✗  Import failed: ' + JSON.stringify(data.error || data), 'failed');
+    }
+  } catch (err) {
+    zLog('✗  Network error: ' + err.message, 'failed');
+  }
+  document.getElementById('zImportBtn').disabled = false;
+}
+
+function zLog(msg, cls) {
+  const log = document.getElementById('zephyrLog');
+  const span = document.createElement('span');
+  span.className = 'log-line log-' + (cls || 'default');
+  span.textContent = msg;
+  log.appendChild(span);
+  log.scrollTop = log.scrollHeight;
+}
+
+function clearZephyrLog() {
+  document.getElementById('zephyrLog').innerHTML = '';
+}
 
 init();
 </script>

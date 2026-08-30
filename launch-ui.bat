@@ -90,6 +90,17 @@ if %errorlevel% neq 0 (
 )
 
 :: ----------------------------------------------------------
+:: Free port 7777 if already in use
+:: ----------------------------------------------------------
+set "PORT=7777"
+for /f "tokens=5" %%P in ('netstat -ano ^| findstr ":%PORT% " ^| findstr "LISTENING"') do (
+    echo [INFO] Port %PORT% in use (PID: %%P) -- killing...
+    taskkill /PID %%P /F >nul 2>&1
+)
+:: Brief pause to let the socket release
+timeout /t 1 /nobreak >nul
+
+:: ----------------------------------------------------------
 :: Launch the web server
 :: ----------------------------------------------------------
 cd /d "%EXECUTER_ROOT%"

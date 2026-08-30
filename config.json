@@ -1,36 +1,37 @@
 {
-  "repo_root": "",
-  "browsers": ["chromium", "firefox", "webkit"],
+  "repo_root": "/Users/admin/Documents/GitHub/p13n-marketing-experiences-qa-automation",
+  "browsers": [
+    "chromium",
+    "firefox",
+    "webkit"
+  ],
   "default_browser": "chromium",
   "markers": [],
   "report_paths": [
     "allure/reports/latest/index.html",
     "allure/reports/html/index.html"
   ],
-  "report_individual_dir": "allure/reports",
-  "report_consolidated_dir": "allure/reports/history",
   "default_workers": 1,
   "auto_open_report": false,
+  "allure_results_dir": "allure/results",
+  "report_individual_dir": "allure/reports",
+  "report_consolidated_dir": "allure/reports/history",
   "extra_options": [
     {
-      "label": "Environment",
+      "default": "",
       "flag": "--env",
+      "label": "Environment",
       "type": "dropdown",
-      "values": ["qa3", "qa4", "int", "prod"],
-      "default": ""
-    },
-    {
-      "label": "Stop after first failure",
-      "flag": "-x",
-      "type": "checkbox",
-      "default": false
-    },
-    {
-      "label": "Reruns on failure",
-      "flag": "--reruns",
-      "type": "dropdown",
-      "values": ["1", "2", "3"],
-      "default": ""
+      "values": [
+        "qa3",
+        "qa4",
+        "int",
+        "prod"
+      ]
     }
-  ]
+  ],
+  "zephyr": {
+    "api_key": "",
+    "base_url": "https://api.zephyrscale.smartbear.com/v2"
+  }
 }

@@ -1,5 +1,17 @@
-# Playwright-Executer UI — Dependencies
+# Playwright Test Executor — Python dependencies
 #
-# Install with:  pip install -r requirements.txt
+# Install:  pip install -r requirements.txt
+# Requires: Python 3.10+  (3.13 recommended, used by launch-ui.sh)
 #
-flask>=3.0.0
+# Runtime
+flask>=3.0.0          # Web server + SSE streaming
+
+# Standard-library modules used (no install needed):
+#   base64, csv, datetime, hashlib, hmac, io, json, os, pathlib,
+#   queue, subprocess, sys, threading, time, tkinter, urllib
+#
+# Optional — only needed if you run Playwright/pytest tests locally:
+#   pytest
+#   pytest-playwright
+#   allure-pytest
+#   pytest-xdist

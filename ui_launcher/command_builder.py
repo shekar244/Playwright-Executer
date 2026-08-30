@@ -32,6 +32,7 @@ class CommandBuilder:
         extra: str,
         test_tree: Dict[str, List[str]],
         extra_flags: Optional[List[str]] = None,
+        allure_results_dir: str = "allure/results",
     ) -> List[str]:
         """Return a list of strings suitable for subprocess.Popen(args=...)."""
 
@@ -53,7 +54,8 @@ class CommandBuilder:
             cmd.extend(["--override-ini", "addopts="])
 
         # ── Allure results dir ────────────────────────────────────────────────
-        cmd.append("--alluredir=allure/results")
+        if allure_results_dir:
+            cmd.append(f"--alluredir={allure_results_dir}")
 
         # ── Browser ───────────────────────────────────────────────────────────
         if browser:
