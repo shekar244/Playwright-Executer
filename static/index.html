@@ -3048,9 +3048,10 @@ async function clearHistory() {
 }
 
 // ── Zephyr Scale Integration ──────────────────────────────────────────────────
-let _zProject   = '';
-let _zProjectId = '';   // numeric Jira project ID
-let _zVersionId = '-1';
+let _zProject     = '';
+let _zProjectId   = '';   // numeric Jira project ID
+let _zProjectName = '';   // full display name
+let _zVersionId   = '-1';
 let _zCycleId   = '';
 let _zFolderId  = '';
 let _zFile      = null;
@@ -3332,6 +3333,7 @@ async function loadZephyrConfig() {
   set('z_account_id',  cfg.account_id  || '');
   set('z_project_key',  cfg.project_key  || '');
   set('z_project_name', cfg.project_name || '');
+  _zProjectName = cfg.project_name || '';   // cache for banners
   const sslEl = document.getElementById('z_verify_ssl');
   // Default SSL verify = false (works for most corporate Jira setups)
   if (sslEl) sslEl.checked = cfg.verify_ssl === true;
@@ -3376,6 +3378,7 @@ async function saveZephyrConfig() {
     const data = await res.json();
     if (res.ok && data.ok) {
       zLog(`✓  Config saved — project: ${projectKey || '(none)'}`, 'passed');
+      _zProjectName = projectName;
       _syncProjectDisplay(projectKey);
     } else {
       zLog('✗  Save failed: ' + JSON.stringify(data), 'failed');
@@ -3982,12 +3985,10 @@ function _updateZephyrContextBanners() {
   const fName = _zFolderId
                   ? (fEl?.querySelector('span:last-child')?.textContent || _zFolderId) : '';
 
-  // Resolve project name from config
-  const zCfg = {};
-  try { const r = await fetch('/api/zephyr/config'); Object.assign(zCfg, await r.json()); } catch(_){}
-  const projDisplay = zCfg.project_name
-    ? `${zCfg.project_name} (${_zProject || zCfg.project_key || ''})`
-    : (_zProject || zCfg.project_key || '');
+  // Use cached project name (set by loadZephyrConfig via _zProjectName)
+  const projDisplay = _zProjectName
+    ? `${_zProjectName} (${_zProject || ''})`
+    : (_zProject || '');
 
   const chip = (label, value, color) =>
     `<span style="font-size:10px;color:var(--text-dim);margin-right:2px;">${label}:</span>` +
