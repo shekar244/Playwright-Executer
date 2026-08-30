@@ -1125,7 +1125,16 @@
             <div class="field"><label>Priority</label><input type="text" id="m_priority" placeholder="e.g. Priority" /></div>
             <div class="field"><label>Labels</label><input type="text" id="m_labels" placeholder="e.g. Tags" /></div>
             <div class="field"><label>Components</label><input type="text" id="m_components" placeholder="e.g. Component" /></div>
-            <div class="field"><label>Issue Type</label><input type="text" id="m_issue_type" placeholder="Test" /></div>
+            <div class="field">
+              <label>Issue Type Name</label>
+              <input type="text" id="m_issue_type" placeholder="Test" />
+            </div>
+            <div class="field">
+              <label>Issue Type ID <span style="font-weight:400;color:var(--green);">(paste numeric ID — most reliable)</span></label>
+              <input type="text" id="m_issue_type_id" placeholder="e.g. 19100"
+                     style="font-family:'JetBrains Mono',monospace;" />
+              <div class="hint">Get from: /rest/api/latest/project/BBX → issueTypes[].id</div>
+            </div>
           </div>
           <div class="mapping-group-title">Zephyr Test Steps</div>
           <div class="field"><label>Steps Format</label>
@@ -3136,6 +3145,7 @@ async function loadMappingConfig() {
 
   // Test case mapping
   s('m_story_id',      tc.story_id            || '');
+  s('m_issue_type_id', tc.issue_type_id       || '');
   s('m_summary',       tc.summary             || '');
   s('m_description',   tc.description         || '');
   s('m_priority',      tc.priority            || '');
@@ -3215,6 +3225,7 @@ async function saveTcMapping() {
     labels:               v('m_labels'),
     components:           v('m_components'),
     issue_type_name:      v('m_issue_type')    || 'Test',
+    issue_type_id:        v('m_issue_type_id'),   // numeric ID — bypasses name lookup
     steps_format:         document.getElementById('m_steps_format')?.value || 'columns',
     step_action_prefix:   v('m_step_action')   || 'Step Action',
     step_data_prefix:     v('m_step_data')     || 'Step Data',

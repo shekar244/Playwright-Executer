@@ -1335,8 +1335,9 @@ def import_testcases_grouped():
     col_desc    = mapping.get("description",         "")
     col_priority= mapping.get("priority",            "")
     col_labels  = mapping.get("labels",              "")
-    issue_type_name = mapping.get("issue_type_name", "Test")  # fixed value, NOT a CSV column
-    col_type        = issue_type_name  # keep alias for existing references
+    issue_type_name = mapping.get("issue_type_name", "Test")   # fixed value, NOT a CSV column
+    issue_type_id_cfg = mapping.get("issue_type_id", "").strip()  # optional: override with numeric ID
+    col_type        = issue_type_name
     # Custom field mappings: [{csv_col, jira_field, field_type}]
     custom_fields = mapping.get("custom_fields", [])
     # Zephyr UI names for steps: "Test Step", "Test Data", "Test Result"
@@ -1368,14 +1369,23 @@ def import_testcases_grouped():
         _proj_debug["issue_type_id"] = issue_type_id
 
     def _row_step(row: dict) -> dict | None:
-        """Extract ONE step from a CSV row using mapped column names."""
-        act = (row.get(step_act) or "").strip()
+        """Extract ONE step from a CSV row.
+        Tries mapped column names first, then common Zephyr UI aliases."""
+        def _get(col, *aliases):
+            v = row.get(col, "")
+            if not v:
+                for a in aliases:
+                    v = row.get(a, "")
+                    if v: break
+            return (v or "").strip()
+
+        act = _get(step_act, "Test Step", "Step", "Action", "Step Action")
         if not act:
             return None
         return {
             "step":   act,
-            "data":   (row.get(step_dat) or "").strip(),
-            "result": (row.get(step_exp) or "").strip(),
+            "data":   _get(step_dat,   "Test Data",     "Data",   "Step Data"),
+            "result": _get(step_exp,   "Test Result",   "Result", "Expected Result"),
         }
 
     def _upload_steps(issue_id: str, steps: list[dict]) -> list[dict]:
@@ -1446,16 +1456,20 @@ def import_testcases_grouped():
         for test_name, test_rows in test_cases.items():
             primary = test_rows[0]   # first row has the issue metadata
 
-            # Project: use key (works reliably with Jira REST)
-            # Issuetype: prefer numeric ID (resolved from project lookup) — avoids name-matching issues
+            # Determine issue type — priority: config ID > lookup ID > name
+            effective_id = issue_type_id_cfg or issue_type_id
             fields: dict = {
                 "project":   {"key": project_key},
-                "issuetype": {"id": issue_type_id} if issue_type_id
+                "issuetype": {"id": effective_id} if effective_id
                              else {"name": col_type or "Test"},
                 "summary":   test_name,
             }
-            if col_desc and primary.get(col_desc):
-                fields["description"] = primary[col_desc].strip()
+            # Description — try mapped column, then common aliases
+            desc_val = (primary.get(col_desc) or
+                        primary.get("Description") or
+                        primary.get("DESCRIPTION") or "").strip()
+            if desc_val:
+                fields["description"] = desc_val
             if col_priority and primary.get(col_priority):
                 fields["priority"] = {"name": primary[col_priority].strip()}
             if col_labels and primary.get(col_labels):
