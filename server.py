@@ -773,16 +773,17 @@ import ssl as _ssl
 
 def _ssl_ctx(verify: bool = True) -> _ssl.SSLContext:
     """Return an SSL context.
-    verify=False disables all cert checks including OpenSSL 3.x key-usage enforcement."""
+    verify=False uses Python's internal _create_unverified_context — the most
+    permissive option available, bypasses all cert checks including OpenSSL 3.x
+    key-usage, CA chain, and hostname validation."""
     if not verify:
-        # Use PROTOCOL_TLS_CLIENT base then relax everything
-        ctx = _ssl.SSLContext(_ssl.PROTOCOL_TLS_CLIENT)
+        # _create_unverified_context is the canonical Python way to skip all SSL checks
+        ctx = _ssl._create_unverified_context()  # type: ignore[attr-defined]
+        # Belt-and-suspenders: also set these explicitly
         ctx.check_hostname = False
         ctx.verify_mode    = _ssl.CERT_NONE
-        # Python 3.12+ / OpenSSL 3.x: bypass legacy cert key-usage errors
         if hasattr(_ssl, "OP_LEGACY_SERVER_CONNECT"):
             ctx.options |= _ssl.OP_LEGACY_SERVER_CONNECT  # type: ignore[attr-defined]
-        # Lower security level so old/non-conformant certs are accepted
         try:
             ctx.set_ciphers("DEFAULT@SECLEVEL=0")
         except _ssl.SSLError:
@@ -795,6 +796,13 @@ def _ssl_ctx(verify: bool = True) -> _ssl.SSLContext:
     except ImportError:
         pass
     return _ssl.create_default_context()
+
+
+def _urlopen(req: urllib.request.Request, timeout: int = 20) -> object:
+    """Wrapper around urlopen that always applies the configured SSL context.
+    Default verify=False — most corporate Jira/Zephyr setups need this."""
+    verify = _z_cfg().get("verify_ssl", False)
+    return urllib.request.urlopen(req, timeout=timeout, context=_ssl_ctx(verify))
 
 STATUS_MAP = {
     "pass": 1, "passed": 1, "p": 1,
@@ -809,65 +817,65 @@ def _b64url(data: bytes) -> str:
     return base64.urlsafe_b64encode(data).rstrip(b"=").decode("ascii")
 
 
-import secrets as _secrets
-import re as _re
-
-
-def _normalize_path(path: str) -> str:
-    """Normalize URL path per RFC 3986 for QSH:
-    - ensure leading slash
-    - remove trailing slash (unless root)
-    - decode then re-encode each segment with only unreserved chars (A-Z a-z 0-9 - _ . ~)
-    """
-    if not path.startswith("/"):
-        path = "/" + path
-    if len(path) > 1 and path.endswith("/"):
-        path = path.rstrip("/")
-    segments = path.split("/")
-    safe_unreserved = ""  # encode EVERYTHING except the implicit unreserved set
-    encoded = []
-    for seg in segments:
-        # Decode any existing %-encoding first, then re-encode strictly
-        decoded = urllib.parse.unquote(seg)
-        encoded.append(urllib.parse.quote(decoded, safe=safe_unreserved))
-    return "/".join(encoded)
+import uuid as _uuid
 
 
 def _canonical_qs(params: dict | None) -> str:
-    """Build canonical query string for QSH per Zephyr spec:
-    - percent-encode keys and values using only unreserved chars (safe='')
-    - sort by percent-encoded key name
-    - join with '&'
+    """Build Atlassian Connect canonical query string for QSH.
+
+    Matches the working ZephyrSquadCloudClient._canonical_query implementation:
+    - safe chars: '~._-'  (NOT empty string)
+    - handles list/tuple multi-values
+    - sorts by (encoded_key, encoded_value)
     """
     if not params:
         return ""
-    pairs = [
-        (urllib.parse.quote(str(k), safe=""), urllib.parse.quote(str(v), safe=""))
-        for k, v in params.items() if v is not None
-    ]
-    pairs.sort(key=lambda p: p[0])   # sort by encoded key
-    return "&".join(f"{k}={v}" for k, v in pairs)
+    items: list[tuple[str, str]] = []
+    for key, value in params.items():
+        if value is None:
+            continue
+        if isinstance(value, (list, tuple)):
+            for v in value:
+                items.append((str(key), str(v)))
+        else:
+            items.append((str(key), str(value)))
+    items.sort(key=lambda x: (x[0], x[1]))
+    safe = "~._-"
+    return "&".join(
+        f"{urllib.parse.quote(k, safe=safe)}={urllib.parse.quote(v, safe=safe)}"
+        for k, v in items
+    )
+
+
+def _build_qsh(method: str, api_path: str, query_params: dict | None = None) -> str:
+    """Build Atlassian Connect QSH hash.
+
+    Canonical format: METHOD&PATH&QUERY
+    PATH: ensure leading slash only — no per-segment re-encoding (matches working impl).
+    """
+    path  = api_path if api_path.startswith("/") else f"/{api_path}"
+    query = _canonical_qs(query_params or {})
+    canonical = f"{method.upper().strip()}&{path}&{query}"
+    return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
 
 
 def _zephyr_jwt(access_key: str, secret_key: str, account_id: str,
                 method: str, path: str, query_params: dict | None = None,
-                expires_in: int = 60) -> str:
-    """Generate a per-operation Zephyr JWT (HS256).
+                expires_in: int = 3600) -> str:
+    """Generate a Zephyr for Jira Cloud JWT (HS256).
 
-    Fixes applied vs naïve implementation:
-      1. nonce  — unique random hex per token (replay prevention)
-      2. path   — normalized per RFC 3986 (leading /, no trailing /, segments re-encoded)
-      3. QSH    — keys AND values encoded with safe='' (unreserved chars only), sorted by encoded key
+    Matches the working ZephyrSquadCloudClient._jwt_token implementation:
+    - nonce:  uuid4().hex  (unique per call, prevents anti-replay rejection)
+    - exp:    now + 3600   (1 hour — matching Java client default)
+    - signing input encoded as ASCII (not UTF-8)
+    - QSH safe chars: '~._-'
     """
-    norm_path = _normalize_path(path)
-    cqs       = _canonical_qs(query_params)
-    canonical = f"{method.upper()}&{norm_path}&{cqs}"
-    qsh       = hashlib.sha256(canonical.encode("utf-8")).hexdigest()
-
     now   = int(time.time())
-    nonce = _secrets.token_hex(16)   # 128-bit random nonce — unique per JWT
+    nonce = _uuid.uuid4().hex   # unique per JWT — prevents Zephyr anti-replay rejection
 
-    header  = _b64url(json.dumps({"alg": "HS256", "typ": "JWT"}, separators=(",", ":")).encode())
+    qsh = _build_qsh(method, path, query_params)
+
+    header  = _b64url(json.dumps({"alg": "HS256", "typ": "JWT"}, separators=(",", ":")).encode("utf-8"))
     payload = _b64url(json.dumps({
         "sub":   account_id,
         "qsh":   qsh,
@@ -875,10 +883,12 @@ def _zephyr_jwt(access_key: str, secret_key: str, account_id: str,
         "iat":   now,
         "exp":   now + expires_in,
         "nonce": nonce,
-    }, separators=(",", ":")).encode())
-    msg = f"{header}.{payload}"
-    sig = _b64url(hmac.new(secret_key.encode("utf-8"), msg.encode("utf-8"), hashlib.sha256).digest())
-    return f"{msg}.{sig}"
+    }, separators=(",", ":")).encode("utf-8"))
+
+    # Sign with ASCII-encoded signing input (matches working _encode_hs256_jwt)
+    signing_input = f"{header}.{payload}".encode("ascii")
+    signature = hmac.new(secret_key.encode("utf-8"), signing_input, hashlib.sha256).digest()
+    return f"{header}.{payload}.{_b64url(signature)}"
 
 
 def _z_cfg() -> dict:
@@ -903,17 +913,18 @@ def _z_call(method: str, path: str, params: dict | None = None, body=None) -> tu
     hdrs = {
         "Authorization": f"JWT {token}",
         "zapiAccessKey": ak,
-        "Content-Type": "application/json",
         "Accept": "application/json",
     }
+    # Only set Content-Type for mutation methods — matches working Java client behaviour
+    if method.upper() in ("POST", "PUT", "PATCH"):
+        hdrs["Content-Type"] = "application/json"
     url = ZAPI_BASE + path
     if params:
         url += "?" + urllib.parse.urlencode({k: v for k, v in params.items() if v is not None})
     data = json.dumps(body).encode() if body is not None else None
-    verify = cfg.get("verify_ssl", True)
     try:
         req = urllib.request.Request(url, data=data, headers=hdrs, method=method.upper())
-        with urllib.request.urlopen(req, timeout=20, context=_ssl_ctx(verify)) as resp:
+        with _urlopen(req, timeout=20) as resp:
             raw = resp.read()
             return (json.loads(raw) if raw else {}), resp.status
     except urllib.error.HTTPError as e:
@@ -938,10 +949,9 @@ def _jira_call(method: str, path: str, params: dict | None = None, body=None) ->
     if params:
         url += "?" + urllib.parse.urlencode(params)
     data = json.dumps(body).encode() if body is not None else None
-    verify = cfg.get("verify_ssl", True)
     try:
         req = urllib.request.Request(url, data=data, headers=hdrs, method=method.upper())
-        with urllib.request.urlopen(req, timeout=20, context=_ssl_ctx(verify)) as resp:
+        with _urlopen(req, timeout=20) as resp:
             raw = resp.read()
             return (json.loads(raw) if raw else {}), resp.status
     except urllib.error.HTTPError as e:
@@ -1010,7 +1020,7 @@ def zephyr_debug():
             "account_id": bool(ai),
         },
         "jwt_generated": bool(token),
-        "jwt_preview": token[:40] + "…" if token else None,
+        "jwt_preview": token,
         "zapi_base": ZAPI_BASE,
         "zapi_test_status": code,
         "zapi_test_response": data,
@@ -1179,7 +1189,7 @@ def zephyr_attach():
 
     try:
         req = urllib.request.Request(url, data=body_bytes, headers=hdrs, method="POST")
-        with urllib.request.urlopen(req, timeout=30) as resp:
+        with _urlopen(req, timeout=30) as resp:
             return jsonify(json.loads(resp.read().decode()))
     except urllib.error.HTTPError as e:
         try:    err = json.loads(e.read().decode())
@@ -1274,7 +1284,7 @@ def bulk_results_upload():
                 hdrs_att = {"Authorization": f"JWT {tok}", "zapiAccessKey": cfg.get("access_key",""), "Content-Type": ct}
                 try:
                     req = urllib.request.Request(url_att, data=bb, headers=hdrs_att, method="POST")
-                    urllib.request.urlopen(req, timeout=30).close()
+                    _urlopen(req, timeout=30).close()
                 except Exception:
                     pass
         else:

@@ -1000,9 +1000,9 @@
     <div class="section-block">
       <div class="section-title" onclick="toggleConfigSection('cfgFeatures','cfgFeaturesArrow')" style="cursor:pointer;user-select:none;">
         <span class="stitle-icon">🔌</span>Features
-        <span id="cfgFeaturesArrow" style="margin-left:auto;font-size:11px;color:var(--text-dim);">▼</span>
+        <span id="cfgFeaturesArrow" style="margin-left:auto;font-size:11px;color:var(--text-dim);">▶ Expand</span>
       </div>
-      <div id="cfgFeatures" class="section-content" style="display:flex;flex-direction:column;gap:10px;">
+      <div id="cfgFeatures" class="section-content" style="display:none;flex-direction:column;gap:10px;">
         <div class="hint">Run Python, Node.js, or shell scripts from the executor.</div>
 
         <!-- Add / Edit form -->
@@ -1045,9 +1045,9 @@
       <div class="section-title" onclick="toggleConfigSection('cfgTools','cfgToolsArrow')" style="cursor:pointer;user-select:none;">
         <span class="stitle-icon">🔧</span>Custom CLI Tools
         <span style="font-size:10px;color:var(--text-dim);margin-left:6px;font-weight:400;text-transform:none;letter-spacing:0;">Executor tab controls</span>
-        <span id="cfgToolsArrow" style="margin-left:auto;font-size:11px;color:var(--text-dim);">▼</span>
+        <span id="cfgToolsArrow" style="margin-left:auto;font-size:11px;color:var(--text-dim);">▶ Expand</span>
       </div>
-      <div id="cfgTools" class="section-content" style="display:flex;flex-direction:column;gap:10px;">
+      <div id="cfgTools" class="section-content" style="display:none;flex-direction:column;gap:10px;">
         <div style="display:flex;align-items:center;gap:8px;">
           <span class="hint" style="margin:0;">Become "Custom Options" controls on the Executor tab</span>
           <button class="btn btn-sm" style="margin-left:auto;flex-shrink:0;" onclick="showAddForm()">+ Add Tool</button>
@@ -1096,8 +1096,13 @@
         <div class="field"><label>Zephyr Secret Key</label><input type="password" id="z_secret_key" placeholder="Secret key from Zephyr app" /></div>
         <div class="field"><label>Atlassian Account ID</label><input type="text" id="z_account_id" placeholder="e.g. 5b10a2844c20165700ede21g" /></div>
         <div class="field">
+          <label>Project Key</label>
+          <input type="text" id="z_project_key" placeholder="e.g. BBX, PROJ, QA" style="text-transform:uppercase;" />
+          <div class="hint">Jira project key — used for all Zephyr operations</div>
+        </div>
+        <div class="field">
           <label class="checkbox-label" style="gap:8px;">
-            <input type="checkbox" id="z_verify_ssl" checked />
+            <input type="checkbox" id="z_verify_ssl" />
             Verify SSL certificate
           </label>
           <div class="hint">Uncheck if you get SSL certificate errors (corporate proxy / self-signed cert)</div>
@@ -1279,15 +1284,18 @@
       </div>
     </div>
 
-    <!-- Step 1: Project -->
+    <!-- Step 1: Project (set in Config tab) -->
     <div class="zephyr-step">
       <div class="zephyr-step-title"><span class="zephyr-step-num">1</span>Project</div>
-      <div class="field">
-        <select id="z_project" onchange="onZephyrProjectChange()">
-          <option value="">— load projects —</option>
-        </select>
+      <div style="display:flex;align-items:center;gap:8px;">
+        <div id="z_project_display" style="flex:1;background:var(--input-bg);border:1px solid var(--border);
+             border-radius:var(--radius);padding:7px 10px;font-size:12px;color:var(--text);
+             font-family:'JetBrains Mono',monospace;font-weight:600;">
+          — not configured —
+        </div>
+        <button class="btn btn-sm" onclick="switchTab('tools');toggleConfigSection('cfgZephyr','cfgZephyrArrow')" title="Edit in Config">⚙</button>
       </div>
-      <button class="btn btn-sm" onclick="loadZephyrProjects()">Load Projects</button>
+      <div class="hint">Set the Project Key in the Config tab → Zephyr section</div>
     </div>
 
     <!-- Step 2: Version / Release -->
@@ -1295,9 +1303,10 @@
       <div class="zephyr-step-title"><span class="zephyr-step-num">2</span>Version / Release</div>
       <div class="field">
         <select id="z_version" onchange="onZephyrVersionChange()">
-          <option value="">— select project first —</option>
+          <option value="-1">Unscheduled</option>
         </select>
       </div>
+      <button class="btn btn-sm" onclick="loadZephyrVersionsAndCycles()">⟳ Load Versions &amp; Cycles</button>
     </div>
 
     <!-- Step 3: Test Cycle -->
@@ -2710,11 +2719,12 @@ function toggleConfigSection(bodyId, arrowId) {
   const body  = document.getElementById(bodyId);
   const arrow = document.getElementById(arrowId);
   if (!body) return;
-  const open = body.style.display === 'none' || body.style.display === '';
-  // cfgZephyr starts closed (display:none), others start open
   const isClosed = body.style.display === 'none';
-  body.style.display  = isClosed ? 'flex' : 'none';
-  if (arrow) arrow.textContent = isClosed ? '▼' : '▶ Configure';
+  body.style.display = isClosed ? 'flex' : 'none';
+  if (arrow) {
+    const label = arrow.textContent.replace(/^[▼▶]\s*/, '').replace(/^Expand|^Configure|^Hide/, '').trim() || 'Expand';
+    arrow.textContent = isClosed ? '▼ ' + label : '▶ ' + label;
+  }
 }
 
 // ── Zephyr sub-tabs (Import / Upload Results / Executions) ────────────────────
@@ -2733,33 +2743,40 @@ function switchZTab(tab) {
 async function loadZephyrConfig() {
   const cfg = await fetch('/api/zephyr/config').then(r => r.json()).catch(() => ({}));
   const set = (id, val) => { const el = document.getElementById(id); if (el) el.value = val || ''; };
-  set('z_jira_url',   cfg.jira_url   || '');
-  set('z_username',   cfg.username   || '');
-  set('z_api_token',  cfg.api_token  || '');
-  set('z_access_key', cfg.access_key || '');
-  set('z_secret_key', cfg.secret_key || '');
-  set('z_account_id', cfg.account_id || '');
+  set('z_jira_url',    cfg.jira_url    || '');
+  set('z_username',    cfg.username    || '');
+  set('z_api_token',   cfg.api_token   || '');
+  set('z_access_key',  cfg.access_key  || '');
+  set('z_secret_key',  cfg.secret_key  || '');
+  set('z_account_id',  cfg.account_id  || '');
+  set('z_project_key', cfg.project_key || '');
   const sslEl = document.getElementById('z_verify_ssl');
-  if (sslEl) sslEl.checked = cfg.verify_ssl !== false;
+  // Default SSL verify = false (works for most corporate Jira setups)
+  if (sslEl) sslEl.checked = cfg.verify_ssl === true;
+  // Sync project key into the Zephyr tab display
+  _syncProjectDisplay(cfg.project_key || '');
   // Update connection status badge on the Zephyr tab
   if (cfg.access_key) {
     const dot = document.getElementById('zConnectStatus');
-    if (dot) dot.innerHTML = '<span class="connect-dot" style="background:var(--text-dim);width:7px;height:7px;border-radius:50%;display:inline-block;margin-right:3px;"></span>Configured';
+    if (dot) dot.innerHTML = '<span class="connect-dot" style="background:var(--green);width:7px;height:7px;border-radius:50%;display:inline-block;margin-right:3px;"></span>Configured';
   }
 }
 
 async function saveZephyrConfig() {
   const get = id => { const el = document.getElementById(id); return el ? el.value.trim() : ''; };
   const sslEl = document.getElementById('z_verify_ssl');
+  const projectKey = get('z_project_key').toUpperCase();
   const cfg = {
-    jira_url:   get('z_jira_url'),
-    username:   get('z_username'),
-    api_token:  get('z_api_token'),
-    access_key: get('z_access_key'),
-    secret_key: get('z_secret_key'),
-    account_id: get('z_account_id'),
-    verify_ssl: sslEl ? sslEl.checked : true,
+    jira_url:    get('z_jira_url'),
+    username:    get('z_username'),
+    api_token:   get('z_api_token'),
+    access_key:  get('z_access_key'),
+    secret_key:  get('z_secret_key'),
+    account_id:  get('z_account_id'),
+    project_key: projectKey,
+    verify_ssl:  sslEl ? sslEl.checked : true,
   };
+  _syncProjectDisplay(projectKey);
   const res = await fetch('/api/zephyr/config', {
     method: 'POST', headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(cfg),
@@ -2784,46 +2801,39 @@ async function testZephyrConnection() {
   }
 }
 
-async function loadZephyrProjects() {
-  zLog('⟳  Loading projects…', 'info');
-  const res = await fetch('/api/zephyr/proxy', {
-    method: 'POST', headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ endpoint: 'projects', method: 'GET', params: { maxResults: 100 } }),
-  });
-  if (!res.ok) { const e = await res.json(); zLog('✗  ' + JSON.stringify(e.error || e), 'failed'); return; }
-
-  const data = await res.json();
-  const projects = data.values || data || [];
-  const sel = document.getElementById('z_project');
-  sel.innerHTML = '<option value="">— select —</option>' +
-    projects.map(p => `<option value="${escHtml(p.key)}">${escHtml(p.name || p.key)} (${escHtml(p.key)})</option>`).join('');
-  zLog(`✓  Loaded ${projects.length} project(s).`, 'passed');
+function _syncProjectDisplay(key) {
+  _zProject = (key || '').trim().toUpperCase();
+  const el = document.getElementById('z_project_display');
+  if (el) {
+    el.textContent = _zProject || '— not configured —';
+    el.style.color = _zProject ? 'var(--accent)' : 'var(--text-dim)';
+  }
+  updateZephyrBreadcrumb();
 }
 
 async function onZephyrProjectChange() {
-  _zProject = document.getElementById('z_project').value;
-  _zCycleId = '';
-  _zFolderId = '';
-  updateZephyrBreadcrumb();
-  if (!_zProject) return;
+  // Project key comes from config — this is a no-op kept for compatibility
+}
 
-  // Load test cycles
-  zLog(`⟳  Loading test cycles for ${_zProject}…`, 'info');
-  const res = await fetch('/api/zephyr/proxy', {
-    method: 'POST', headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ endpoint: 'testcycles', method: 'GET', params: { projectKey: _zProject, maxResults: 200 } }),
-  });
-  if (!res.ok) { const e = await res.json(); zLog('✗  ' + JSON.stringify(e.error || e), 'failed'); return; }
-
-  const data = await res.json();
-  const cycles = data.values || data || [];
-  const sel = document.getElementById('z_cycle');
-  sel.innerHTML = '<option value="">— select cycle —</option>' +
-    cycles.map(c => `<option value="${escHtml(String(c.id))}">${escHtml(c.name || String(c.id))}</option>`).join('');
-  zLog(`✓  Loaded ${cycles.length} test cycle(s).`, 'passed');
-
-  // Load folders
-  loadZephyrFolders();
+async function loadZephyrVersionsAndCycles() {
+  if (!_zProject) {
+    zLog('✗  No project key configured. Go to Config → Zephyr and set Project Key.', 'failed');
+    return;
+  }
+  // Load versions first
+  zLog(`⟳  Loading versions for ${_zProject}…`, 'info');
+  const vRes = await fetch(`/api/zephyr/versions?projectKey=${encodeURIComponent(_zProject)}`);
+  if (vRes.ok) {
+    const versions = await vRes.json();
+    const arr = Array.isArray(versions) ? versions : (versions.values || []);
+    const sel = document.getElementById('z_version');
+    sel.innerHTML = '<option value="-1">Unscheduled</option>' +
+      arr.map(v => `<option value="${escHtml(String(v.id))}">${escHtml(v.name)}</option>`).join('');
+    zLog(`✓  Loaded ${arr.length} version(s).`, 'passed');
+  } else {
+    zLog('⚠  Could not load versions — loading cycles for Unscheduled.', 'warning');
+  }
+  await onZephyrVersionChange();
 }
 
 function onZephyrCycleChange() {
