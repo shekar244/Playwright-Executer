@@ -1313,127 +1313,196 @@ def import_testcases_grouped():
 
     app_cfg  = ConfigReader().load()
     mapping  = app_cfg.get("zephyr_tc_mapping", app_cfg.get("zephyr_mapping", {}))
-    col_story   = mapping.get("story_id", "Story ID")
-    col_summary = mapping.get("summary", "Summary")
-    col_desc    = mapping.get("description", "")
-    col_priority= mapping.get("priority", "")
-    col_labels  = mapping.get("labels", "")
-    col_type    = mapping.get("issue_type_name", "Test")
-    steps_fmt   = mapping.get("steps_format", "columns")
-    step_act    = mapping.get("step_action_prefix", "Step Action")
-    step_dat    = mapping.get("step_data_prefix",   "Step Data")
-    step_exp    = mapping.get("step_expected_prefix","Expected Result")
+    col_story   = mapping.get("story_id",            "Story ID")
+    col_summary = mapping.get("summary",             "Summary")
+    col_desc    = mapping.get("description",         "")
+    col_priority= mapping.get("priority",            "")
+    col_labels  = mapping.get("labels",              "")
+    col_type    = mapping.get("issue_type_name",     "Test")
+    # Custom field mappings: [{csv_col, jira_field, field_type}]
+    custom_fields = mapping.get("custom_fields", [])
+    # Zephyr UI names for steps: "Test Step", "Test Data", "Test Result"
+    step_act    = mapping.get("step_action_prefix",   "Test Step")
+    step_dat    = mapping.get("step_data_prefix",     "Test Data")
+    step_exp    = mapping.get("step_expected_prefix", "Test Result")
 
     content = file.read().decode("utf-8-sig")
     rows    = list(csv.DictReader(io.StringIO(content)))
+    vi      = int(version_id) if str(version_id).lstrip("-").isdigit() else -1
 
-    # Fetch existing folders for this cycle so we can reuse them
+    def _row_step(row: dict) -> dict | None:
+        """Extract ONE step from a CSV row using mapped column names."""
+        act = (row.get(step_act) or "").strip()
+        if not act:
+            return None
+        return {
+            "step":   act,
+            "data":   (row.get(step_dat) or "").strip(),
+            "result": (row.get(step_exp) or "").strip(),
+        }
+
+    def _upload_steps(issue_id: str, steps: list[dict]) -> list[dict]:
+        """Upload Zephyr test steps. Returns list of {orderId, ok}."""
+        uploaded = []
+        for order, step in enumerate(steps, start=1):
+            if not step.get("step"):
+                continue
+            _, code = _z_call("POST", f"/public/rest/api/1.0/teststep/{issue_id}",
+                               body={"step": step["step"],
+                                     "data": step.get("data", ""),
+                                     "result": step.get("result", "")})
+            uploaded.append({"order": order, "step": step["step"][:60], "ok": code in (200, 201)})
+        return uploaded
+
+    # ── Fetch existing folders once ───────────────────────────────────────────
     existing_folders: dict[str, str] = {}
     if cycle_id:
-        params = {"versionId": version_id}
-        if folder_id: params["folderId"] = folder_id
         fd, _ = _z_call("GET", "/public/rest/api/1.0/folders",
                          {"cycleId": cycle_id, "versionId": version_id})
         for f in (fd if isinstance(fd, list) else fd.get("folders", [])):
             existing_folders[f.get("name", "")] = str(f.get("id", ""))
 
-    # Group rows by Story ID
-    from collections import defaultdict
-    groups: dict[str, list] = defaultdict(list)
+    # ── Group rows: Level 1 = Story ID, Level 2 = Test Name ──────────────────
+    # Structure: {story_id: {test_name: [rows...]}}
+    from collections import defaultdict, OrderedDict
+    story_tests: dict[str, dict[str, list]] = defaultdict(OrderedDict)
     for row in rows:
-        story = row.get(col_story, "").strip()
-        groups[story].append(row)
+        story   = row.get(col_story,   "").strip()
+        summary = row.get(col_summary, "").strip()
+        if not summary:
+            continue
+        if summary not in story_tests[story]:
+            story_tests[story][summary] = []
+        story_tests[story][summary].append(row)
 
     results: dict = {"created": [], "errors": [], "skipped": [], "folders": {}}
 
-    def _extract_steps(row: dict) -> list[dict]:
-        steps = []
-        if steps_fmt == "columns":
-            i = 1
-            while True:
-                act = row.get(f"{step_act} {i}", row.get(f"{step_act}{i}", "")).strip()
-                if not act: break
-                steps.append({"step": act,
-                               "data":   row.get(f"{step_dat} {i}", row.get(f"{step_dat}{i}","")).strip(),
-                               "result": row.get(f"{step_exp} {i}", row.get(f"{step_exp}{i}","")).strip()})
-                i += 1
-        return steps
+    for story_id, test_cases in story_tests.items():
 
-    for story_id, story_rows in groups.items():
-        # Resolve folder: reuse if name exists, else create
+        # ── Resolve Story ID folder (find existing or create) ─────────────────
         target_folder_id = existing_folders.get(story_id, "")
         if story_id and not target_folder_id and cycle_id:
-            fd_body = {"name": story_id, "cycleId": cycle_id,
-                       "projectId": project_key, "versionId": int(version_id) if str(version_id).lstrip("-").isdigit() else -1}
-            if folder_id: fd_body["clonedFolderId"] = folder_id
+            fd_body = {
+                "name":      story_id,
+                "cycleId":   cycle_id,
+                "projectId": project_key,
+                "versionId": vi,
+            }
             new_fd, fd_code = _z_call("POST", "/public/rest/api/1.0/folder", body=fd_body)
             if fd_code in (200, 201):
                 target_folder_id = str(new_fd.get("id", ""))
                 existing_folders[story_id] = target_folder_id
                 results["folders"][story_id] = {"id": target_folder_id, "created": True}
             else:
-                results["errors"].append({"story": story_id, "error": f"folder creation failed: {new_fd}"})
+                results["errors"].append({"story": story_id,
+                                          "error": f"folder creation failed ({fd_code}): {new_fd}"})
                 continue
         elif story_id and target_folder_id:
             results["folders"][story_id] = {"id": target_folder_id, "created": False}
 
-        for row in story_rows:
-            summary = row.get(col_summary, "").strip()
-            if not summary:
-                results["skipped"].append({"story": story_id, "reason": "empty summary"})
-                continue
+        # effective folder = story folder (if created) else user-selected folder
+        use_folder = target_folder_id or folder_id
 
+        # ── Create one Jira Test issue per unique test name ───────────────────
+        for test_name, test_rows in test_cases.items():
+            primary = test_rows[0]   # first row has the issue metadata
+
+            # Build Jira fields
             fields: dict = {
                 "project":   {"key": project_key},
                 "issuetype": {"name": col_type or "Test"},
-                "summary":   summary,
+                "summary":   test_name,
             }
-            if col_desc and row.get(col_desc):
-                fields["description"] = row[col_desc].strip()
-            if col_priority and row.get(col_priority):
-                fields["priority"] = {"name": row[col_priority].strip()}
-            if col_labels and row.get(col_labels):
-                fields["labels"] = [l.strip() for l in row[col_labels].split(",") if l.strip()]
+            if col_desc and primary.get(col_desc):
+                fields["description"] = primary[col_desc].strip()
+            if col_priority and primary.get(col_priority):
+                fields["priority"] = {"name": primary[col_priority].strip()}
+            if col_labels and primary.get(col_labels):
+                fields["labels"] = [l.strip() for l in primary[col_labels].split(",") if l.strip()]
+
+            # Apply custom field mappings (user-defined CSV col → Jira field)
+            for cf in custom_fields:
+                csv_col    = cf.get("csv_col",    "").strip()
+                jira_field = cf.get("jira_field", "").strip()
+                field_type = cf.get("field_type", "text")   # text | list | object | number
+                if not csv_col or not jira_field:
+                    continue
+                raw = primary.get(csv_col, "")
+                if raw is None or str(raw).strip() == "":
+                    continue
+                val = str(raw).strip()
+                if field_type == "list":
+                    fields[jira_field] = [v.strip() for v in val.split(",") if v.strip()]
+                elif field_type == "object":
+                    # e.g. {"name": "value"} for select-list fields
+                    fields[jira_field] = {"name": val}
+                elif field_type == "number":
+                    try:    fields[jira_field] = float(val)
+                    except: pass
+                else:
+                    fields[jira_field] = val   # plain text / textarea
 
             issue_data, issue_code = _jira_call("POST", "/issue", body={"fields": fields})
             if issue_code not in (200, 201):
-                results["errors"].append({"summary": summary, "error": issue_data})
+                results["errors"].append({"summary": test_name, "story": story_id, "error": issue_data})
                 continue
 
             issue_key = issue_data.get("key", "")
             issue_id  = issue_data.get("id",  "")
-            results["created"].append({"key": issue_key, "summary": summary,
-                                       "story": story_id, "folder": story_id})
 
-            # Add Zephyr steps
-            for step in _extract_steps(row):
-                if step.get("step"):
-                    _z_call("POST", f"/public/rest/api/1.0/teststep/{issue_id}",
-                            body={"step": step["step"], "data": step.get("data",""), "result": step.get("result","")})
+            # ── Upload Zephyr test steps (one per row with this test name) ────
+            steps = [s for row in test_rows for s in [_row_step(row)] if s]
+            step_results = _upload_steps(issue_id, steps)
 
-            # Link test case → story
+            # ── Link test case → Jira Story ───────────────────────────────────
+            link_ok = False
             if story_id:
-                link_body = {
-                    "type":          {"name": link_type},
-                    "inwardIssue":   {"key": issue_key},
-                    "outwardIssue":  {"key": story_id},
-                }
-                _jira_call("POST", "/issueLink", body=link_body)
+                _, lc = _jira_call("POST", "/issueLink", body={
+                    "type":         {"name": link_type},
+                    "inwardIssue":  {"key": issue_key},
+                    "outwardIssue": {"key": story_id},
+                })
+                link_ok = lc in (200, 201, 204)
 
-            # Enrol in cycle/folder
-            enrol = {"issues": [issue_key], "method": 1, "projectId": project_key,
-                     "versionId": int(version_id) if str(version_id).lstrip("-").isdigit() else -1,
-                     "assigneeType": "currentUser"}
-            use_folder = target_folder_id or folder_id
-            if use_folder:
+            # ── Enrol into cycle + story-folder ──────────────────────────────
+            enrol = {
+                "issues":       [issue_key],
+                "method":       1,
+                "projectId":    project_key,
+                "versionId":    vi,
+                "assigneeType": "currentUser",
+            }
+            enrol_ok = False
+            if use_folder and cycle_id:
                 enrol["cycleId"] = cycle_id
-                _z_call("POST", f"/public/rest/api/1.0/executions/add/folder/{use_folder}", body=enrol)
+                _, ec = _z_call("POST",
+                                f"/public/rest/api/1.0/executions/add/folder/{use_folder}",
+                                body=enrol)
+                enrol_ok = ec in (200, 201)
             elif cycle_id:
-                _z_call("POST", f"/public/rest/api/1.0/executions/add/cycle/{cycle_id}", body=enrol)
+                _, ec = _z_call("POST",
+                                f"/public/rest/api/1.0/executions/add/cycle/{cycle_id}",
+                                body=enrol)
+                enrol_ok = ec in (200, 201)
 
-    return jsonify({"created": len(results["created"]), "errors": len(results["errors"]),
-                    "skipped": len(results["skipped"]), "folders": results["folders"],
-                    "details": results})
+            results["created"].append({
+                "key":     issue_key,
+                "summary": test_name,
+                "story":   story_id,
+                "folder":  use_folder,
+                "steps":   len(step_results),
+                "steps_ok": sum(1 for s in step_results if s["ok"]),
+                "linked":  link_ok,
+                "enrolled": enrol_ok,
+            })
+
+    return jsonify({
+        "created":  len(results["created"]),
+        "errors":   len(results["errors"]),
+        "skipped":  len(results["skipped"]),
+        "folders":  results["folders"],
+        "details":  results,
+    })
 
 
 # ── Raw ZAPI proxy (path + params + body, used by frontend for arbitrary calls) ─
