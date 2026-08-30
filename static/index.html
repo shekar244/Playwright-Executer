@@ -817,6 +817,45 @@
     .connect-dot.err { background: var(--red); box-shadow: 0 0 6px var(--red-glow); }
     .ztab-btn { border-radius: var(--radius) !important; transition: all 0.15s; }
     .ztab-btn.active { background: var(--accent) !important; color: #0d1117 !important; border-color: var(--accent) !important; font-weight: 700; }
+    .import-mode-btn.active { background: var(--surface2) !important; color: var(--accent) !important; border-color: var(--accent) !important; font-weight: 700; }
+
+    /* Config horizontal sub-tabs */
+    .cfg-tab-btn {
+      padding: 6px 16px; font-size: 12px; font-weight: 600;
+      color: var(--text-dim); background: transparent;
+      border: 1px solid transparent; border-bottom: none;
+      border-radius: 7px 7px 0 0; cursor: pointer;
+      font-family: 'Inter', inherit; letter-spacing: 0.02em;
+      transition: all 0.12s; margin-bottom: -1px;
+    }
+    .cfg-tab-btn:hover:not(.active) { color: var(--text); background: rgba(255,255,255,0.04); }
+    .cfg-tab-btn.active { color: var(--accent); background: var(--surface); border-color: var(--border); border-bottom-color: var(--surface); }
+
+    /* ── Vertical tabs (mapping config) ── */
+    .vtab-layout { display: flex; min-height: 0; }
+    .vtab-nav {
+      display: flex; flex-direction: column; gap: 2px;
+      width: 148px; flex-shrink: 0;
+      border-right: 1px solid var(--border);
+      padding: 8px 0;
+    }
+    .vtab-btn {
+      padding: 9px 14px; text-align: left; background: transparent;
+      border: none; border-right: 2px solid transparent;
+      color: var(--text-muted); cursor: pointer;
+      font-family: 'Inter', sans-serif; font-size: 11px; font-weight: 600;
+      letter-spacing: 0.02em; transition: all 0.12s; line-height: 1.4;
+    }
+    .vtab-btn:hover:not(.active) { color: var(--text); background: rgba(255,255,255,0.04); }
+    .vtab-btn.active { color: var(--accent); border-right-color: var(--accent); background: var(--accent-glow); }
+    .vtab-btn .vtab-icon { display: block; font-size: 16px; margin-bottom: 3px; }
+    .vtab-panel { flex: 1; padding: 14px 16px; overflow-y: auto; display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+    .vtab-panel.hidden { display: none; }
+    .mapping-group-title {
+      font-size: 10px; font-weight: 700; text-transform: uppercase;
+      letter-spacing: 0.09em; color: var(--text-dim);
+      border-bottom: 1px solid var(--border); padding-bottom: 6px; margin-bottom: 2px;
+    }
   </style>
 </head>
 <body>
@@ -991,131 +1030,184 @@
 
 </div>
 
-<!-- ── Config page (merges Features + Tools + Zephyr config) ── -->
-<div id="page-tools">
-  <!-- Left: config sections -->
-  <div class="features-left" style="width:440px;">
+<!-- ── Config page ── -->
+<div id="page-tools" style="flex-direction:column;">
 
-    <!-- Features section -->
-    <div class="section-block">
-      <div class="section-title" onclick="toggleConfigSection('cfgFeatures','cfgFeaturesArrow')" style="cursor:pointer;user-select:none;">
-        <span class="stitle-icon">🔌</span>Features
-        <span id="cfgFeaturesArrow" style="margin-left:auto;font-size:11px;color:var(--text-dim);">▶ Expand</span>
+  <!-- Horizontal sub-tab bar -->
+  <div style="background:var(--surface);border-bottom:1px solid var(--border);display:flex;gap:2px;padding:8px 16px 0;flex-shrink:0;">
+    <button type="button" class="cfg-tab-btn active" onclick="switchCfgTab('features')" id="ctab-features">🔌 Features</button>
+    <button type="button" class="cfg-tab-btn" onclick="switchCfgTab('tools')" id="ctab-tools">🔧 CLI Tools</button>
+    <button type="button" class="cfg-tab-btn" onclick="switchCfgTab('mapping')" id="ctab-mapping">🗂️ Field Mapping</button>
+    <button type="button" class="cfg-tab-btn" onclick="switchCfgTab('zephyr')" id="ctab-zephyr">🔷 Zephyr Config</button>
+  </div>
+
+  <!-- Content + log area -->
+  <div style="display:flex;flex:1;min-height:0;">
+  <!-- Left: config content -->
+  <div class="features-left" style="width:460px;padding:16px;gap:14px;">
+
+    <!-- Panel: Features -->
+    <div id="cfgFeatures" style="display:flex;flex-direction:column;gap:10px;">
+      <div class="hint">Run Python, Node.js, or shell scripts directly from the executor.</div>
+      <div class="feat-form" id="featForm" style="display:none;">
+        <h3 id="featFormTitle">Add Feature</h3>
+        <input type="hidden" id="ff_index" value="-1" />
+        <div class="field"><label>Name</label><input type="text" id="ff_name" placeholder="e.g. Seed Test Data" /></div>
+        <div class="field"><label>Description</label><input type="text" id="ff_desc" placeholder="(optional)" /></div>
+        <div class="field"><label>Runtime</label>
+          <select id="ff_runtime">
+            <option value="python">Python</option>
+            <option value="node">Node.js</option>
+            <option value="shell">Shell / bash</option>
+          </select>
+        </div>
+        <div class="field"><label>Script Path</label><input type="text" id="ff_script" placeholder="/path/to/script.py" /></div>
+        <div class="field"><label>Working Directory</label><input type="text" id="ff_cwd" placeholder="(defaults to script folder)" /></div>
+        <div class="field"><label>Arguments</label><input type="text" id="ff_args" placeholder="e.g. --env=qa3 --dry-run" /></div>
+        <div class="feat-form-actions">
+          <button type="button" class="btn btn-sm" onclick="cancelFeatForm()">Cancel</button>
+          <button type="button" class="btn btn-run" onclick="saveFeatForm()" style="padding:6px 16px;font-size:12px;">Save</button>
+        </div>
       </div>
-      <div id="cfgFeatures" class="section-content" style="display:none;flex-direction:column;gap:10px;">
-        <div class="hint">Run Python, Node.js, or shell scripts from the executor.</div>
+      <div class="action-row">
+        <button type="button" class="btn btn-run" id="featRunBtn" onclick="runFeature()" disabled>▶ RUN</button>
+        <button type="button" class="btn btn-stop" id="featStopBtn" onclick="stopTests()" disabled>■ STOP</button>
+        <button type="button" class="btn btn-sm" style="margin-left:auto;" onclick="showFeatAddForm()">+ Add</button>
+      </div>
+      <div id="featList" style="display:flex;flex-direction:column;gap:8px;"></div>
+    </div>
 
-        <!-- Add / Edit form -->
-        <div class="feat-form" id="featForm" style="display:none;">
-          <h3 id="featFormTitle">Add Feature</h3>
-          <input type="hidden" id="ff_index" value="-1" />
-          <div class="field"><label>Name</label><input type="text" id="ff_name" placeholder="e.g. Seed Test Data" /></div>
-          <div class="field"><label>Description</label><input type="text" id="ff_desc" placeholder="(optional)" /></div>
-          <div class="field">
-            <label>Runtime</label>
-            <select id="ff_runtime">
-              <option value="python">Python</option>
-              <option value="node">Node.js</option>
-              <option value="shell">Shell / bash</option>
+    <!-- Panel: CLI Tools -->
+    <div id="cfgTools" style="display:none;flex-direction:column;gap:10px;">
+      <div style="display:flex;align-items:center;gap:8px;">
+        <span class="hint" style="margin:0;">These become "Custom Options" controls on the Executor tab</span>
+        <button class="btn btn-sm" style="margin-left:auto;flex-shrink:0;" onclick="showAddForm()">+ Add Tool</button>
+      </div>
+      <div class="tool-form" id="toolForm" style="display:none;">
+        <h3 id="toolFormTitle">Add New Tool</h3>
+        <input type="hidden" id="toolFormIndex" value="-1" />
+        <div class="tool-form-grid">
+          <div class="field"><label>Label</label><input type="text" id="tf_label" placeholder="e.g. Environment" /></div>
+          <div class="field"><label>CLI Flag</label><input type="text" id="tf_flag" placeholder="e.g. --env" /></div>
+          <div class="field"><label>Type</label>
+            <select id="tf_type" onchange="onToolTypeChange()">
+              <option value="checkbox">checkbox</option>
+              <option value="dropdown">dropdown</option>
+              <option value="text">text</option>
             </select>
           </div>
-          <div class="field"><label>Script Path</label><input type="text" id="ff_script" placeholder="/path/to/script.py" /></div>
-          <div class="field"><label>Working Directory</label><input type="text" id="ff_cwd" placeholder="(defaults to script folder)" /></div>
-          <div class="field"><label>Arguments</label><input type="text" id="ff_args" placeholder="e.g. --env=qa3 --dry-run" /></div>
-          <div class="feat-form-actions">
-            <button type="button" class="btn btn-sm" onclick="cancelFeatForm()">Cancel</button>
-            <button type="button" class="btn btn-run" onclick="saveFeatForm()" style="padding:6px 16px;font-size:12px;">Save</button>
+          <div class="field" id="tf_default_wrap"><label>Default</label><input type="text" id="tf_default" placeholder="leave blank for none" /></div>
+          <div class="field full" id="tf_values_wrap" style="display:none;"><label>Values (comma-separated)</label><input type="text" id="tf_values" placeholder="e.g. qa3, qa4, int, prod" /></div>
+          <div class="field full" id="tf_placeholder_wrap" style="display:none;"><label>Placeholder</label><input type="text" id="tf_placeholder" placeholder="e.g. /path/to/file" /></div>
+        </div>
+        <div class="tool-form-actions">
+          <button type="button" class="btn btn-sm" onclick="cancelToolForm()">Cancel</button>
+          <button type="button" class="btn btn-run" onclick="saveToolForm()" style="padding:6px 16px;font-size:12px;">Save</button>
+        </div>
+      </div>
+      <div id="toolsList"></div>
+    </div>
+
+    <!-- Panel: Field Mapping — two sections always visible -->
+    <div id="cfgMapping" style="display:none;flex-direction:column;gap:20px;">
+
+      <!-- Section 1: Test Case Upload -->
+      <div class="section-block" style="border-radius:var(--radius-lg);overflow:hidden;">
+        <div class="section-title" style="background:rgba(137,180,250,0.08);border-color:rgba(137,180,250,0.2);">
+          <span class="stitle-icon">📋</span>Test Case Upload — Field Mapping
+        </div>
+        <div class="section-content" style="flex-direction:column;gap:10px;">
+          <div class="hint">Map your CSV column headers to Jira/Zephyr fields. Case-sensitive. Leave blank to skip.</div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
+            <div class="field"><label>Summary / Name * (required)</label><input type="text" id="m_summary" placeholder="e.g. Test Name" /></div>
+            <div class="field"><label>Description</label><input type="text" id="m_description" placeholder="e.g. Description" /></div>
+            <div class="field"><label>Priority</label><input type="text" id="m_priority" placeholder="e.g. Priority" /></div>
+            <div class="field"><label>Labels</label><input type="text" id="m_labels" placeholder="e.g. Tags" /></div>
+            <div class="field"><label>Components</label><input type="text" id="m_components" placeholder="e.g. Component" /></div>
+            <div class="field"><label>Issue Type</label><input type="text" id="m_issue_type" placeholder="Test" /></div>
+          </div>
+          <div class="mapping-group-title">Zephyr Test Steps</div>
+          <div class="field"><label>Steps Format</label>
+            <select id="m_steps_format" onchange="onMappingStepsFormatChange()">
+              <option value="columns">Numbered columns — Step Action 1, Step Data 1, Expected Result 1…</option>
+              <option value="rows">One step per row (same Summary = same test case)</option>
+              <option value="single_col">All steps in one column (newline-separated)</option>
+              <option value="none">No steps</option>
+            </select>
+          </div>
+          <div id="m_columns_fields" style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;">
+            <div class="field"><label>Step Action prefix</label><input type="text" id="m_step_action" placeholder="Step Action" /></div>
+            <div class="field"><label>Step Data prefix</label><input type="text" id="m_step_data" placeholder="Step Data" /></div>
+            <div class="field"><label>Expected Result prefix</label><input type="text" id="m_step_expected" placeholder="Expected Result" /></div>
+          </div>
+          <div id="m_rows_fields" style="display:none;grid-template-columns:1fr 1fr 1fr;gap:8px;">
+            <div class="field"><label>Step column</label><input type="text" id="m_row_step" placeholder="Step" /></div>
+            <div class="field"><label>Data column</label><input type="text" id="m_row_data" placeholder="Data" /></div>
+            <div class="field"><label>Expected column</label><input type="text" id="m_row_expected" placeholder="Expected" /></div>
+          </div>
+          <div id="m_single_col_fields" style="display:none;">
+            <div class="field"><label>Steps column</label><input type="text" id="m_step_single" placeholder="Steps" /></div>
           </div>
         </div>
+      </div>
 
-        <!-- Actions -->
-        <div class="action-row">
-          <button type="button" class="btn btn-run" id="featRunBtn" onclick="runFeature()" disabled>▶ RUN</button>
-          <button type="button" class="btn btn-stop" id="featStopBtn" onclick="stopTests()" disabled>■ STOP</button>
-          <button type="button" class="btn btn-sm" style="margin-left:auto;" onclick="showFeatAddForm()">+ Add</button>
+      <!-- Section 2: Results Upload -->
+      <div class="section-block" style="border-radius:var(--radius-lg);overflow:hidden;">
+        <div class="section-title" style="background:rgba(166,227,161,0.08);border-color:rgba(166,227,161,0.2);">
+          <span class="stitle-icon">📊</span>Results Upload — Field Mapping
         </div>
+        <div class="section-content" style="flex-direction:column;gap:10px;">
+          <div class="hint">Map CSV columns used when bulk-uploading execution results.</div>
+          <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;">
+            <div class="field"><label>Issue Key column</label><input type="text" id="rm_issue_key" placeholder="Issue Key" /></div>
+            <div class="field"><label>Status column</label><input type="text" id="rm_status" placeholder="Status" /></div>
+            <div class="field"><label>Comment column</label><input type="text" id="rm_comment" placeholder="Comment" /></div>
+          </div>
+          <div class="hint">Status values: <code>pass</code> <code>fail</code> <code>wip</code> <code>blocked</code> <code>unexecuted</code></div>
+          <div class="field"><label>Update test steps to match execution status?</label>
+            <select id="rm_update_steps">
+              <option value="true">Yes — set all steps to same status</option>
+              <option value="false">No — leave steps unchanged</option>
+            </select>
+          </div>
+        </div>
+      </div>
 
-        <!-- Feature cards -->
-        <div id="featList" style="display:flex;flex-direction:column;gap:8px;"></div>
+      <div class="action-row">
+        <button class="btn btn-run" onclick="saveMappingConfig()">💾 Save Mapping</button>
+        <button class="btn btn-sm" onclick="loadMappingConfig()">↺ Reload</button>
+        <span id="mappingSaveStatus" style="font-size:11px;color:var(--text-dim);margin-left:6px;"></span>
+        <span id="mappingSaveStatus2" style="display:none;"></span>
       </div>
     </div>
 
-    <!-- Custom CLI Tools section -->
-    <div class="section-block">
-      <div class="section-title" onclick="toggleConfigSection('cfgTools','cfgToolsArrow')" style="cursor:pointer;user-select:none;">
-        <span class="stitle-icon">🔧</span>Custom CLI Tools
-        <span style="font-size:10px;color:var(--text-dim);margin-left:6px;font-weight:400;text-transform:none;letter-spacing:0;">Executor tab controls</span>
-        <span id="cfgToolsArrow" style="margin-left:auto;font-size:11px;color:var(--text-dim);">▶ Expand</span>
+    <!-- Panel: Zephyr Config -->
+    <div id="cfgZephyr" style="display:none;flex-direction:column;gap:10px;">
+      <div class="field"><label>Jira Base URL</label><input type="text" id="z_jira_url" placeholder="https://yourcompany.atlassian.net" /></div>
+      <div class="field"><label>Jira Username (email)</label><input type="text" id="z_username" placeholder="you@company.com" /></div>
+      <div class="field"><label>Jira API Token</label><input type="password" id="z_api_token" placeholder="Jira API token (for projects/versions)" /></div>
+      <div class="field"><label>Zephyr Access Key</label><input type="password" id="z_access_key" placeholder="zapiAccessKey from Zephyr app" /></div>
+      <div class="field"><label>Zephyr Secret Key</label><input type="password" id="z_secret_key" placeholder="Secret key from Zephyr app" /></div>
+      <div class="field"><label>Atlassian Account ID</label><input type="text" id="z_account_id" placeholder="e.g. 5b10a2844c20165700ede21g" /></div>
+      <div class="field">
+        <label>Project Key</label>
+        <input type="text" id="z_project_key" placeholder="e.g. JIRAPROJECTID, PROJ, QA" style="text-transform:uppercase;" />
+        <div class="hint">Jira project key — used for all Zephyr operations</div>
       </div>
-      <div id="cfgTools" class="section-content" style="display:none;flex-direction:column;gap:10px;">
-        <div style="display:flex;align-items:center;gap:8px;">
-          <span class="hint" style="margin:0;">Become "Custom Options" controls on the Executor tab</span>
-          <button class="btn btn-sm" style="margin-left:auto;flex-shrink:0;" onclick="showAddForm()">+ Add Tool</button>
-        </div>
-
-        <!-- Add / Edit form -->
-        <div class="tool-form" id="toolForm" style="display:none;">
-          <h3 id="toolFormTitle">Add New Tool</h3>
-          <input type="hidden" id="toolFormIndex" value="-1" />
-          <div class="tool-form-grid">
-            <div class="field"><label>Label</label><input type="text" id="tf_label" placeholder="e.g. Environment" /></div>
-            <div class="field"><label>CLI Flag</label><input type="text" id="tf_flag" placeholder="e.g. --env" /></div>
-            <div class="field">
-              <label>Type</label>
-              <select id="tf_type" onchange="onToolTypeChange()">
-                <option value="checkbox">checkbox</option>
-                <option value="dropdown">dropdown</option>
-                <option value="text">text</option>
-              </select>
-            </div>
-            <div class="field" id="tf_default_wrap"><label>Default</label><input type="text" id="tf_default" placeholder="leave blank for none" /></div>
-            <div class="field full" id="tf_values_wrap" style="display:none;"><label>Values (comma-separated)</label><input type="text" id="tf_values" placeholder="e.g. qa3, qa4, int, prod" /></div>
-            <div class="field full" id="tf_placeholder_wrap" style="display:none;"><label>Placeholder</label><input type="text" id="tf_placeholder" placeholder="e.g. /path/to/file" /></div>
-          </div>
-          <div class="tool-form-actions">
-            <button type="button" class="btn btn-sm" onclick="cancelToolForm()">Cancel</button>
-            <button type="button" class="btn btn-run" onclick="saveToolForm()" style="padding:6px 16px;font-size:12px;">Save</button>
-          </div>
-        </div>
-
-        <div id="toolsList"></div>
+      <div class="field">
+        <label class="checkbox-label" style="gap:8px;">
+          <input type="checkbox" id="z_verify_ssl" /> Verify SSL certificate
+        </label>
+        <div class="hint">Uncheck if you get SSL certificate errors</div>
+      </div>
+      <div class="action-row">
+        <button class="btn btn-run" onclick="saveZephyrConfig()">💾 Save</button>
+        <button class="btn btn-sm" onclick="testZephyrConnection()">⚡ Test Connection</button>
+        <span id="zConnectStatus" style="font-size:11px;color:var(--text-dim);margin-left:4px;"></span>
       </div>
     </div>
 
-    <!-- Zephyr Configuration section -->
-    <div class="section-block">
-      <div class="section-title" onclick="toggleConfigSection('cfgZephyr','cfgZephyrArrow')" style="cursor:pointer;user-select:none;">
-        <span class="stitle-icon">🔷</span>Zephyr for Jira — Cloud
-        <span id="cfgZephyrArrow" style="margin-left:auto;font-size:11px;color:var(--text-dim);">▶ Configure</span>
-      </div>
-      <div id="cfgZephyr" class="section-content" style="display:none;flex-direction:column;gap:10px;">
-        <div class="field"><label>Jira Base URL</label><input type="text" id="z_jira_url" placeholder="https://yourcompany.atlassian.net" /></div>
-        <div class="field"><label>Jira Username (email)</label><input type="text" id="z_username" placeholder="you@company.com" /></div>
-        <div class="field"><label>Jira API Token</label><input type="password" id="z_api_token" placeholder="Jira API token (for projects/versions)" /></div>
-        <div class="field"><label>Zephyr Access Key</label><input type="password" id="z_access_key" placeholder="zapiAccessKey from Zephyr app" /></div>
-        <div class="field"><label>Zephyr Secret Key</label><input type="password" id="z_secret_key" placeholder="Secret key from Zephyr app" /></div>
-        <div class="field"><label>Atlassian Account ID</label><input type="text" id="z_account_id" placeholder="e.g. 5b10a2844c20165700ede21g" /></div>
-        <div class="field">
-          <label>Project Key</label>
-          <input type="text" id="z_project_key" placeholder="e.g. BBX, PROJ, QA" style="text-transform:uppercase;" />
-          <div class="hint">Jira project key — used for all Zephyr operations</div>
-        </div>
-        <div class="field">
-          <label class="checkbox-label" style="gap:8px;">
-            <input type="checkbox" id="z_verify_ssl" />
-            Verify SSL certificate
-          </label>
-          <div class="hint">Uncheck if you get SSL certificate errors (corporate proxy / self-signed cert)</div>
-        </div>
-        <div class="action-row">
-          <button class="btn btn-sm" onclick="saveZephyrConfig()">💾 Save</button>
-          <button class="btn btn-sm" onclick="testZephyrConnection()">⚡ Test</button>
-          <span id="zConnectStatus" style="font-size:11px;color:var(--text-dim);margin-left:4px;"></span>
-        </div>
-      </div>
-    </div>
-
-  </div>
+  </div><!-- end features-left -->
 
   <!-- Right: feature output log -->
   <div class="features-right">
@@ -1130,6 +1222,8 @@
          font-family:'JetBrains Mono','Menlo',monospace;font-size:12px;
          line-height:1.6;white-space:pre-wrap;word-break:break-all;"></div>
   </div>
+
+  </div><!-- end content+log row -->
 </div>
 
 <!-- ── Dashboard page ── -->
@@ -1278,8 +1372,8 @@
     <div class="section-block">
       <div class="section-title">
         <span class="stitle-icon">🔑</span>Zephyr for Jira — Cloud
-        <span id="zConnectStatus" style="margin-left:auto;font-size:11px;color:var(--text-dim);"></span>
-        <button class="btn btn-sm" onclick="switchTab('tools');toggleConfigSection('cfgZephyr','cfgZephyrArrow')"
+        <span id="zConnectStatusBadge" style="margin-left:auto;font-size:11px;color:var(--text-dim);"></span>
+        <button class="btn btn-sm" onclick="switchTab('tools');switchCfgTab('zephyr')"
                 style="margin-left:8px;font-size:10px;padding:3px 9px;">⚙ Configure</button>
       </div>
     </div>
@@ -1312,12 +1406,13 @@
     <!-- Step 3: Test Cycle -->
     <div class="zephyr-step">
       <div class="zephyr-step-title"><span class="zephyr-step-num">3</span>Test Cycle</div>
-      <div class="field">
-        <select id="z_cycle" onchange="onZephyrCycleChange()">
+      <div class="field-row">
+        <select id="z_cycle" onchange="onZephyrCycleChange()" style="flex:1;">
           <option value="">— select version first —</option>
         </select>
+        <button class="browse-btn" onclick="loadZephyrCycles()" title="Load cycles">⟳</button>
       </div>
-      <div class="action-row">
+      <div class="action-row" style="margin-top:6px;">
         <input type="text" id="z_new_cycle" placeholder="New cycle name" style="flex:1;" />
         <button class="btn btn-sm" onclick="createZephyrCycle()">+ Cycle</button>
       </div>
@@ -1326,8 +1421,11 @@
     <!-- Step 4: Folder -->
     <div class="zephyr-step">
       <div class="zephyr-step-title"><span class="zephyr-step-num">4</span>Folder</div>
-      <div class="folder-tree" id="zFolderTree">
-        <div style="color:var(--text-dim);font-size:11px;padding:6px;">Select a cycle to browse folders</div>
+      <div style="display:flex;gap:6px;align-items:flex-start;">
+        <div class="folder-tree" id="zFolderTree" style="flex:1;">
+          <div style="color:var(--text-dim);font-size:11px;padding:6px;">Select a cycle then click ⟳</div>
+        </div>
+        <button class="browse-btn" onclick="loadZephyrFolders()" title="Load folders" style="margin-top:2px;">⟳</button>
       </div>
       <div class="action-row" style="margin-top:6px;">
         <input type="text" id="z_new_folder" placeholder="New folder name" style="flex:1;" />
@@ -1356,38 +1454,95 @@
 
     <!-- Import Tests tab -->
     <div id="zpanel-import" class="zpanel" style="padding:16px;display:flex;flex-direction:column;gap:12px;overflow-y:auto;">
-      <div style="font-size:12px;color:var(--text-muted);line-height:1.6;">
-        Add Jira issue keys to the selected test cycle/folder. Enter one key per line or upload a CSV with a <code>Issue Key</code> column.
+
+      <!-- Mode toggle -->
+      <div style="display:flex;gap:6px;">
+        <button class="btn btn-sm import-mode-btn active" id="imode-keys" onclick="setImportMode('keys')">By Issue Keys</button>
+        <button class="btn btn-sm import-mode-btn" id="imode-create" onclick="setImportMode('create')">Create from CSV</button>
+        <a href="#" onclick="switchTab('tools');toggleConfigSection('cfgMapping','cfgMappingArrow');return false;"
+           style="margin-left:auto;font-size:11px;color:var(--accent);text-decoration:none;">⚙ Field Mapping</a>
       </div>
-      <div class="field">
-        <label>Jira Issue Keys (one per line)</label>
-        <textarea id="z_issue_keys" placeholder="PROJ-1&#10;PROJ-2&#10;PROJ-3"
-                  style="height:100px;background:var(--input-bg);border:1px solid var(--input-border);
-                         border-radius:var(--radius);color:var(--text);padding:8px 10px;
-                         font-family:'JetBrains Mono',monospace;font-size:11px;resize:vertical;
-                         width:100%;outline:none;"></textarea>
+
+      <!-- Mode: By Issue Keys -->
+      <div id="import-mode-keys">
+        <div style="font-size:12px;color:var(--text-muted);line-height:1.6;margin-bottom:8px;">
+          Add existing Jira test cases to the selected cycle/folder by issue key.
+        </div>
+        <div class="field">
+          <label>Jira Issue Keys (one per line)</label>
+          <textarea id="z_issue_keys" placeholder="PROJ-1&#10;PROJ-2&#10;PROJ-3"
+                    style="height:90px;background:var(--input-bg);border:1px solid var(--input-border);
+                           border-radius:var(--radius);color:var(--text);padding:8px 10px;
+                           font-family:'JetBrains Mono',monospace;font-size:11px;resize:vertical;width:100%;outline:none;"></textarea>
+        </div>
+        <div style="text-align:center;color:var(--text-dim);font-size:11px;margin:4px 0;">— or upload CSV with Issue Key column —</div>
+        <div class="drop-zone" id="zImportDropZone" onclick="document.getElementById('zImportFile').click()"
+             ondragover="event.preventDefault();this.classList.add('drag-over')"
+             ondragleave="this.classList.remove('drag-over')"
+             ondrop="onZDrop(event,'zImportFile','zImportFileInfo')">
+          <input type="file" id="zImportFile" accept=".csv" onchange="onZFileSelect(event,'zImportFileInfo')" />
+          <span class="drop-zone-icon" style="font-size:18px;">📄</span>
+          <div style="font-size:12px;">CSV with <code>Issue Key</code> column</div>
+        </div>
+        <div class="z-file-info" id="zImportFileInfo">
+          <span>📄</span><span id="zImportFileName">—</span>
+          <button class="btn btn-sm" style="margin-left:auto;color:var(--red);" onclick="clearZFile('zImportFile','zImportFileInfo')">✕</button>
+        </div>
+        <button class="btn btn-run" style="margin-top:8px;" id="zAddTestsBtn" onclick="zAddTests()">Add Tests to Cycle</button>
       </div>
-      <div style="text-align:center;color:var(--text-dim);font-size:11px;">— or upload CSV —</div>
-      <div class="drop-zone" id="zImportDropZone" onclick="document.getElementById('zImportFile').click()"
-           ondragover="event.preventDefault();this.classList.add('drag-over')"
-           ondragleave="this.classList.remove('drag-over')"
-           ondrop="onZDrop(event,'zImportFile','zImportFileInfo')">
-        <input type="file" id="zImportFile" accept=".csv" onchange="onZFileSelect(event,'zImportFileInfo')" />
-        <span class="drop-zone-icon" style="font-size:20px;">📄</span>
-        <div style="font-weight:600;font-size:12px;">CSV with Issue Key column</div>
+
+      <!-- Mode: Create from CSV -->
+      <div id="import-mode-create" style="display:none;flex-direction:column;gap:10px;">
+        <div style="font-size:12px;color:var(--text-muted);line-height:1.6;">
+          Create new Jira Test issues from CSV using your <b>Field Mapping</b> config, then add them to the selected cycle. Steps are created automatically.
+        </div>
+
+        <!-- CSV upload -->
+        <div class="drop-zone" id="zCreateDropZone" onclick="document.getElementById('zCreateFile').click()"
+             ondragover="event.preventDefault();this.classList.add('drag-over')"
+             ondragleave="this.classList.remove('drag-over')"
+             ondrop="onZCreateDrop(event)">
+          <input type="file" id="zCreateFile" accept=".csv" onchange="onZCreateFileSelect(event)" />
+          <span class="drop-zone-icon" style="font-size:20px;">📋</span>
+          <div style="font-weight:600;font-size:12px;">Upload Test Cases CSV</div>
+          <div style="font-size:10px;opacity:0.7;margin-top:2px;">Headers will be matched to your field mapping</div>
+        </div>
+        <div class="z-file-info" id="zCreateFileInfo">
+          <span>📋</span><span id="zCreateFileName">—</span>
+          <button class="btn btn-sm" style="margin-left:auto;color:var(--red);" onclick="clearZCreateFile()">✕</button>
+        </div>
+
+        <!-- Mapping preview: shown after CSV loaded -->
+        <div id="zMappingPreview" style="display:none;flex-direction:column;gap:8px;">
+          <div style="font-size:11px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.07em;">
+            Mapping Preview
+            <span id="zMappingStatus" style="font-weight:400;color:var(--text-dim);text-transform:none;letter-spacing:0;margin-left:8px;"></span>
+          </div>
+          <div style="overflow-x:auto;max-height:180px;overflow-y:auto;border:1px solid var(--border);border-radius:var(--radius);">
+            <table class="history-tbl" id="zPreviewTable" style="font-size:11px;">
+              <thead><tr id="zPreviewHead"></tr></thead>
+              <tbody id="zPreviewBody"></tbody>
+            </table>
+          </div>
+          <div style="font-size:11px;color:var(--text-dim);">
+            <span style="display:inline-block;width:10px;height:10px;background:rgba(137,180,250,0.3);border:1px solid var(--accent);border-radius:2px;margin-right:4px;"></span>Mapped field
+            <span style="display:inline-block;width:10px;height:10px;background:rgba(249,226,175,0.2);border:1px solid var(--yellow);border-radius:2px;margin:0 4px 0 10px;"></span>Step field
+            <span style="display:inline-block;width:10px;height:10px;background:var(--surface);border:1px solid var(--border);border-radius:2px;margin:0 4px 0 10px;"></span>Unmapped
+          </div>
+        </div>
+
+        <div class="field">
+          <label>Assignee</label>
+          <select id="z_create_assignee">
+            <option value="currentUser">Current User</option>
+            <option value="unassigned">Unassigned</option>
+          </select>
+        </div>
+        <button class="btn btn-run" id="zCreateTestsBtn" onclick="zCreateTestcases()" disabled>
+          Create Test Cases &amp; Add to Cycle
+        </button>
       </div>
-      <div class="z-file-info" id="zImportFileInfo">
-        <span>📄</span><span id="zImportFileName">—</span>
-        <button class="btn btn-sm" style="margin-left:auto;color:var(--red);" onclick="clearZFile('zImportFile','zImportFileInfo')">✕</button>
-      </div>
-      <div class="field">
-        <label>Assignee Type</label>
-        <select id="z_assignee_type">
-          <option value="currentUser">Current User</option>
-          <option value="assignee">Issue Assignee</option>
-        </select>
-      </div>
-      <button class="btn btn-run" id="zAddTestsBtn" onclick="zAddTests()">Add Tests to Cycle</button>
+
     </div>
 
     <!-- Upload Results tab -->
@@ -2316,7 +2471,7 @@ function switchTab(tab) {
   document.querySelectorAll('.tab-btn').forEach((btn, i) => {
     btn.classList.toggle('active', pages[i] === tab);
   });
-  if (tab === 'tools')     { loadTools(); loadFeatures(); loadZephyrConfig(); }
+  if (tab === 'tools')     { switchCfgTab('features'); loadTools(); loadFeatures(); loadZephyrConfig(); loadMappingConfig(); }
   if (tab === 'dashboard') loadDashboard();
   if (tab === 'zephyr')    loadZephyrConfig();
 }
@@ -2709,10 +2864,12 @@ async function clearHistory() {
 }
 
 // ── Zephyr Scale Integration ──────────────────────────────────────────────────
-let _zProject = '';
-let _zCycleId = '';
-let _zFolderId = '';
-let _zFile = null;
+let _zProject   = '';
+let _zProjectId = '';   // numeric Jira project ID
+let _zVersionId = '-1';
+let _zCycleId   = '';
+let _zFolderId  = '';
+let _zFile      = null;
 
 // ── Config section accordion ──────────────────────────────────────────────────
 function toggleConfigSection(bodyId, arrowId) {
@@ -2720,11 +2877,33 @@ function toggleConfigSection(bodyId, arrowId) {
   const arrow = document.getElementById(arrowId);
   if (!body) return;
   const isClosed = body.style.display === 'none';
-  body.style.display = isClosed ? 'flex' : 'none';
+  // vtab-layout sections use block, section-content sections use flex
+  body.style.display = isClosed ? (body.classList.contains('vtab-layout') ? 'block' : '') : 'none';
+  // for sections without section-content class, just toggle between '' and 'none'
+  if (!isClosed) body.style.display = 'none';
+  else body.style.display = '';
   if (arrow) {
-    const label = arrow.textContent.replace(/^[▼▶]\s*/, '').replace(/^Expand|^Configure|^Hide/, '').trim() || 'Expand';
-    arrow.textContent = isClosed ? '▼ ' + label : '▶ ' + label;
+    const label = arrow.textContent.replace(/^[▼▶]\s*/, '').replace(/Expand|Configure|Hide/g, '').trim() || 'Expand';
+    arrow.textContent = (body.style.display !== 'none') ? '▼ ' + label : '▶ ' + label;
   }
+}
+
+function switchMappingTab(tab) {
+  ['tc', 'res'].forEach(t => {
+    document.getElementById('vtab-' + t)?.classList.toggle('active', t === tab);
+    const panel = document.getElementById('vtab-panel-' + t);
+    if (panel) panel.classList.toggle('hidden', t !== tab);
+  });
+}
+
+function switchCfgTab(tab) {
+  const panels = { features: 'cfgFeatures', tools: 'cfgTools', mapping: 'cfgMapping', zephyr: 'cfgZephyr' };
+  Object.entries(panels).forEach(([key, id]) => {
+    const panel = document.getElementById(id);
+    if (panel) panel.style.display = key === tab ? (key === 'mapping' ? 'flex' : 'flex') : 'none';
+    document.getElementById('ctab-' + key)?.classList.toggle('active', key === tab);
+  });
+  if (tab === 'mapping') onMappingStepsFormatChange();
 }
 
 // ── Zephyr sub-tabs (Import / Upload Results / Executions) ────────────────────
@@ -2737,6 +2916,195 @@ function switchZTab(tab) {
     if (btn)   btn.classList.toggle('active', active);
     if (panel) panel.style.display = active ? 'flex' : 'none';
   });
+}
+
+// ── Field Mapping Config ──────────────────────────────────────────────────────
+let _csvMapping   = {};    // saved mapping config
+let _csvHeaders   = [];    // headers from last uploaded create-CSV
+let _createFile   = null;  // File object for create-from-CSV
+
+function onMappingStepsFormatChange() {
+  const fmt = document.getElementById('m_steps_format').value;
+  document.getElementById('m_columns_fields').style.display  = fmt === 'columns'    ? 'grid' : 'none';
+  document.getElementById('m_rows_fields').style.display     = fmt === 'rows'       ? 'grid' : 'none';
+  document.getElementById('m_single_col_fields').style.display = fmt === 'single_col' ? 'block' : 'none';
+}
+
+async function loadMappingConfig() {
+  const m = await fetch('/api/zephyr/mapping').then(r => r.json()).catch(() => ({}));
+  _csvMapping = m;
+  const s = (id, val) => { const el = document.getElementById(id); if (el) el.value = val || ''; };
+  s('m_summary',       m.summary || '');
+  s('m_description',   m.description || '');
+  s('m_priority',      m.priority || '');
+  s('m_labels',        m.labels || '');
+  s('m_components',    m.components || '');
+  s('m_issue_type',    m.issue_type_name || 'Test');
+  s('m_step_action',   m.step_action_prefix || 'Step Action');
+  s('m_step_data',     m.step_data_prefix   || 'Step Data');
+  s('m_step_expected', m.step_expected_prefix || 'Expected Result');
+  s('m_row_step',      m.row_step || 'Step');
+  s('m_row_data',      m.row_data || 'Data');
+  s('m_row_expected',  m.row_expected || 'Expected');
+  s('m_step_single',   m.step_single_column || 'Steps');
+  // Results mapping
+  s('rm_issue_key', m.results_issue_key || 'Issue Key');
+  s('rm_status',    m.results_status    || 'Status');
+  s('rm_comment',   m.results_comment   || 'Comment');
+  const stepsEl = document.getElementById('rm_update_steps');
+  if (stepsEl) stepsEl.value = m.results_update_steps !== false ? 'true' : 'false';
+  const fmtEl = document.getElementById('m_steps_format');
+  if (fmtEl) { fmtEl.value = m.steps_format || 'columns'; onMappingStepsFormatChange(); }
+}
+
+async function saveMappingConfig() {
+  const v = id => { const el = document.getElementById(id); return el ? el.value.trim() : ''; };
+  const mapping = {
+    summary:              v('m_summary')       || 'Summary',
+    description:          v('m_description'),
+    priority:             v('m_priority'),
+    labels:               v('m_labels'),
+    components:           v('m_components'),
+    issue_type_name:      v('m_issue_type')    || 'Test',
+    steps_format:         document.getElementById('m_steps_format')?.value || 'columns',
+    step_action_prefix:   v('m_step_action')   || 'Step Action',
+    step_data_prefix:     v('m_step_data')     || 'Step Data',
+    step_expected_prefix: v('m_step_expected') || 'Expected Result',
+    row_step:             v('m_row_step')       || 'Step',
+    row_data:             v('m_row_data')       || 'Data',
+    row_expected:         v('m_row_expected')   || 'Expected',
+    step_single_column:   v('m_step_single')   || 'Steps',
+    // Results mapping
+    results_issue_key: v('rm_issue_key') || 'Issue Key',
+    results_status:    v('rm_status')    || 'Status',
+    results_comment:   v('rm_comment')   || 'Comment',
+  };
+  mapping.results_update_steps = document.getElementById('rm_update_steps')?.value === 'true';
+  _csvMapping = mapping;
+  const res = await fetch('/api/zephyr/mapping', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(mapping),
+  });
+  const ok = res.ok;
+  ['mappingSaveStatus','mappingSaveStatus2'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) { el.textContent = ok ? '✓ Saved' : '✗ Failed'; setTimeout(() => { if(el) el.textContent=''; }, 3000); }
+  });
+}
+
+// ── Import mode toggle ────────────────────────────────────────────────────────
+function setImportMode(mode) {
+  document.getElementById('import-mode-keys').style.display   = mode === 'keys'   ? 'block' : 'none';
+  document.getElementById('import-mode-create').style.display = mode === 'create' ? 'flex'  : 'none';
+  document.querySelectorAll('.import-mode-btn').forEach(b => b.classList.remove('active'));
+  document.getElementById('imode-' + mode)?.classList.add('active');
+}
+
+// ── Create from CSV ───────────────────────────────────────────────────────────
+function onZCreateDrop(e) {
+  e.preventDefault();
+  document.getElementById('zCreateDropZone').classList.remove('drag-over');
+  const f = e.dataTransfer.files[0];
+  if (f) { _createFile = f; _showCreateFile(); previewCreateCsv(f); }
+}
+
+function onZCreateFileSelect(e) {
+  const f = e.target.files[0];
+  if (f) { _createFile = f; _showCreateFile(); previewCreateCsv(f); }
+}
+
+function _showCreateFile() {
+  if (!_createFile) return;
+  document.getElementById('zCreateFileName').textContent = `${_createFile.name}  (${(_createFile.size/1024).toFixed(1)} KB)`;
+  document.getElementById('zCreateFileInfo').classList.add('visible');
+  document.getElementById('zCreateDropZone').style.display = 'none';
+}
+
+function clearZCreateFile() {
+  _createFile = null;
+  document.getElementById('zCreateFile').value = '';
+  document.getElementById('zCreateFileInfo').classList.remove('visible');
+  document.getElementById('zCreateDropZone').style.display = '';
+  document.getElementById('zMappingPreview').style.display = 'none';
+  document.getElementById('zCreateTestsBtn').disabled = true;
+}
+
+async function previewCreateCsv(file) {
+  const form = new FormData();
+  form.append('file', file);
+  const res  = await fetch('/api/zephyr/csv-preview', { method: 'POST', body: form });
+  if (!res.ok) { zLog('✗  Could not parse CSV', 'failed'); return; }
+  const data = await res.json();
+  _csvHeaders = data.headers || [];
+  const preview = data.preview || [];
+
+  // Determine which columns are mapped
+  const m = _csvMapping;
+  const mappedFields  = new Set([m.summary, m.description, m.priority, m.labels, m.components].filter(Boolean));
+  const stepPfxs = [m.step_action_prefix, m.step_data_prefix, m.step_expected_prefix,
+                    m.row_step, m.row_data, m.row_expected, m.step_single_column].filter(Boolean);
+  const isStep = h => stepPfxs.some(p => h.startsWith(p));
+
+  // Build table header
+  const thead = document.getElementById('zPreviewHead');
+  thead.innerHTML = _csvHeaders.map(h => {
+    const bg = mappedFields.has(h)
+      ? 'background:rgba(137,180,250,0.2);color:var(--accent);'
+      : isStep(h)
+        ? 'background:rgba(249,226,175,0.15);color:var(--yellow);'
+        : '';
+    return `<th style="font-size:10px;padding:5px 8px;${bg}">${escHtml(h)}</th>`;
+  }).join('');
+
+  // Build preview rows
+  document.getElementById('zPreviewBody').innerHTML = preview.map(row =>
+    '<tr>' + _csvHeaders.map(h => {
+      const bg = mappedFields.has(h)
+        ? 'background:rgba(137,180,250,0.06);'
+        : isStep(h) ? 'background:rgba(249,226,175,0.05);' : '';
+      return `<td style="${bg}font-size:11px;padding:4px 8px;max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${escHtml(row[h]||'')}">${escHtml(row[h]||'')}</td>`;
+    }).join('') + '</tr>'
+  ).join('');
+
+  // Status line
+  const mapped = _csvHeaders.filter(h => mappedFields.has(h) || isStep(h)).length;
+  document.getElementById('zMappingStatus').textContent =
+    `${_csvHeaders.length} columns, ${mapped} mapped, ${preview.length} preview rows`;
+  document.getElementById('zMappingPreview').style.display = 'flex';
+  document.getElementById('zCreateTestsBtn').disabled = !_zProject;
+}
+
+async function zCreateTestcases() {
+  if (!_createFile || !_zProject) return;
+  const btn = document.getElementById('zCreateTestsBtn');
+  btn.disabled = true; btn.textContent = 'Creating…';
+
+  const form = new FormData();
+  form.append('file', _createFile);
+  form.append('projectKey', _zProject);
+  form.append('cycleId',    _zCycleId   || '');
+  form.append('folderId',   _zFolderId  || '');
+  form.append('versionId',  _zVersionId || '-1');
+
+  zLog(`⟳  Creating test cases from "${_createFile.name}"…`, 'info');
+  try {
+    const res  = await fetch('/api/zephyr/import-testcases', { method: 'POST', body: form });
+    const data = await res.json();
+    if (res.ok) {
+      zLog(`✓  Created: ${data.created}  Errors: ${data.errors}  Skipped: ${data.skipped}`, data.errors ? 'warning' : 'passed');
+      if (data.details?.created?.length) {
+        data.details.created.slice(0, 10).forEach(t => zLog(`  ✓ ${t.key}  ${t.summary}`, 'passed'));
+      }
+      if (data.details?.errors?.length) {
+        data.details.errors.forEach(e => zLog(`  ✗ ${e.summary}: ${JSON.stringify(e.error)}`, 'failed'));
+      }
+    } else {
+      zLog('✗  Import failed: ' + JSON.stringify(data.error || data), 'failed');
+    }
+  } catch (err) {
+    zLog('✗  ' + err.message, 'failed');
+  }
+  btn.disabled = false; btn.textContent = 'Create Test Cases & Add to Cycle';
 }
 
 // ── Zephyr config ─────────────────────────────────────────────────────────────
@@ -2763,26 +3131,42 @@ async function loadZephyrConfig() {
 }
 
 async function saveZephyrConfig() {
-  const get = id => { const el = document.getElementById(id); return el ? el.value.trim() : ''; };
-  const sslEl = document.getElementById('z_verify_ssl');
-  const projectKey = get('z_project_key').toUpperCase();
-  const cfg = {
-    jira_url:    get('z_jira_url'),
-    username:    get('z_username'),
-    api_token:   get('z_api_token'),
-    access_key:  get('z_access_key'),
-    secret_key:  get('z_secret_key'),
-    account_id:  get('z_account_id'),
-    project_key: projectKey,
-    verify_ssl:  sslEl ? sslEl.checked : true,
+  const val = id => {
+    const el = document.getElementById(id);
+    return el ? el.value.trim() : '';
   };
-  _syncProjectDisplay(projectKey);
-  const res = await fetch('/api/zephyr/config', {
-    method: 'POST', headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(cfg),
-  });
-  if (res.ok) { zLog('✓  Zephyr config saved.', 'passed'); }
-  else { zLog('✗  Failed to save Zephyr config.', 'failed'); }
+  const projectKey = val('z_project_key').toUpperCase();
+  const sslEl      = document.getElementById('z_verify_ssl');
+
+  const cfg = {
+    jira_url:    val('z_jira_url'),
+    username:    val('z_username'),
+    api_token:   val('z_api_token'),
+    access_key:  val('z_access_key'),
+    secret_key:  val('z_secret_key'),
+    account_id:  val('z_account_id'),
+    project_key: projectKey,
+    verify_ssl:  sslEl ? sslEl.checked : false,
+  };
+
+  console.log('[Zephyr] saving config:', Object.keys(cfg), 'project_key:', projectKey);
+
+  try {
+    const res = await fetch('/api/zephyr/config', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(cfg),
+    });
+    const data = await res.json();
+    if (res.ok && data.ok) {
+      zLog(`✓  Config saved — project: ${projectKey || '(none)'}`, 'passed');
+      _syncProjectDisplay(projectKey);
+    } else {
+      zLog('✗  Save failed: ' + JSON.stringify(data), 'failed');
+    }
+  } catch (err) {
+    zLog('✗  Save error: ' + err.message, 'failed');
+  }
 }
 
 async function testZephyrConnection() {
@@ -2817,41 +3201,110 @@ async function onZephyrProjectChange() {
 
 async function loadZephyrVersionsAndCycles() {
   if (!_zProject) {
-    zLog('✗  No project key configured. Go to Config → Zephyr and set Project Key.', 'failed');
+    zLog('✗  No project key — set it in Config → Zephyr.', 'failed');
     return;
   }
-  // Load versions first
   zLog(`⟳  Loading versions for ${_zProject}…`, 'info');
   const vRes = await fetch(`/api/zephyr/versions?projectKey=${encodeURIComponent(_zProject)}`);
   if (vRes.ok) {
     const versions = await vRes.json();
     const arr = Array.isArray(versions) ? versions : (versions.values || []);
+    // Store numeric projectId from first version for ZAPI calls
+    if (arr.length && arr[0].projectId) _zProjectId = String(arr[0].projectId);
     const sel = document.getElementById('z_version');
     sel.innerHTML = '<option value="-1">Unscheduled</option>' +
       arr.map(v => `<option value="${escHtml(String(v.id))}">${escHtml(v.name)}</option>`).join('');
     zLog(`✓  Loaded ${arr.length} version(s).`, 'passed');
   } else {
-    zLog('⚠  Could not load versions — loading cycles for Unscheduled.', 'warning');
+    zLog('⚠  Could not load versions — will use Unscheduled.', 'warning');
   }
-  await onZephyrVersionChange();
+  await loadZephyrCycles();
+}
+
+async function onZephyrVersionChange() {
+  const versionId = document.getElementById('z_version').value || '-1';
+  _zVersionId = versionId;
+  _zCycleId   = '';
+  _zFolderId  = '';
+  updateZephyrBreadcrumb();
+  await loadZephyrCycles();
 }
 
 function onZephyrCycleChange() {
   _zCycleId = document.getElementById('z_cycle').value;
+  _zFolderId = '';
   updateZephyrBreadcrumb();
 }
 
-async function loadZephyrFolders() {
-  if (!_zProject) return;
-  zLog('⟳  Loading folders…', 'info');
-  const res = await fetch('/api/zephyr/proxy', {
-    method: 'POST', headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ endpoint: 'folders', method: 'GET', params: { projectKey: _zProject, folderType: 'TEST_CASE', maxResults: 200 } }),
-  });
-  if (!res.ok) { const e = await res.json(); zLog('✗  ' + JSON.stringify(e.error || e), 'failed'); return; }
+async function loadZephyrCycles() {
+  if (!_zProject) {
+    zLog('✗  No project key — set it in Config → Zephyr.', 'failed');
+    return;
+  }
+  const versionId = (document.getElementById('z_version')?.value) || _zVersionId || '-1';
+  zLog(`⟳  Loading cycles for ${_zProject} / version ${versionId}…`, 'info');
+
+  // Get the numeric projectId from Jira first
+  const pRes = await fetch(`/api/zephyr/versions?projectKey=${encodeURIComponent(_zProject)}`);
+  let projectId = '';
+  if (pRes.ok) {
+    const pData = await pRes.json();
+    const arr = Array.isArray(pData) ? pData : (pData.values || []);
+    // projectId lives on the version objects
+    if (arr.length) projectId = String(arr[0].projectId || '');
+  }
+
+  const params = new URLSearchParams({ versionId });
+  if (projectId) params.set('projectId', projectId);
+  const res = await fetch(`/api/zephyr/cycles?${params}`);
+  if (!res.ok) {
+    const e = await res.json().catch(() => ({}));
+    zLog('✗  Cycles error: ' + JSON.stringify(e.error || e), 'failed');
+    return;
+  }
 
   const data = await res.json();
-  const folders = data.values || data || [];
+  // ZAPI /cycles/search returns an object keyed by cycleId, not an array
+  let cycles = [];
+  if (Array.isArray(data)) {
+    cycles = data;
+  } else if (data && typeof data === 'object') {
+    // Filter out non-cycle meta keys like "recordsCount", "offset"
+    cycles = Object.entries(data)
+      .filter(([k]) => k !== 'recordsCount' && k !== 'offset' && !isNaN(Number(k)) === false)
+      .map(([id, c]) => ({ id, name: c.name || id, ...c }))
+      .filter(c => c.name);
+  }
+
+  const sel = document.getElementById('z_cycle');
+  sel.innerHTML = '<option value="">— select cycle —</option>' +
+    cycles.map(c => `<option value="${escHtml(String(c.id))}">${escHtml(c.name)}</option>`).join('');
+  zLog(`✓  Loaded ${cycles.length} cycle(s).`, 'passed');
+
+  // Reset folder tree
+  document.getElementById('zFolderTree').innerHTML =
+    '<div style="color:var(--text-dim);font-size:11px;padding:6px;">Select a cycle then click ⟳</div>';
+}
+
+async function loadZephyrFolders() {
+  if (!_zCycleId) {
+    zLog('✗  Select a test cycle first.', 'failed');
+    return;
+  }
+  const versionId  = (document.getElementById('z_version')?.value) || _zVersionId || '-1';
+  const params     = new URLSearchParams({ cycleId: _zCycleId, versionId });
+  if (_zProjectId) params.set('projectId', _zProjectId);
+
+  zLog('⟳  Loading folders…', 'info');
+  const res = await fetch(`/api/zephyr/folders?${params}`);
+  if (!res.ok) {
+    const e = await res.json().catch(() => ({}));
+    zLog('✗  Folders error: ' + JSON.stringify(e.error || e), 'failed');
+    return;
+  }
+
+  const data = await res.json();
+  const folders = Array.isArray(data) ? data : (data.values || []);
   renderFolderTree(folders);
   zLog(`✓  Loaded ${folders.length} folder(s).`, 'passed');
 }

@@ -1199,6 +1199,191 @@ def zephyr_attach():
         return jsonify({"error": str(ex)}), 500
 
 
+# ── Field Mapping Config ──────────────────────────────────────────────────────
+
+@app.route("/api/zephyr/mapping", methods=["GET", "POST"])
+def zephyr_mapping():
+    """Load / save the CSV-to-Jira field mapping configuration."""
+    reader = ConfigReader()
+    cfg    = reader.load()
+    if request.method == "POST":
+        body = request.json or {}
+        cfg["zephyr_mapping"] = body
+        try:
+            reader.save(cfg)
+        except OSError as exc:
+            return jsonify({"error": str(exc)}), 500
+        return jsonify({"ok": True})
+    return jsonify(cfg.get("zephyr_mapping", {}))
+
+
+@app.route("/api/zephyr/csv-preview", methods=["POST"])
+def csv_preview():
+    """Parse an uploaded CSV and return its column headers + up to 5 preview rows."""
+    file = request.files.get("file")
+    if not file:
+        return jsonify({"error": "No file provided"}), 400
+    content = file.read().decode("utf-8-sig")
+    reader  = csv.DictReader(io.StringIO(content))
+    headers = list(reader.fieldnames or [])
+    preview: list[dict] = []
+    for i, row in enumerate(reader):
+        if i >= 5:
+            break
+        preview.append(dict(row))
+    return jsonify({"headers": headers, "preview": preview})
+
+
+@app.route("/api/zephyr/import-testcases", methods=["POST"])
+def import_testcases():
+    """Create Jira 'Test' issues from a CSV using the saved field mapping,
+    add Zephyr test steps, then enrol each issue into the target cycle/folder."""
+    file       = request.files.get("file")
+    cycle_id   = request.form.get("cycleId", "")
+    folder_id  = request.form.get("folderId", "")
+    project_key = request.form.get("projectKey", "")
+    version_id  = request.form.get("versionId", "-1")
+
+    if not file or not project_key:
+        return jsonify({"error": "file and projectKey are required"}), 400
+
+    cfg        = _z_cfg()
+    app_cfg    = ConfigReader().load()
+    mapping    = app_cfg.get("zephyr_mapping", {})
+
+    content = file.read().decode("utf-8-sig")
+    rows    = list(csv.DictReader(io.StringIO(content)))
+
+    # Field mapping keys
+    col_summary    = mapping.get("summary", "Summary")
+    col_desc       = mapping.get("description", "")
+    col_priority   = mapping.get("priority", "")
+    col_labels     = mapping.get("labels", "")
+    col_components = mapping.get("components", "")
+    col_issue_type = mapping.get("issue_type_name", "Test")
+    steps_format   = mapping.get("steps_format", "columns")   # columns | rows | single_col
+    step_act_pfx   = mapping.get("step_action_prefix", "Step Action")
+    step_dat_pfx   = mapping.get("step_data_prefix", "Step Data")
+    step_exp_pfx   = mapping.get("step_expected_prefix", "Expected Result")
+    col_step_all   = mapping.get("step_single_column", "Steps")
+
+    results: dict = {"created": [], "errors": [], "skipped": []}
+
+    def _jira_fields(row: dict) -> dict:
+        fields: dict = {
+            "project":   {"key": project_key},
+            "issuetype": {"name": col_issue_type or "Test"},
+            "summary":   row.get(col_summary, "").strip(),
+        }
+        if col_desc and row.get(col_desc):
+            fields["description"] = row[col_desc].strip()
+        if col_priority and row.get(col_priority):
+            fields["priority"] = {"name": row[col_priority].strip()}
+        if col_labels and row.get(col_labels):
+            fields["labels"] = [l.strip() for l in row[col_labels].split(",") if l.strip()]
+        if col_components and row.get(col_components):
+            fields["components"] = [{"name": c.strip()} for c in row[col_components].split(",") if c.strip()]
+        return fields
+
+    def _extract_steps(row: dict, headers: list[str]) -> list[dict]:
+        steps: list[dict] = []
+        if steps_format == "columns":
+            i = 1
+            while True:
+                act = row.get(f"{step_act_pfx} {i}", row.get(f"{step_act_pfx}{i}", "")).strip()
+                if not act:
+                    break
+                steps.append({
+                    "step":   act,
+                    "data":   row.get(f"{step_dat_pfx} {i}", row.get(f"{step_dat_pfx}{i}", "")).strip(),
+                    "result": row.get(f"{step_exp_pfx} {i}", row.get(f"{step_exp_pfx}{i}", "")).strip(),
+                })
+                i += 1
+        elif steps_format == "single_col" and col_step_all:
+            raw = row.get(col_step_all, "")
+            for line in raw.split("\n"):
+                line = line.strip()
+                if line:
+                    steps.append({"step": line, "data": "", "result": ""})
+        return steps
+
+    headers = list(rows[0].keys()) if rows else []
+
+    # Group rows by summary when format==rows (one step per row, same summary = same test)
+    if steps_format == "rows":
+        grouped: dict[str, list] = {}
+        for row in rows:
+            key = row.get(col_summary, "").strip()
+            if not key:
+                continue
+            if key not in grouped:
+                grouped[key] = []
+            grouped[key].append(row)
+        work_items = list(grouped.values())
+    else:
+        work_items = [[r] for r in rows]
+
+    for group in work_items:
+        primary = group[0]
+        summary = primary.get(col_summary, "").strip()
+        if not summary:
+            results["skipped"].append({"row": primary, "reason": "empty summary"})
+            continue
+
+        # 1. Create Jira issue
+        fields = _jira_fields(primary)
+        jira_data, jira_code = _jira_call("POST", "/issue", body={"fields": fields})
+        if jira_code not in (200, 201):
+            results["errors"].append({"summary": summary, "error": jira_data})
+            continue
+
+        issue_key = jira_data.get("key", "")
+        issue_id  = jira_data.get("id", "")
+        results["created"].append({"key": issue_key, "summary": summary})
+
+        # 2. Add Zephyr test steps
+        if steps_format == "rows":
+            step_rows = group
+        else:
+            step_rows = [primary]
+
+        for order, step_row in enumerate(step_rows, start=1):
+            steps = _extract_steps(step_row, headers) if steps_format != "rows" else [{
+                "step":   step_row.get(step_act_pfx, step_row.get("Step", "")).strip(),
+                "data":   step_row.get(step_dat_pfx, step_row.get("Data", "")).strip(),
+                "result": step_row.get(step_exp_pfx, step_row.get("Expected", "")).strip(),
+            }]
+            for step in steps:
+                if step.get("step"):
+                    path = f"/public/rest/api/1.0/teststep/{issue_id}"
+                    _z_call("POST", path, body={
+                        "step": step["step"],
+                        "data": step.get("data", ""),
+                        "result": step.get("result", ""),
+                    })
+
+        # 3. Add to cycle / folder
+        enrol_body = {
+            "issues": [issue_key],
+            "method": 1,
+            "projectId": project_key,
+            "versionId": int(version_id) if str(version_id).lstrip("-").isdigit() else -1,
+            "assigneeType": "currentUser",
+        }
+        if folder_id:
+            enrol_body["cycleId"] = cycle_id
+            _z_call("POST", f"/public/rest/api/1.0/executions/add/folder/{folder_id}", body=enrol_body)
+        elif cycle_id:
+            _z_call("POST", f"/public/rest/api/1.0/executions/add/cycle/{cycle_id}", body=enrol_body)
+
+    return jsonify({
+        "created": len(results["created"]),
+        "errors":  len(results["errors"]),
+        "skipped": len(results["skipped"]),
+        "details": results,
+    })
+
+
 # ── Bulk Results Upload ───────────────────────────────────────────────────────
 
 @app.route("/api/zephyr/bulk-results", methods=["POST"])

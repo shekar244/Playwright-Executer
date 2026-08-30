@@ -30,8 +30,25 @@
       ]
     }
   ],
-  "zephyr": {
-    "api_key": "",
-    "base_url": "https://api.zephyrscale.smartbear.com/v2"
+  "zephyr": {},
+  "zephyr_mapping": {
+    "summary": "TESTNAME",
+    "description": "DESCRITION",
+    "priority": "PRIORITY",
+    "labels": "LABEL",
+    "components": "COMPONENT",
+    "issue_type_name": "Test",
+    "steps_format": "columns",
+    "step_action_prefix": "Step Action",
+    "step_data_prefix": "Step Data",
+    "step_expected_prefix": "Expected Result",
+    "row_step": "Step",
+    "row_data": "Data",
+    "row_expected": "Expected",
+    "step_single_column": "Steps",
+    "results_issue_key": "Issue Key",
+    "results_status": "Status",
+    "results_comment": "Comment",
+    "results_update_steps": true
   }
 }
