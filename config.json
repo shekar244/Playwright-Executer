@@ -31,7 +31,8 @@
     }
   ],
   "zephyr": {},
-  "zephyr_mapping": {
+  "zephyr_tc_mapping": {
+    "story_id": "",
     "summary": "TESTNAME",
     "description": "DESCRITION",
     "priority": "PRIORITY",
@@ -45,10 +46,13 @@
     "row_step": "Step",
     "row_data": "Data",
     "row_expected": "Expected",
-    "step_single_column": "Steps",
-    "results_issue_key": "Issue Key",
-    "results_status": "Status",
-    "results_comment": "Comment",
-    "results_update_steps": true
+    "step_single_column": "Steps"
+  },
+  "zephyr_results_mapping": {
+    "issue_key": "Issue Key",
+    "status": "Status",
+    "comment": "Comment",
+    "attachment_path": "Attachment Path",
+    "update_steps": true
   }
 }
