@@ -1330,6 +1330,12 @@ def import_testcases_grouped():
     rows    = list(csv.DictReader(io.StringIO(content)))
     vi      = int(version_id) if str(version_id).lstrip("-").isdigit() else -1
 
+    # Resolve numeric Jira project ID (Zephyr folder/cycle APIs require numeric, not key)
+    numeric_pid = project_key   # fallback to key if lookup fails
+    proj_data, proj_code = _jira_call("GET", f"/project/{project_key}")
+    if proj_code == 200 and proj_data.get("id"):
+        numeric_pid = str(proj_data["id"])
+
     def _row_step(row: dict) -> dict | None:
         """Extract ONE step from a CSV row using mapped column names."""
         act = (row.get(step_act) or "").strip()
@@ -1354,11 +1360,12 @@ def import_testcases_grouped():
             uploaded.append({"order": order, "step": step["step"][:60], "ok": code in (200, 201)})
         return uploaded
 
-    # ── Fetch existing folders once ───────────────────────────────────────────
+    # ── Fetch existing folders once (use numeric projectId) ───────────────────
     existing_folders: dict[str, str] = {}
     if cycle_id:
         fd, _ = _z_call("GET", "/public/rest/api/1.0/folders",
-                         {"cycleId": cycle_id, "versionId": version_id})
+                         {"cycleId": cycle_id, "versionId": version_id,
+                          "projectId": numeric_pid})
         for f in (fd if isinstance(fd, list) else fd.get("folders", [])):
             existing_folders[f.get("name", "")] = str(f.get("id", ""))
 
@@ -1385,7 +1392,7 @@ def import_testcases_grouped():
             fd_body = {
                 "name":      story_id,
                 "cycleId":   cycle_id,
-                "projectId": project_key,
+                "projectId": numeric_pid,   # must be numeric for Zephyr folder API
                 "versionId": vi,
             }
             new_fd, fd_code = _z_call("POST", "/public/rest/api/1.0/folder", body=fd_body)
@@ -1468,7 +1475,7 @@ def import_testcases_grouped():
             enrol = {
                 "issues":       [issue_key],
                 "method":       1,
-                "projectId":    project_key,
+                "projectId":    numeric_pid,   # numeric required for enrolment too
                 "versionId":    vi,
                 "assigneeType": "currentUser",
             }
