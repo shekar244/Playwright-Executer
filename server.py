@@ -1335,7 +1335,8 @@ def import_testcases_grouped():
     col_desc    = mapping.get("description",         "")
     col_priority= mapping.get("priority",            "")
     col_labels  = mapping.get("labels",              "")
-    col_type    = mapping.get("issue_type_name",     "Test")
+    issue_type_name = mapping.get("issue_type_name", "Test")  # fixed value, NOT a CSV column
+    col_type        = issue_type_name  # keep alias for existing references
     # Custom field mappings: [{csv_col, jira_field, field_type}]
     custom_fields = mapping.get("custom_fields", [])
     # Zephyr UI names for steps: "Test Step", "Test Data", "Test Result"
@@ -1354,8 +1355,8 @@ def import_testcases_grouped():
     if proj_code == 200:
         if proj_data.get("id"):
             numeric_pid = str(proj_data["id"])
-        # Find the issue type ID by name (case-insensitive)
-        target_name = (col_type or "Test").strip().lower()
+        # Find the issue type ID by name (case-insensitive) — avoids Jira name-matching issues
+        target_name = (issue_type_name or "Test").strip().lower()
         for it in proj_data.get("issueTypes", []):
             if it.get("name", "").lower() == target_name:
                 issue_type_id = str(it["id"])
@@ -1439,10 +1440,12 @@ def import_testcases_grouped():
         for test_name, test_rows in test_cases.items():
             primary = test_rows[0]   # first row has the issue metadata
 
-            # Build Jira fields — use numeric IDs where available (more reliable)
+            # Project: use key (works reliably with Jira REST)
+            # Issuetype: prefer numeric ID (resolved from project lookup) — avoids name-matching issues
             fields: dict = {
-                "project":   {"id": numeric_pid} if numeric_pid != project_key else {"key": project_key},
-                "issuetype": {"id": issue_type_id} if issue_type_id else {"name": col_type or "Test"},
+                "project":   {"key": project_key},
+                "issuetype": {"id": issue_type_id} if issue_type_id
+                             else {"name": col_type or "Test"},
                 "summary":   test_name,
             }
             if col_desc and primary.get(col_desc):
