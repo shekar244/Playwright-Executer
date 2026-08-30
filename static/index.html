@@ -4346,40 +4346,60 @@ async function zLoadExecutions() {
     zLog(`  ℹ  status.name="${sample.status?.name}"  status.id="${sample.status?.id}"  issueSummary="${sample.issueSummary}"  assignedToDisplayName="${sample.assignedToDisplayName}"`, 'info');
   }
 
-  document.getElementById('zExecTbody').innerHTML = _executions.length
-    ? _executions.map((e, i) => {
+  // Render all, then re-apply active filter
+  _renderExecRows(_executions);
+  const activeFilter = document.getElementById('z_exec_status_filter')?.value;
+  if (activeFilter) zFilterExecTable();
+}
 
-        /* ── Status: confirmed nested object {id, name, desc, color, type}
-           Use status.name as the display label; map to CSS class via id ── */
-        const statusObj = e.status || {};
+function zFilterExecTable() {
+  const filter = document.getElementById('z_exec_status_filter')?.value || '';
+  // Re-render the table with filtered executions
+  _renderExecRows(filter ? _executions.filter(e => {
+    const execObj   = e.execution || {};
+    const statusObj = execObj.status || e.status || {};
+    const sid = String(statusObj.id ?? e.executionStatus ?? -1);
+    return sid === filter;
+  }) : _executions);
+}
+
+function _renderExecRows(list) {
+  const STAT     = { '-1':'UNEXECUTED', '1':'PASS', '2':'FAIL', '3':'WIP', '4':'BLOCKED' };
+  const STAT_CLS = { '1':'passed', '2':'failed', '3':'broken', '4':'cancelled', '-1':'' };
+  const STAT_ICON= { '1':'✓', '2':'✗', '3':'⋯', '4':'⊘', '-1':'—' };
+
+  document.getElementById('zExecTbody').innerHTML = list.length
+    ? list.map((e, i) => {
+        const execObj   = e.execution || {};
+        const statusObj = execObj.status || e.status || {};
         const sName = statusObj.name || e.executionStatus || '—';
         const sid   = String(statusObj.id ?? e.executionStatus ?? -1);
-        const sCls  = STAT_CLS[sid]  || '';
+        const sCls  = STAT_CLS[sid] || '';
         const sIcon = STAT_ICON[sid] || '';
-
-        /* ── Summary: issueSummary confirmed working; others as fallback ── */
-        const summary  = e.issueSummary || e.label || e.summary || e.issueLabel || '';
-
-        /* ── Assignee: user confirmed field is "assignedToDisplayName" ── */
-        const assignee = e.assignedToDisplayName   // confirmed field from live response
-                      || e.assigneeDisplay || e.executedByDisplay
-                      || e.assigneeUserName || e.executor || '';
-
+        const summary  = e.issueSummary || e.label || e.summary || '';
+        const assignee = (e.assignedToDisplayName && e.assignedToDisplayName !== 'null')
+                        ? e.assignedToDisplayName
+                        : (e.executedByDisplayName && e.executedByDisplayName !== 'null')
+                          ? `Ran: ${e.executedByDisplayName}` : '—';
+        const execId  = execObj.id || e.id || e.executionId || '';
+        const issueId = e.issueId || execObj.issueId || 0;
+        // Find original index in _executions for checkbox
+        const origIdx = _executions.indexOf(e);
         return `<tr>
-          <td style="width:32px;"><input type="checkbox" class="z-exec-cb" data-idx="${i}" /></td>
+          <td style="width:32px;"><input type="checkbox" class="z-exec-cb" data-idx="${origIdx}" /></td>
           <td style="font-family:'JetBrains Mono',monospace;font-size:11px;font-weight:600;color:var(--accent);">${escHtml(e.issueKey||'')}</td>
           <td style="font-size:11px;max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${escHtml(summary)}">${escHtml(summary||'—')}</td>
           <td><span class="tbl-status-badge ${sCls}" style="font-size:10px;">${sIcon} ${sName}</span></td>
-          <td style="font-size:11px;color:var(--text-dim);max-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escHtml(assignee||'—')}</td>
+          <td style="font-size:11px;color:var(--text-dim);max-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escHtml(assignee)}</td>
           <td style="white-space:nowrap;">
-            <button class="btn btn-sm" style="font-size:10px;padding:3px 8px;" onclick="zQuickMark('${e.id||e.executionId}',${e.issueId||0})">Mark</button>
+            <button class="btn btn-sm" style="font-size:10px;padding:3px 8px;" onclick="zQuickMark('${execId}',${issueId})">Mark</button>
           </td>
         </tr>`;
       }).join('')
-    : '<tr><td colspan="6" style="text-align:center;color:var(--text-dim);padding:24px;">No executions found</td></tr>';
+    : '<tr><td colspan="6" style="text-align:center;color:var(--text-dim);padding:16px;">No executions match the filter</td></tr>';
 
-  document.getElementById('zBulkMarkBtn').disabled = !_executions.length;
-  document.getElementById('zSelectAll').checked = false;
+  document.getElementById('zBulkMarkBtn').disabled = !list.length;
+  document.getElementById('zSelectAll').checked    = false;
 }
 
 function zToggleAll(cb) {
@@ -4425,15 +4445,21 @@ async function _markExecsByKey(issueKeys) {
 }
 
 async function zQuickMark(execId, issueId) {
-  const exec = _executions.find(e => (e.id || e.executionId) === execId);
-  const key  = exec?.issueKey || String(issueId);
+  // execId is from e.execution.id — find by that or fallback to issueKey lookup
+  const exec = _executions.find(e =>
+    (e.execution?.id || e.id || e.executionId) === execId || e.issueId == issueId
+  );
+  const key = exec?.issueKey || String(issueId);
   await _markExecsByKey([key]);
 }
 
 async function zBulkMark() {
   const checked = [...document.querySelectorAll('.z-exec-cb:checked')];
   if (!checked.length) { zLog('✗  Select at least one execution.', 'failed'); return; }
-  const keys = checked.map(c => _executions[parseInt(c.dataset.idx)]?.issueKey).filter(Boolean);
+  const keys = checked.map(c => {
+    const ex = _executions[parseInt(c.dataset.idx)];
+    return ex?.issueKey || '';
+  }).filter(Boolean);
   const btn  = document.getElementById('zBulkMarkBtn');
   btn.disabled = true; btn.textContent = 'Marking…';
   await _markExecsByKey(keys);
