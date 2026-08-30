@@ -809,22 +809,72 @@ def _b64url(data: bytes) -> str:
     return base64.urlsafe_b64encode(data).rstrip(b"=").decode("ascii")
 
 
+import secrets as _secrets
+import re as _re
+
+
+def _normalize_path(path: str) -> str:
+    """Normalize URL path per RFC 3986 for QSH:
+    - ensure leading slash
+    - remove trailing slash (unless root)
+    - decode then re-encode each segment with only unreserved chars (A-Z a-z 0-9 - _ . ~)
+    """
+    if not path.startswith("/"):
+        path = "/" + path
+    if len(path) > 1 and path.endswith("/"):
+        path = path.rstrip("/")
+    segments = path.split("/")
+    safe_unreserved = ""  # encode EVERYTHING except the implicit unreserved set
+    encoded = []
+    for seg in segments:
+        # Decode any existing %-encoding first, then re-encode strictly
+        decoded = urllib.parse.unquote(seg)
+        encoded.append(urllib.parse.quote(decoded, safe=safe_unreserved))
+    return "/".join(encoded)
+
+
+def _canonical_qs(params: dict | None) -> str:
+    """Build canonical query string for QSH per Zephyr spec:
+    - percent-encode keys and values using only unreserved chars (safe='')
+    - sort by percent-encoded key name
+    - join with '&'
+    """
+    if not params:
+        return ""
+    pairs = [
+        (urllib.parse.quote(str(k), safe=""), urllib.parse.quote(str(v), safe=""))
+        for k, v in params.items() if v is not None
+    ]
+    pairs.sort(key=lambda p: p[0])   # sort by encoded key
+    return "&".join(f"{k}={v}" for k, v in pairs)
+
+
 def _zephyr_jwt(access_key: str, secret_key: str, account_id: str,
                 method: str, path: str, query_params: dict | None = None,
                 expires_in: int = 60) -> str:
-    """Generate a per-operation Zephyr JWT (HS256). Default expiry: 60 s (single-use)."""
-    params = {k: str(v) for k, v in (query_params or {}).items() if v is not None}
-    sorted_qs = "&".join(
-        f"{urllib.parse.quote(k, safe='')}={urllib.parse.quote(v, safe='')}"
-        for k, v in sorted(params.items())
-    )
-    canonical = f"{method.upper()}&{path}&{sorted_qs}"
-    qsh = hashlib.sha256(canonical.encode("utf-8")).hexdigest()
-    now = int(time.time())
+    """Generate a per-operation Zephyr JWT (HS256).
+
+    Fixes applied vs naïve implementation:
+      1. nonce  — unique random hex per token (replay prevention)
+      2. path   — normalized per RFC 3986 (leading /, no trailing /, segments re-encoded)
+      3. QSH    — keys AND values encoded with safe='' (unreserved chars only), sorted by encoded key
+    """
+    norm_path = _normalize_path(path)
+    cqs       = _canonical_qs(query_params)
+    canonical = f"{method.upper()}&{norm_path}&{cqs}"
+    qsh       = hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+
+    now   = int(time.time())
+    nonce = _secrets.token_hex(16)   # 128-bit random nonce — unique per JWT
+
     header  = _b64url(json.dumps({"alg": "HS256", "typ": "JWT"}, separators=(",", ":")).encode())
     payload = _b64url(json.dumps({
-        "sub": account_id, "qsh": qsh, "iss": access_key,
-        "iat": now, "exp": now + expires_in,
+        "sub":   account_id,
+        "qsh":   qsh,
+        "iss":   access_key,
+        "iat":   now,
+        "exp":   now + expires_in,
+        "nonce": nonce,
     }, separators=(",", ":")).encode())
     msg = f"{header}.{payload}"
     sig = _b64url(hmac.new(secret_key.encode("utf-8"), msg.encode("utf-8"), hashlib.sha256).digest())
