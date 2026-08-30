@@ -772,19 +772,28 @@ JIRA_REST = "/rest/api/2"
 import ssl as _ssl
 
 def _ssl_ctx(verify: bool = True) -> _ssl.SSLContext:
-    """Return an SSL context.  verify=False skips cert check (corp proxies / self-signed certs)."""
+    """Return an SSL context.
+    verify=False disables all cert checks including OpenSSL 3.x key-usage enforcement."""
     if not verify:
-        ctx = _ssl.create_default_context()
+        # Use PROTOCOL_TLS_CLIENT base then relax everything
+        ctx = _ssl.SSLContext(_ssl.PROTOCOL_TLS_CLIENT)
         ctx.check_hostname = False
         ctx.verify_mode    = _ssl.CERT_NONE
+        # Python 3.12+ / OpenSSL 3.x: bypass legacy cert key-usage errors
+        if hasattr(_ssl, "OP_LEGACY_SERVER_CONNECT"):
+            ctx.options |= _ssl.OP_LEGACY_SERVER_CONNECT  # type: ignore[attr-defined]
+        # Lower security level so old/non-conformant certs are accepted
+        try:
+            ctx.set_ciphers("DEFAULT@SECLEVEL=0")
+        except _ssl.SSLError:
+            pass
         return ctx
-    # Try certifi bundle first (most reliable cross-platform)
+    # Verified path — try certifi bundle first (most reliable cross-platform)
     try:
         import certifi
         return _ssl.create_default_context(cafile=certifi.where())
     except ImportError:
         pass
-    # Fall back to system default
     return _ssl.create_default_context()
 
 STATUS_MAP = {
@@ -801,8 +810,9 @@ def _b64url(data: bytes) -> str:
 
 
 def _zephyr_jwt(access_key: str, secret_key: str, account_id: str,
-                method: str, path: str, query_params: dict | None = None) -> str:
-    """Generate a Zephyr for Jira Cloud JWT token (HS256, no external library)."""
+                method: str, path: str, query_params: dict | None = None,
+                expires_in: int = 60) -> str:
+    """Generate a per-operation Zephyr JWT (HS256). Default expiry: 60 s (single-use)."""
     params = {k: str(v) for k, v in (query_params or {}).items() if v is not None}
     sorted_qs = "&".join(
         f"{urllib.parse.quote(k, safe='')}={urllib.parse.quote(v, safe='')}"
@@ -814,7 +824,7 @@ def _zephyr_jwt(access_key: str, secret_key: str, account_id: str,
     header  = _b64url(json.dumps({"alg": "HS256", "typ": "JWT"}, separators=(",", ":")).encode())
     payload = _b64url(json.dumps({
         "sub": account_id, "qsh": qsh, "iss": access_key,
-        "iat": now, "exp": now + 3600,
+        "iat": now, "exp": now + expires_in,
     }, separators=(",", ":")).encode())
     msg = f"{header}.{payload}"
     sig = _b64url(hmac.new(secret_key.encode("utf-8"), msg.encode("utf-8"), hashlib.sha256).digest())
@@ -822,29 +832,30 @@ def _zephyr_jwt(access_key: str, secret_key: str, account_id: str,
 
 
 def _z_cfg() -> dict:
+    """Always load fresh from disk so credential changes take effect immediately."""
     return ConfigReader().load().get(ZEPHYR_CONFIG_KEY, {})
 
 
-def _z_headers(method: str, path: str, params: dict | None = None) -> dict:
+def _z_call(method: str, path: str, params: dict | None = None, body=None) -> tuple:
+    """Authenticated ZAPI call — fresh JWT generated for every request."""
+    # Reload config fresh on every call
     cfg = _z_cfg()
-    token = _zephyr_jwt(
-        cfg.get("access_key", ""), cfg.get("secret_key", ""),
-        cfg.get("account_id", ""), method, path, params,
-    )
-    return {
+    ak = cfg.get("access_key", "").strip()
+    sk = cfg.get("secret_key", "").strip()
+    ai = cfg.get("account_id", "").strip()
+
+    if not (ak and sk and ai):
+        return {"error": "Zephyr not configured — add Access Key, Secret Key and Account ID"}, 400
+
+    # Generate a new JWT for this specific operation (60 s expiry — single-use)
+    token = _zephyr_jwt(ak, sk, ai, method, path, params, expires_in=60)
+
+    hdrs = {
         "Authorization": f"JWT {token}",
-        "zapiAccessKey": cfg.get("access_key", ""),
+        "zapiAccessKey": ak,
         "Content-Type": "application/json",
         "Accept": "application/json",
     }
-
-
-def _z_call(method: str, path: str, params: dict | None = None, body=None) -> tuple:
-    """Authenticated ZAPI call. Returns (response_dict, status_code)."""
-    cfg = _z_cfg()
-    if not cfg.get("access_key"):
-        return {"error": "Zephyr not configured — add Access Key, Secret Key and Account ID"}, 400
-    hdrs = _z_headers(method, path, params)
     url = ZAPI_BASE + path
     if params:
         url += "?" + urllib.parse.urlencode({k: v for k, v in params.items() if v is not None})
