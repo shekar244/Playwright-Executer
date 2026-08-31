@@ -1390,16 +1390,27 @@ def import_testcases_grouped():
         }
 
     def _upload_steps(issue_id: str, steps: list[dict]) -> list[dict]:
-        """Upload Zephyr test steps. Returns list of {orderId, ok}."""
+        """Upload Zephyr test steps. Returns list of {order, ok, code, error}."""
         uploaded = []
         for order, step in enumerate(steps, start=1):
             if not step.get("step"):
                 continue
-            _, code = _z_call("POST", f"/public/rest/api/1.0/teststep/{issue_id}",
-                               body={"step": step["step"],
-                                     "data": step.get("data", ""),
-                                     "result": step.get("result", "")})
-            uploaded.append({"order": order, "step": step["step"][:60], "ok": code in (200, 201)})
+            resp_data, code = _z_call(
+                "POST", f"/public/rest/api/1.0/teststep/{issue_id}",
+                body={
+                    "step":   step["step"],
+                    "data":   step.get("data", ""),
+                    "result": step.get("result", ""),
+                }
+            )
+            ok = code in (200, 201)
+            uploaded.append({
+                "order": order,
+                "step":  step["step"][:80],
+                "ok":    ok,
+                "code":  code,
+                "error": str(resp_data) if not ok else None,
+            })
         return uploaded
 
     # ── Fetch existing folders once (use numeric projectId) ───────────────────
@@ -1548,14 +1559,15 @@ def import_testcases_grouped():
                 enrol_ok = ec in (200, 201)
 
             results["created"].append({
-                "key":     issue_key,
-                "summary": test_name,
-                "story":   story_id,
-                "folder":  use_folder,
-                "steps":   len(step_results),
-                "steps_ok": sum(1 for s in step_results if s["ok"]),
-                "linked":  link_ok,
-                "enrolled": enrol_ok,
+                "key":         issue_key,
+                "summary":     test_name,
+                "story":       story_id,
+                "folder":      use_folder,
+                "steps":       len(step_results),
+                "steps_ok":    sum(1 for s in step_results if s["ok"]),
+                "step_details": step_results,   # includes code + error per step
+                "linked":      link_ok,
+                "enrolled":    enrol_ok,
             })
 
     return jsonify({

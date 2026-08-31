@@ -3892,8 +3892,15 @@ async function zCreateTestcasesGrouped() {
       zLog(`  📁 ${story} → folder id=${f.id} (${f.created ? 'NEW' : 'existing'})`, 'info'));
 
     // Created tests
-    (data.details?.created || []).slice(0, 30).forEach(t =>
-      zLog(`  ✓ ${t.key}  "${t.summary}"  steps=${t.steps_ok}/${t.steps}  linked=${t.linked}  enrolled=${t.enrolled}`, 'passed'));
+    (data.details?.created || []).slice(0, 30).forEach(t => {
+      const stepStatus = t.steps_ok === t.steps ? '✓' : '⚠';
+      zLog(`  ✓ ${t.key}  "${t.summary}"  steps=${t.steps_ok}/${t.steps} ${stepStatus}  enrolled=${t.enrolled}`, t.steps_ok < t.steps ? 'warning' : 'passed');
+      // Show step errors if any failed
+      if (t.step_details) {
+        t.step_details.filter(s => !s.ok).forEach(s =>
+          zLog(`     ✗ Step ${s.order} (${s.code}): ${s.error?.slice(0,200)}`, 'failed'));
+      }
+    });
 
     // Errors — show full detail
     (data.details?.errors || []).forEach(e => {
