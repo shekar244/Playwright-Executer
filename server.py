@@ -1390,13 +1390,17 @@ def import_testcases_grouped():
         }
 
     def _upload_steps(issue_id: str, steps: list[dict]) -> list[dict]:
-        """Upload Zephyr test steps. Returns list of {order, ok, code, error}."""
+        """Upload Zephyr test steps.
+        Zephyr Squad Cloud requires projectId as a query param on POST /teststep/{issueId}."""
         uploaded = []
+        path = f"/public/rest/api/1.0/teststep/{issue_id}"
+        # projectId (numeric) is a required query parameter
+        params = {"projectId": numeric_pid}
         for order, step in enumerate(steps, start=1):
             if not step.get("step"):
                 continue
             resp_data, code = _z_call(
-                "POST", f"/public/rest/api/1.0/teststep/{issue_id}",
+                "POST", path, params=params,
                 body={
                     "step":   step["step"],
                     "data":   step.get("data", ""),
