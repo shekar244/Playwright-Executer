@@ -1,0 +1,356 @@
+<!-- ── Test Management (Zephyr) page ── -->
+<div id="page-zephyr">
+
+  <div class="zephyr-left">
+
+    <div class="section-block">
+      <div class="section-title">
+        <span class="stitle-icon">🔑</span>Zephyr for Jira — Cloud
+        <span id="zConnectStatusBadge" style="margin-left:auto;font-size:11px;color:var(--text-dim);"></span>
+        <button class="btn btn-sm" onclick="switchTab('tools');switchCfgTab('zephyr')"
+                style="margin-left:8px;font-size:10px;padding:3px 9px;">⚙ Configure</button>
+      </div>
+    </div>
+
+    <div class="zephyr-step">
+      <div class="zephyr-step-title"><span class="zephyr-step-num">1</span>Project</div>
+      <div style="display:flex;align-items:center;gap:8px;">
+        <div id="z_project_display" style="flex:1;background:var(--input-bg);border:1px solid var(--border);border-radius:var(--radius);padding:7px 10px;font-size:12px;color:var(--text);font-family:'JetBrains Mono',monospace;font-weight:600;">— not configured —</div>
+        <button class="btn btn-sm" onclick="switchTab('tools');toggleConfigSection('cfgZephyr','cfgZephyrArrow')" title="Edit in Config">⚙</button>
+      </div>
+      <div class="hint">Set the Project Key in the Config tab → Zephyr section</div>
+    </div>
+
+    <div class="zephyr-step">
+      <div class="zephyr-step-title"><span class="zephyr-step-num">2</span>Version / Release</div>
+      <div class="field">
+        <select id="z_version" onchange="onZephyrVersionChange()"><option value="-1">Unscheduled</option></select>
+      </div>
+      <button class="btn btn-sm" onclick="loadZephyrVersionsAndCycles()">⟳ Load Versions &amp; Cycles</button>
+    </div>
+
+    <div class="zephyr-step">
+      <div class="zephyr-step-title"><span class="zephyr-step-num">3</span>Test Cycle</div>
+      <div class="field-row">
+        <select id="z_cycle" onchange="onZephyrCycleChange()" style="flex:1;"><option value="">— select version first —</option></select>
+        <button class="browse-btn" onclick="loadZephyrCycles()" title="Load cycles">⟳</button>
+      </div>
+      <div class="action-row" style="margin-top:6px;">
+        <input type="text" id="z_new_cycle" placeholder="New cycle name" style="flex:1;" />
+        <button class="btn btn-sm" onclick="createZephyrCycle()">+ Cycle</button>
+      </div>
+    </div>
+
+    <div class="zephyr-step">
+      <div class="zephyr-step-title"><span class="zephyr-step-num">4</span>Folder</div>
+      <div style="display:flex;gap:6px;align-items:flex-start;">
+        <div class="folder-tree" id="zFolderTree" style="flex:1;"><div style="color:var(--text-dim);font-size:11px;padding:6px;">Select a cycle then click ⟳</div></div>
+        <button class="browse-btn" onclick="loadZephyrFolders()" title="Load folders" style="margin-top:2px;">⟳</button>
+      </div>
+      <div class="action-row" style="margin-top:6px;">
+        <input type="text" id="z_new_folder" placeholder="New folder name" style="flex:1;" />
+        <button class="btn btn-sm" onclick="createZephyrFolder()">+ Folder</button>
+      </div>
+    </div>
+
+    <div class="zephyr-breadcrumb" id="zBreadcrumb" style="font-size:11px;">
+      Select project → version → cycle → folder above
+    </div>
+
+  </div>
+
+  <div class="zephyr-right">
+
+    <div class="log-header" style="gap:0;padding:0 12px;border-bottom:1px solid var(--border);">
+      <span class="log-title" style="margin-right:16px;">Zephyr Actions</span>
+      <button type="button" class="btn btn-sm ztab-btn active" onclick="switchZTab('import')" id="ztab-import">Import Tests</button>
+      <button type="button" class="btn btn-sm ztab-btn" onclick="switchZTab('results')" id="ztab-results">Upload Results</button>
+      <button type="button" class="btn btn-sm ztab-btn" onclick="switchZTab('executions')" id="ztab-executions">Executions</button>
+      <div class="log-actions"><button type="button" class="btn btn-sm" onclick="clearZephyrLog()">Clear Log</button></div>
+    </div>
+
+    <!-- Import Tests tab -->
+    <div id="zpanel-import" class="zpanel" style="padding:16px;display:flex;flex-direction:column;gap:12px;overflow-y:auto;">
+      <div id="zImportContext" style="background:var(--input-bg);border:1px solid var(--border);border-radius:var(--radius);padding:7px 12px;font-size:11px;">
+        <span style="color:var(--text-dim);">Target: </span>
+        <span style="color:var(--yellow);">⚠ No cycle selected — use Steps 2 &amp; 3 on the left to select Version → Cycle → Folder</span>
+      </div>
+      <div style="display:flex;gap:4px;flex-wrap:wrap;">
+        <button class="btn btn-sm import-mode-btn active" id="imode-keys" onclick="setImportMode('keys')">📋 By Issue Keys</button>
+        <button class="btn btn-sm import-mode-btn" id="imode-create" onclick="setImportMode('create')">✨ Create from CSV</button>
+        <button class="btn btn-sm import-mode-btn" id="imode-filter" onclick="setImportMode('filter')">🔍 From Jira Filter</button>
+        <a href="#" onclick="switchTab('tools');switchCfgTab('mapping');return false;" style="margin-left:auto;font-size:11px;color:var(--accent);text-decoration:none;align-self:center;">⚙ Mapping</a>
+      </div>
+
+      <div id="import-mode-keys" style="display:flex;flex-direction:column;gap:10px;">
+        <div class="hint" style="line-height:1.5;">Paste Jira issue keys to add to the selected cycle/folder. Preview loads before upload.</div>
+        <div class="field">
+          <label>Jira Issue Keys (one per line)</label>
+          <textarea id="z_issue_keys" placeholder="PROJ-1&#10;PROJ-2&#10;PROJ-3" oninput="onIssueKeysChange()"
+                    style="height:80px;background:var(--input-bg);border:1px solid var(--input-border);border-radius:var(--radius);color:var(--text);padding:8px 10px;font-family:'JetBrains Mono',monospace;font-size:11px;resize:vertical;width:100%;outline:none;"></textarea>
+        </div>
+        <div style="text-align:center;color:var(--text-dim);font-size:11px;">— or upload CSV —</div>
+        <div class="drop-zone" style="padding:10px;" onclick="document.getElementById('zImportFile').click()"
+             ondragover="event.preventDefault();this.classList.add('drag-over')"
+             ondragleave="this.classList.remove('drag-over')"
+             ondrop="onZDrop(event,'zImportFile','zImportFileInfo',onImportCsvLoaded)">
+          <input type="file" id="zImportFile" accept=".csv" onchange="onZFileSelect(event,'zImportFileInfo',onImportCsvLoaded)" />
+          <div style="font-size:12px;">📄 CSV with Issue Key column</div>
+        </div>
+        <div class="z-file-info" id="zImportFileInfo">
+          <span>📄</span><span id="zImportFileName">—</span>
+          <button class="btn btn-sm" style="margin-left:auto;color:var(--red);" onclick="clearZFile('zImportFile','zImportFileInfo');_importKeys=[];renderImportPreview()">✕</button>
+        </div>
+        <div id="zKeysPreview" style="display:none;flex-direction:column;gap:6px;">
+          <div style="display:flex;align-items:center;gap:8px;">
+            <span style="font-size:11px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.07em;">Selected Tests</span>
+            <span id="zKeysCount" style="font-size:11px;color:var(--accent);font-weight:700;"></span>
+          </div>
+          <div style="overflow-y:auto;max-height:180px;border:1px solid var(--border);border-radius:var(--radius);">
+            <table class="history-tbl" style="font-size:11px;" id="zKeysTable">
+              <thead><tr><th>#</th><th>Issue Key</th><th>Summary</th></tr></thead>
+              <tbody id="zKeysTbody"></tbody>
+            </table>
+          </div>
+        </div>
+        <button class="btn btn-run" id="zAddTestsBtn" onclick="zAddTests()" disabled>Add Tests to Cycle</button>
+      </div>
+
+      <div id="import-mode-create" style="display:none;flex-direction:column;gap:10px;">
+        <div class="hint" style="line-height:1.5;">CSV with a <strong>Story ID</strong> column creates one sub-folder per story, links test cases to the story, and adds them to the selected cycle. Existing folders are reused. Uses <a href="#" onclick="switchTab('tools');switchCfgTab('mapping');return false;" style="color:var(--accent);">Field Mapping</a> config.</div>
+        <div class="drop-zone" id="zCreateDropZone" onclick="document.getElementById('zCreateFile').click()"
+             ondragover="event.preventDefault();this.classList.add('drag-over')"
+             ondragleave="this.classList.remove('drag-over')"
+             ondrop="onZCreateDrop(event)">
+          <input type="file" id="zCreateFile" accept=".csv" onchange="onZCreateFileSelect(event)" />
+          <span class="drop-zone-icon" style="font-size:20px;">📋</span>
+          <div style="font-weight:600;font-size:12px;">Upload Test Cases CSV</div>
+          <div style="font-size:10px;opacity:0.7;margin-top:2px;">Story ID, Test Name, Steps columns → matched by Field Mapping</div>
+        </div>
+        <div class="z-file-info" id="zCreateFileInfo">
+          <span>📋</span><span id="zCreateFileName">—</span>
+          <button class="btn btn-sm" style="margin-left:auto;color:var(--red);" onclick="clearZCreateFile()">✕</button>
+        </div>
+        <div id="zMappingPreview" style="display:none;flex-direction:column;gap:8px;">
+          <div style="display:flex;align-items:center;gap:8px;">
+            <span style="font-size:11px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.07em;">Preview</span>
+            <span id="zMappingStatus" style="font-size:11px;color:var(--text-dim);"></span>
+          </div>
+          <div style="overflow-x:auto;max-height:200px;overflow-y:auto;border:1px solid var(--border);border-radius:var(--radius);">
+            <table class="history-tbl" id="zPreviewTable" style="font-size:11px;">
+              <thead><tr id="zPreviewHead"></tr></thead>
+              <tbody id="zPreviewBody"></tbody>
+            </table>
+          </div>
+          <div style="font-size:10px;color:var(--text-dim);">
+            <span style="color:var(--purple);">■</span> Story ID (becomes folder)
+            <span style="color:var(--accent);margin-left:8px;">■</span> Mapped field
+            <span style="color:var(--yellow);margin-left:8px;">■</span> Step column
+          </div>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
+          <div class="field"><label>Jira Link Type (test→story)</label><input type="text" id="z_link_type" placeholder="Tests" value="Tests" /></div>
+          <div class="field"><label>Assignee</label>
+            <select id="z_create_assignee"><option value="currentUser">Current User</option><option value="unassigned">Unassigned</option></select>
+          </div>
+        </div>
+        <button class="btn btn-run" id="zCreateTestsBtn" onclick="zCreateTestcasesGrouped()" disabled>Create Test Cases by Story → Add to Cycle</button>
+      </div>
+
+      <div id="import-mode-filter" style="display:none;flex-direction:column;gap:10px;">
+        <div class="hint" style="line-height:1.5;">Fetch Jira issues by Filter ID or JQL, preview the list, then add selected tests to the cycle.</div>
+        <div style="display:flex;gap:6px;">
+          <button class="btn btn-sm import-mode-btn active" id="fsub-filter" onclick="setFilterSubMode('filter')">Filter ID</button>
+          <button class="btn btn-sm import-mode-btn" id="fsub-jql" onclick="setFilterSubMode('jql')">JQL</button>
+        </div>
+        <div id="filter-sub-filter">
+          <div class="field"><label>Jira Saved Filter ID</label><input type="text" id="z_filter_id" placeholder="e.g. 12345" style="font-family:'JetBrains Mono',monospace;" /></div>
+        </div>
+        <div id="filter-sub-jql" style="display:none;">
+          <div class="field"><label>JQL Query</label>
+            <textarea id="z_jql" placeholder='project = "BBX" AND issuetype = Test AND status = Open'
+                      style="height:60px;background:var(--input-bg);border:1px solid var(--input-border);border-radius:var(--radius);color:var(--text);padding:8px 10px;font-family:'JetBrains Mono',monospace;font-size:11px;resize:vertical;width:100%;outline:none;"></textarea>
+          </div>
+        </div>
+        <div style="display:flex;gap:6px;align-items:center;">
+          <button class="btn btn-sm" onclick="zFetchFilterIssues()">⟳ Fetch Issues</button>
+          <span id="zFilterStatus" style="font-size:11px;color:var(--text-dim);"></span>
+          <div style="margin-left:auto;display:flex;align-items:center;gap:6px;">
+            <label style="font-size:11px;color:var(--text-muted);">Max results</label>
+            <input type="number" id="z_filter_max" value="100" min="1" max="500" style="width:65px;font-size:11px;" />
+          </div>
+        </div>
+        <div id="zFilterPreview" style="display:none;flex-direction:column;gap:6px;">
+          <div style="display:flex;align-items:center;gap:8px;">
+            <input type="checkbox" id="zFilterSelectAll" onchange="zFilterToggleAll(this)" />
+            <span style="font-size:11px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.07em;">Issues Found</span>
+            <span id="zFilterCount" style="font-size:11px;color:var(--accent);font-weight:700;"></span>
+          </div>
+          <div style="overflow-x:auto;max-height:220px;overflow-y:auto;border:1px solid var(--border);border-radius:var(--radius);">
+            <table class="history-tbl" id="zFilterTable" style="font-size:11px;">
+              <thead style="position:sticky;top:0;z-index:2;"><tr><th style="width:28px;"></th><th>Key</th><th>Summary</th><th>Type</th><th>Status</th></tr></thead>
+              <tbody id="zFilterTbody"></tbody>
+            </table>
+          </div>
+        </div>
+        <button class="btn btn-run" id="zAddFilterBtn" onclick="zAddFilterTests()" disabled>Add Selected to Cycle</button>
+      </div>
+    </div>
+
+    <!-- Upload Results tab -->
+    <div id="zpanel-results" class="zpanel" style="display:none;padding:16px;flex-direction:column;gap:12px;overflow-y:auto;">
+      <div style="background:var(--input-bg);border:1px solid var(--border);border-radius:var(--radius);padding:7px 12px;font-size:11px;" id="zResultsContext">
+        Select Version → Cycle → Folder on the left to set the target
+      </div>
+      <div style="display:flex;gap:6px;">
+        <button class="btn btn-sm import-mode-btn active" id="rmode-csv" onclick="setResultsMode('csv')">📊 Bulk CSV Upload</button>
+        <button class="btn btn-sm import-mode-btn" id="rmode-single" onclick="setResultsMode('single')">🔍 Individual Test</button>
+      </div>
+      <div id="results-mode-csv" style="display:flex;flex-direction:column;gap:10px;">
+        <div class="hint" style="line-height:1.5;">CSV columns (from <a href="#" onclick="switchTab('tools');switchCfgTab('mapping');return false;" style="color:var(--accent);">Results Mapping config</a>): <strong>Test ID / Issue Key</strong>, <strong>Status</strong>, <strong>Comment</strong> + optional <strong>Attachment Path</strong>.</div>
+        <div class="drop-zone" id="zResultsDropZone" onclick="document.getElementById('zResultsFile').click()"
+             ondragover="event.preventDefault();this.classList.add('drag-over')"
+             ondragleave="this.classList.remove('drag-over')"
+             ondrop="onZDrop(event,'zResultsFile','zResultsFileInfo',onResultsCsvSelected)">
+          <input type="file" id="zResultsFile" accept=".csv" onchange="onZFileSelect(event,'zResultsFileInfo',onResultsCsvSelected)" />
+          <span class="drop-zone-icon" style="font-size:20px;">📊</span>
+          <div style="font-weight:600;font-size:12px;">Drop Results CSV or click to browse</div>
+          <div style="font-size:10px;opacity:0.7;margin-top:2px;">Test ID, Status, Comment [, Attachment Path]</div>
+        </div>
+        <div class="z-file-info" id="zResultsFileInfo">
+          <span>📄</span><span id="zResultsFileName">—</span>
+          <button class="btn btn-sm" style="margin-left:auto;color:var(--red);" onclick="clearZResultsCsv()">✕</button>
+        </div>
+        <div id="zResultsPreview" style="display:none;flex-direction:column;gap:6px;">
+          <div style="display:flex;align-items:center;gap:8px;">
+            <span style="font-size:11px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.07em;">Preview</span>
+            <span id="zResultsPreviewInfo" style="font-size:11px;color:var(--text-dim);"></span>
+            <div style="margin-left:auto;display:flex;gap:6px;">
+              <select id="z_bulk_status" style="font-size:11px;width:140px;">
+                <option value="">Use CSV status values</option>
+                <option value="1">Override → Pass All</option>
+                <option value="2">Override → Fail All</option>
+                <option value="3">Override → WIP All</option>
+                <option value="4">Override → Block All</option>
+              </select>
+              <select id="z_step_flag" style="font-size:11px;width:130px;">
+                <option value="true">Update steps ✓</option>
+                <option value="false">Keep steps as-is</option>
+              </select>
+            </div>
+          </div>
+          <div style="overflow-x:auto;max-height:240px;overflow-y:auto;border:1px solid var(--border);border-radius:var(--radius);">
+            <table class="history-tbl" id="zResultsCsvTable" style="font-size:11px;">
+              <thead style="position:sticky;top:0;z-index:2;"><tr id="zResultsCsvHead"></tr></thead>
+              <tbody id="zResultsCsvBody"></tbody>
+            </table>
+          </div>
+        </div>
+        <div class="field">
+          <label>Global Attachment — attach same file to every test execution (optional)</label>
+          <div class="drop-zone" style="padding:10px;" onclick="document.getElementById('zAttachFile').click()"
+               ondragover="event.preventDefault();this.classList.add('drag-over')"
+               ondragleave="this.classList.remove('drag-over')"
+               ondrop="onZDrop(event,'zAttachFile','zAttachFileInfo',null)">
+            <input type="file" id="zAttachFile" accept=".html,.pdf,.txt,.png,.jpg,.zip,.doc,.docx" onchange="onZFileSelect(event,'zAttachFileInfo',null)" />
+            <div style="font-size:12px;">📎 Drop report/document here</div>
+          </div>
+          <div class="z-file-info" id="zAttachFileInfo">
+            <span>📎</span><span id="zAttachFileName">—</span>
+            <button class="btn btn-sm" style="margin-left:auto;color:var(--red);" onclick="clearZFile('zAttachFile','zAttachFileInfo')">✕</button>
+          </div>
+        </div>
+        <button class="btn btn-run" id="zUploadResultsBtn" onclick="zUploadResults()" disabled>Upload Results to Cycle</button>
+      </div>
+
+      <div id="results-mode-single" style="display:none;flex-direction:column;gap:10px;">
+        <div class="hint">Update a single test execution by its Jira Issue Key.</div>
+        <div class="field"><label>Test ID / Issue Key *</label><input type="text" id="z_single_key" placeholder="e.g. PROJ-123" style="font-family:'JetBrains Mono',monospace;font-weight:600;" /></div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
+          <div class="field"><label>Status *</label>
+            <select id="z_single_status">
+              <option value="1">✓ Pass</option><option value="2">✗ Fail</option>
+              <option value="3">⋯ WIP</option><option value="4">⊘ Blocked</option>
+              <option value="-1">— Unexecuted</option>
+            </select>
+          </div>
+          <div class="field"><label>Update Test Steps</label>
+            <select id="z_single_steps"><option value="true">Yes — match status</option><option value="false">No</option></select>
+          </div>
+        </div>
+        <div class="field"><label>Comment</label>
+          <textarea id="z_single_comment" placeholder="Optional comment…"
+                    style="height:60px;background:var(--input-bg);border:1px solid var(--input-border);border-radius:var(--radius);color:var(--text);padding:8px 10px;font-size:12px;resize:vertical;width:100%;outline:none;"></textarea>
+        </div>
+        <div class="field">
+          <label>Attachment (optional)</label>
+          <div class="drop-zone" style="padding:10px;" onclick="document.getElementById('zSingleAttach').click()"
+               ondragover="event.preventDefault();this.classList.add('drag-over')"
+               ondragleave="this.classList.remove('drag-over')"
+               ondrop="onZDrop(event,'zSingleAttach','zSingleAttachInfo',null)">
+            <input type="file" id="zSingleAttach" onchange="onZFileSelect(event,'zSingleAttachInfo',null)" />
+            <div style="font-size:12px;">📎 Drop or click to browse</div>
+          </div>
+          <div class="z-file-info" id="zSingleAttachInfo">
+            <span>📎</span><span id="zSingleAttachName">—</span>
+            <button class="btn btn-sm" style="margin-left:auto;color:var(--red);" onclick="clearZFile('zSingleAttach','zSingleAttachInfo')">✕</button>
+          </div>
+        </div>
+        <button class="btn btn-run" onclick="zUploadSingle()">Upload This Result</button>
+      </div>
+    </div>
+
+    <!-- Executions tab -->
+    <div id="zpanel-executions" class="zpanel" style="display:none;padding:16px;flex-direction:column;gap:10px;overflow-y:auto;">
+      <div id="zExecContext" style="background:var(--input-bg);border:1px solid var(--border);border-radius:var(--radius);padding:7px 12px;font-size:11px;color:var(--text-dim);">
+        Click ⟳ Load Executions to load tests from the selected cycle / folder
+      </div>
+      <div class="action-row">
+        <button class="btn btn-sm" onclick="zLoadExecutions()">⟳ Load Executions</button>
+        <span id="zExecCount" style="font-size:11px;color:var(--text-dim);"></span>
+        <div style="display:flex;gap:6px;margin-left:auto;">
+          <select id="z_exec_status_filter" style="font-size:11px;width:130px;" onchange="zFilterExecTable()">
+            <option value="">All Status</option>
+            <option value="1">Pass</option><option value="2">Fail</option>
+            <option value="3">WIP</option><option value="4">Blocked</option>
+            <option value="-1">Unexecuted</option>
+          </select>
+        </div>
+      </div>
+      <div style="overflow-x:auto;flex:1;min-height:0;border:1px solid var(--border);border-radius:var(--radius);">
+        <table class="history-tbl" id="zExecTable">
+          <thead style="position:sticky;top:0;z-index:2;">
+            <tr>
+              <th style="width:32px;"><input type="checkbox" id="zSelectAll" onchange="zToggleAll(this)" /></th>
+              <th>Issue Key</th><th>Summary</th><th>Current Status</th><th style="width:70px;">Action</th>
+            </tr>
+          </thead>
+          <tbody id="zExecTbody">
+            <tr><td colspan="5" style="text-align:center;color:var(--text-dim);padding:24px;">Click ⟳ Load Executions above</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div style="background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius);padding:12px 14px;display:flex;flex-direction:column;gap:8px;">
+        <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.07em;color:var(--text-muted);">Mark Selected / Individual</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;">
+          <div class="field"><label>Mark as</label>
+            <select id="z_mark_status">
+              <option value="1">✓ Pass</option><option value="2">✗ Fail</option>
+              <option value="3">⋯ WIP</option><option value="4">⊘ Blocked</option>
+              <option value="-1">— Unexecuted</option>
+            </select>
+          </div>
+          <div class="field"><label>Comment</label><input type="text" id="z_mark_comment" placeholder="Optional comment" /></div>
+          <div class="field"><label>Update test steps</label>
+            <select id="z_mark_steps"><option value="true">Yes — match status</option><option value="false">No</option></select>
+          </div>
+        </div>
+        <button class="btn btn-run" onclick="zBulkMark()" id="zBulkMarkBtn" disabled>Mark Selected Executions</button>
+      </div>
+    </div>
+
+    <div class="zephyr-log" id="zephyrLog" style="border-top:1px solid var(--border);max-height:220px;"></div>
+
+  </div>
+
+</div>

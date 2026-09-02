@@ -1,5 +1,974 @@
 [
   {
+    "ts": 1788389849399,
+    "date": "2026-09-02 18:57",
+    "repo": "p13n-marketing-experiences-qa-automation",
+    "status": "passed",
+    "stats": {
+      "passed": 1,
+      "failed": 0,
+      "broken": 0,
+      "skipped": 0,
+      "total": 1
+    },
+    "tests": [
+      {
+        "suite": "Sephora - PUWLO - Unrecognized Flow - ABTEST ON - View and Click Impression Validations",
+        "name": "TC-1: Search product \u2192 add to basket \u2192 navigate home via logo \u2192 validate PUWLO recap + EVT impression + click events",
+        "method": "TC-1: Search product \u2192 add to basket \u2192 navigate home via logo \u2192 validate PUWLO recap + EVT impression + click events",
+        "fullName": ".TestSephoraHomepagePuwloAnalytics#test_puwlo_ui_and_sot_validations_us_locale",
+        "status": "passed",
+        "date": "2026-09-02",
+        "time": "18:55:05",
+        "duration_ms": 141232,
+        "duration_s": 141.23
+      }
+    ]
+  },
+  {
+    "ts": 1788386340383,
+    "date": "2026-09-02 17:59",
+    "repo": "p13n-marketing-experiences-qa-automation",
+    "status": "failed:1",
+    "stats": {
+      "passed": 39,
+      "failed": 5,
+      "broken": 0,
+      "skipped": 0,
+      "total": 44
+    },
+    "tests": [
+      {
+        "suite": "PUWLO Service \u2013 A/B Test Bucket",
+        "name": "ABTest bucket returns 400 for an invalid feature value",
+        "method": "ABTest bucket returns 400 for an invalid feature value",
+        "fullName": ".TestPuwloAbTestBucket#test_abtest_bucket_invalid_feature_returns_400",
+        "status": "failed",
+        "date": "2026-09-02",
+        "time": "17:58:58",
+        "duration_ms": 160,
+        "duration_s": 0.16
+      },
+      {
+        "suite": "PUWLO Service \u2013 A/B Test Bucket",
+        "name": "ABTest bucket returns 400 when contextId is missing",
+        "method": "ABTest bucket returns 400 when contextId is missing",
+        "fullName": ".TestPuwloAbTestBucket#test_abtest_bucket_missing_context_id_returns_400",
+        "status": "passed",
+        "date": "2026-09-02",
+        "time": "17:58:58",
+        "duration_ms": 243,
+        "duration_s": 0.24
+      },
+      {
+        "suite": "PUWLO Service \u2013 A/B Test Bucket",
+        "name": "ABTest bucket returns 400 when feature is missing",
+        "method": "ABTest bucket returns 400 when feature is missing",
+        "fullName": ".TestPuwloAbTestBucket#test_abtest_bucket_missing_feature_returns_400",
+        "status": "passed",
+        "date": "2026-09-02",
+        "time": "17:58:58",
+        "duration_ms": 165,
+        "duration_s": 0.17
+      },
+      {
+        "suite": "PUWLO Service \u2013 A/B Test Bucket",
+        "name": "ABTest bucket value is one of CONTROL, CHALLENGER, NOT_ASSIGNED",
+        "method": "ABTest bucket value is one of CONTROL, CHALLENGER, NOT_ASSIGNED",
+        "fullName": ".TestPuwloAbTestBucket#test_abtest_bucket_value_is_valid",
+        "status": "passed",
+        "date": "2026-09-02",
+        "time": "17:58:57",
+        "duration_ms": 233,
+        "duration_s": 0.23
+      },
+      {
+        "suite": "PUWLO Service \u2013 A/B Test Bucket",
+        "name": "ABTest bucket response matches ABTestBucketResponse schema",
+        "method": "ABTest bucket response matches ABTestBucketResponse schema",
+        "fullName": ".TestPuwloAbTestBucket#test_abtest_bucket_response_schema",
+        "status": "passed",
+        "date": "2026-09-02",
+        "time": "17:58:57",
+        "duration_ms": 163,
+        "duration_s": 0.16
+      },
+      {
+        "suite": "PUWLO Service \u2013 A/B Test Bucket",
+        "name": "ABTest bucket returns 200 for feature=rtco",
+        "method": "ABTest bucket returns 200 for feature=rtco",
+        "fullName": ".TestPuwloAbTestBucket#test_abtest_bucket_200_all_features",
+        "status": "passed",
+        "date": "2026-09-02",
+        "time": "17:58:57",
+        "duration_ms": 180,
+        "duration_s": 0.18
+      },
+      {
+        "suite": "PUWLO Service \u2013 A/B Test Bucket",
+        "name": "ABTest bucket returns 200 for feature=recap",
+        "method": "ABTest bucket returns 200 for feature=recap",
+        "fullName": ".TestPuwloAbTestBucket#test_abtest_bucket_200_all_features",
+        "status": "passed",
+        "date": "2026-09-02",
+        "time": "17:58:57",
+        "duration_ms": 233,
+        "duration_s": 0.23
+      },
+      {
+        "suite": "PUWLO Service \u2013 A/B Test Bucket",
+        "name": "ABTest bucket returns 200 for feature=replen",
+        "method": "ABTest bucket returns 200 for feature=replen",
+        "fullName": ".TestPuwloAbTestBucket#test_abtest_bucket_200_all_features",
+        "status": "passed",
+        "date": "2026-09-02",
+        "time": "17:58:57",
+        "duration_ms": 174,
+        "duration_s": 0.17
+      },
+      {
+        "suite": "PUWLO Service \u2013 Recap Anonymous",
+        "name": "Recap anonymous returns 400 when channel is missing",
+        "method": "Recap anonymous returns 400 when channel is missing",
+        "fullName": ".TestPuwloRecapAnonymous#test_recap_anonymous_missing_channel_returns_400",
+        "status": "passed",
+        "date": "2026-09-02",
+        "time": "17:58:56",
+        "duration_ms": 164,
+        "duration_s": 0.16
+      },
+      {
+        "suite": "PUWLO Service \u2013 Recap Anonymous",
+        "name": "Recap anonymous returns 400 when contextId is missing",
+        "method": "Recap anonymous returns 400 when contextId is missing",
+        "fullName": ".TestPuwloRecapAnonymous#test_recap_anonymous_missing_context_id_returns_400",
+        "status": "passed",
+        "date": "2026-09-02",
+        "time": "17:58:56",
+        "duration_ms": 243,
+        "duration_s": 0.24
+      },
+      {
+        "suite": "PUWLO Service \u2013 Recap Anonymous",
+        "name": "Recap anonymous returns 400 when deviceId is missing",
+        "method": "Recap anonymous returns 400 when deviceId is missing",
+        "fullName": ".TestPuwloRecapAnonymous#test_recap_anonymous_missing_device_id_returns_400",
+        "status": "passed",
+        "date": "2026-09-02",
+        "time": "17:58:56",
+        "duration_ms": 167,
+        "duration_s": 0.17
+      },
+      {
+        "suite": "PUWLO Service \u2013 Recap Anonymous",
+        "name": "Recap anonymous returns 200 with locale fr-CA",
+        "method": "Recap anonymous returns 200 with locale fr-CA",
+        "fullName": ".TestPuwloRecapAnonymous#test_recap_anonymous_all_locales",
+        "status": "passed",
+        "date": "2026-09-02",
+        "time": "17:58:52",
+        "duration_ms": 3887,
+        "duration_s": 3.89
+      },
+      {
+        "suite": "PUWLO Service \u2013 Recap Anonymous",
+        "name": "Recap anonymous returns 200 with locale en-CA",
+        "method": "Recap anonymous returns 200 with locale en-CA",
+        "fullName": ".TestPuwloRecapAnonymous#test_recap_anonymous_all_locales",
+        "status": "passed",
+        "date": "2026-09-02",
+        "time": "17:58:50",
+        "duration_ms": 2496,
+        "duration_s": 2.5
+      },
+      {
+        "suite": "PUWLO Service \u2013 Recap Anonymous",
+        "name": "Recap anonymous returns 200 with locale en-US",
+        "method": "Recap anonymous returns 200 with locale en-US",
+        "fullName": ".TestPuwloRecapAnonymous#test_recap_anonymous_all_locales",
+        "status": "passed",
+        "date": "2026-09-02",
+        "time": "17:58:49",
+        "duration_ms": 248,
+        "duration_s": 0.25
+      },
+      {
+        "suite": "PUWLO Service \u2013 Recap Anonymous",
+        "name": "Recap anonymous p13n data contains expected fields",
+        "method": "Recap anonymous p13n data contains expected fields",
+        "fullName": ".TestPuwloRecapAnonymous#test_recap_anonymous_p13n_fields",
+        "status": "failed",
+        "date": "2026-09-02",
+        "time": "17:58:49",
+        "duration_ms": 167,
+        "duration_s": 0.17
+      },
+      {
+        "suite": "PUWLO Service \u2013 Recap Anonymous",
+        "name": "Recap anonymous response matches AbTestAssignmentResponse schema",
+        "method": "Recap anonymous response matches AbTestAssignmentResponse schema",
+        "fullName": ".TestPuwloRecapAnonymous#test_recap_anonymous_response_schema",
+        "status": "passed",
+        "date": "2026-09-02",
+        "time": "17:58:49",
+        "duration_ms": 239,
+        "duration_s": 0.24
+      },
+      {
+        "suite": "PUWLO Service \u2013 Recap Anonymous",
+        "name": "Recap anonymous returns 200 with required params",
+        "method": "Recap anonymous returns 200 with required params",
+        "fullName": ".TestPuwloRecapAnonymous#test_recap_anonymous_200",
+        "status": "passed",
+        "date": "2026-09-02",
+        "time": "17:58:46",
+        "duration_ms": 2945,
+        "duration_s": 2.94
+      },
+      {
+        "suite": "PUWLO Service \u2013 Replen",
+        "name": "Replen returns 400 when channel is missing",
+        "method": "Replen returns 400 when channel is missing",
+        "fullName": ".TestPuwloReplenContent#test_replen_missing_channel_returns_400",
+        "status": "passed",
+        "date": "2026-09-02",
+        "time": "17:58:46",
+        "duration_ms": 234,
+        "duration_s": 0.23
+      },
+      {
+        "suite": "PUWLO Service \u2013 Replen",
+        "name": "Replen returns 400 when atg_id is missing",
+        "method": "Replen returns 400 when atg_id is missing",
+        "fullName": ".TestPuwloReplenContent#test_replen_missing_atg_id_returns_400",
+        "status": "passed",
+        "date": "2026-09-02",
+        "time": "17:58:46",
+        "duration_ms": 159,
+        "duration_s": 0.16
+      },
+      {
+        "suite": "PUWLO Service \u2013 Replen",
+        "name": "Replen returns 200 with optional bi_id",
+        "method": "Replen returns 200 with optional bi_id",
+        "fullName": ".TestPuwloReplenContent#test_replen_with_optional_bi_id",
+        "status": "passed",
+        "date": "2026-09-02",
+        "time": "17:58:45",
+        "duration_ms": 175,
+        "duration_s": 0.17
+      },
+      {
+        "suite": "PUWLO Service \u2013 Replen",
+        "name": "Replen accepts optional locale \u2013 fr-CA",
+        "method": "Replen accepts optional locale \u2013 fr-CA",
+        "fullName": ".TestPuwloReplenContent#test_replen_with_optional_locale",
+        "status": "passed",
+        "date": "2026-09-02",
+        "time": "17:58:45",
+        "duration_ms": 316,
+        "duration_s": 0.32
+      },
+      {
+        "suite": "PUWLO Service \u2013 Replen",
+        "name": "Replen accepts optional locale \u2013 en-CA",
+        "method": "Replen accepts optional locale \u2013 en-CA",
+        "fullName": ".TestPuwloReplenContent#test_replen_with_optional_locale",
+        "status": "passed",
+        "date": "2026-09-02",
+        "time": "17:58:45",
+        "duration_ms": 332,
+        "duration_s": 0.33
+      },
+      {
+        "suite": "PUWLO Service \u2013 Replen",
+        "name": "Replen accepts optional locale \u2013 en-US",
+        "method": "Replen accepts optional locale \u2013 en-US",
+        "fullName": ".TestPuwloReplenContent#test_replen_with_optional_locale",
+        "status": "passed",
+        "date": "2026-09-02",
+        "time": "17:58:45",
+        "duration_ms": 168,
+        "duration_s": 0.17
+      },
+      {
+        "suite": "PUWLO Service \u2013 Replen",
+        "name": "Replen accepts all valid channels \u2013 channel=androidApp",
+        "method": "Replen accepts all valid channels \u2013 channel=androidApp",
+        "fullName": ".TestPuwloReplenContent#test_replen_all_valid_channels",
+        "status": "passed",
+        "date": "2026-09-02",
+        "time": "17:58:44",
+        "duration_ms": 164,
+        "duration_s": 0.16
+      },
+      {
+        "suite": "PUWLO Service \u2013 Replen",
+        "name": "Replen accepts all valid channels \u2013 channel=iPhoneApp",
+        "method": "Replen accepts all valid channels \u2013 channel=iPhoneApp",
+        "fullName": ".TestPuwloReplenContent#test_replen_all_valid_channels",
+        "status": "passed",
+        "date": "2026-09-02",
+        "time": "17:58:44",
+        "duration_ms": 224,
+        "duration_s": 0.22
+      },
+      {
+        "suite": "PUWLO Service \u2013 Replen",
+        "name": "Replen accepts all valid channels \u2013 channel=web",
+        "method": "Replen accepts all valid channels \u2013 channel=web",
+        "fullName": ".TestPuwloReplenContent#test_replen_all_valid_channels",
+        "status": "passed",
+        "date": "2026-09-02",
+        "time": "17:58:44",
+        "duration_ms": 168,
+        "duration_s": 0.17
+      },
+      {
+        "suite": "PUWLO Service \u2013 Replen",
+        "name": "Replen returns 200 with required params",
+        "method": "Replen returns 200 with required params",
+        "fullName": ".TestPuwloReplenContent#test_replen_200_with_required_params",
+        "status": "passed",
+        "date": "2026-09-02",
+        "time": "17:58:44",
+        "duration_ms": 166,
+        "duration_s": 0.17
+      },
+      {
+        "suite": "PUWLO Service \u2013 RTCO",
+        "name": "RTCO isRtcoEnabled flag is a boolean",
+        "method": "RTCO isRtcoEnabled flag is a boolean",
+        "fullName": ".TestPuwloRtcoContent#test_rtco_is_rtco_enabled_is_boolean",
+        "status": "failed",
+        "date": "2026-09-02",
+        "time": "17:58:44",
+        "duration_ms": 297,
+        "duration_s": 0.3
+      },
+      {
+        "suite": "PUWLO Service \u2013 RTCO",
+        "name": "RTCO returns 400 for an invalid locale value",
+        "method": "RTCO returns 400 for an invalid locale value",
+        "fullName": ".TestPuwloRtcoContent#test_rtco_invalid_locale_returns_400",
+        "status": "passed",
+        "date": "2026-09-02",
+        "time": "17:58:43",
+        "duration_ms": 166,
+        "duration_s": 0.17
+      },
+      {
+        "suite": "PUWLO Service \u2013 RTCO",
+        "name": "RTCO returns 400 for an invalid channel value",
+        "method": "RTCO returns 400 for an invalid channel value",
+        "fullName": ".TestPuwloRtcoContent#test_rtco_invalid_channel_returns_400",
+        "status": "failed",
+        "date": "2026-09-02",
+        "time": "17:58:43",
+        "duration_ms": 275,
+        "duration_s": 0.28
+      },
+      {
+        "suite": "PUWLO Service \u2013 RTCO",
+        "name": "RTCO returns 400 when locale is missing",
+        "method": "RTCO returns 400 when locale is missing",
+        "fullName": ".TestPuwloRtcoContent#test_rtco_missing_locale_returns_400",
+        "status": "passed",
+        "date": "2026-09-02",
+        "time": "17:58:43",
+        "duration_ms": 177,
+        "duration_s": 0.18
+      },
+      {
+        "suite": "PUWLO Service \u2013 RTCO",
+        "name": "RTCO returns 400 when channel is missing",
+        "method": "RTCO returns 400 when channel is missing",
+        "fullName": ".TestPuwloRtcoContent#test_rtco_missing_channel_returns_400",
+        "status": "passed",
+        "date": "2026-09-02",
+        "time": "17:58:43",
+        "duration_ms": 241,
+        "duration_s": 0.24
+      },
+      {
+        "suite": "PUWLO Service \u2013 RTCO",
+        "name": "RTCO returns 400 when atg_id is missing",
+        "method": "RTCO returns 400 when atg_id is missing",
+        "fullName": ".TestPuwloRtcoContent#test_rtco_missing_atg_id_returns_400",
+        "status": "passed",
+        "date": "2026-09-02",
+        "time": "17:58:42",
+        "duration_ms": 166,
+        "duration_s": 0.17
+      },
+      {
+        "suite": "PUWLO Service \u2013 RTCO",
+        "name": "RTCO returns 400 when contextId is missing",
+        "method": "RTCO returns 400 when contextId is missing",
+        "fullName": ".TestPuwloRtcoContent#test_rtco_missing_context_id_returns_400",
+        "status": "passed",
+        "date": "2026-09-02",
+        "time": "17:58:42",
+        "duration_ms": 170,
+        "duration_s": 0.17
+      },
+      {
+        "suite": "PUWLO Service \u2013 RTCO",
+        "name": "RTCO accepts all valid channels \u2013 channel=androidApp",
+        "method": "RTCO accepts all valid channels \u2013 channel=androidApp",
+        "fullName": ".TestPuwloRtcoContent#test_rtco_all_valid_channels",
+        "status": "passed",
+        "date": "2026-09-02",
+        "time": "17:58:42",
+        "duration_ms": 304,
+        "duration_s": 0.3
+      },
+      {
+        "suite": "PUWLO Service \u2013 RTCO",
+        "name": "RTCO accepts all valid channels \u2013 channel=iPhoneApp",
+        "method": "RTCO accepts all valid channels \u2013 channel=iPhoneApp",
+        "fullName": ".TestPuwloRtcoContent#test_rtco_all_valid_channels",
+        "status": "passed",
+        "date": "2026-09-02",
+        "time": "17:58:42",
+        "duration_ms": 215,
+        "duration_s": 0.21
+      },
+      {
+        "suite": "PUWLO Service \u2013 RTCO",
+        "name": "RTCO accepts all valid channels \u2013 channel=web",
+        "method": "RTCO accepts all valid channels \u2013 channel=web",
+        "fullName": ".TestPuwloRtcoContent#test_rtco_all_valid_channels",
+        "status": "passed",
+        "date": "2026-09-02",
+        "time": "17:58:42",
+        "duration_ms": 252,
+        "duration_s": 0.25
+      },
+      {
+        "suite": "PUWLO Service \u2013 RTCO",
+        "name": "RTCO returns 200 with optional bi_id",
+        "method": "RTCO returns 200 with optional bi_id",
+        "fullName": ".TestPuwloRtcoContent#test_rtco_with_optional_bi_id",
+        "status": "passed",
+        "date": "2026-09-02",
+        "time": "17:58:41",
+        "duration_ms": 215,
+        "duration_s": 0.21
+      },
+      {
+        "suite": "PUWLO Service \u2013 RTCO",
+        "name": "RTCO returns 200 with skipCache=true",
+        "method": "RTCO returns 200 with skipCache=true",
+        "fullName": ".TestPuwloRtcoContent#test_rtco_skip_cache_true",
+        "status": "passed",
+        "date": "2026-09-02",
+        "time": "17:58:41",
+        "duration_ms": 298,
+        "duration_s": 0.3
+      },
+      {
+        "suite": "PUWLO Service \u2013 RTCO",
+        "name": "RTCO data items contain p13n personalization fields",
+        "method": "RTCO data items contain p13n personalization fields",
+        "fullName": ".TestPuwloRtcoContent#test_rtco_p13n_fields_present",
+        "status": "failed",
+        "date": "2026-09-02",
+        "time": "17:58:41",
+        "duration_ms": 216,
+        "duration_s": 0.22
+      },
+      {
+        "suite": "PUWLO Service \u2013 RTCO",
+        "name": "RTCO response contains required top-level fields",
+        "method": "RTCO response contains required top-level fields",
+        "fullName": ".TestPuwloRtcoContent#test_rtco_response_schema",
+        "status": "passed",
+        "date": "2026-09-02",
+        "time": "17:58:40",
+        "duration_ms": 331,
+        "duration_s": 0.33
+      },
+      {
+        "suite": "PUWLO Service \u2013 RTCO",
+        "name": "RTCO returns 200 for locale fr-CA",
+        "method": "RTCO returns 200 for locale fr-CA",
+        "fullName": ".TestPuwloRtcoContent#test_rtco_200_all_locales",
+        "status": "passed",
+        "date": "2026-09-02",
+        "time": "17:58:39",
+        "duration_ms": 1238,
+        "duration_s": 1.24
+      },
+      {
+        "suite": "PUWLO Service \u2013 RTCO",
+        "name": "RTCO returns 200 for locale en-CA",
+        "method": "RTCO returns 200 for locale en-CA",
+        "fullName": ".TestPuwloRtcoContent#test_rtco_200_all_locales",
+        "status": "passed",
+        "date": "2026-09-02",
+        "time": "17:58:38",
+        "duration_ms": 826,
+        "duration_s": 0.83
+      },
+      {
+        "suite": "PUWLO Service \u2013 RTCO",
+        "name": "RTCO returns 200 for locale en-US",
+        "method": "RTCO returns 200 for locale en-US",
+        "fullName": ".TestPuwloRtcoContent#test_rtco_200_all_locales",
+        "status": "passed",
+        "date": "2026-09-02",
+        "time": "17:58:38",
+        "duration_ms": 342,
+        "duration_s": 0.34
+      }
+    ]
+  },
+  {
+    "ts": 1788386028216,
+    "date": "2026-09-02 17:53",
+    "repo": "p13n-marketing-experiences-qa-automation",
+    "status": "passed",
+    "stats": {
+      "passed": 15,
+      "failed": 0,
+      "broken": 0,
+      "skipped": 1,
+      "total": 16
+    },
+    "tests": [
+      {
+        "suite": "Beauty Routine Recommendations",
+        "name": "Invalid channel value returns no 5xx",
+        "method": "Invalid channel value returns no 5xx",
+        "fullName": ".TestRoutineRecosSkincare#test_routine_recos_skincare_invalid_channel",
+        "status": "passed",
+        "date": "2026-09-02",
+        "time": "17:53:46",
+        "duration_ms": 367,
+        "duration_s": 0.37
+      },
+      {
+        "suite": "Beauty Routine Recommendations",
+        "name": "UC-3b: Moisturizer reco URLs (category + image) resolve without error",
+        "method": "UC-3b: Moisturizer reco URLs (category + image) resolve without error",
+        "fullName": ".TestRoutineRecosSkincare#test_all_response_urls_resolve_uc3b_moisturizer",
+        "status": "passed",
+        "date": "2026-09-02",
+        "time": "17:53:44",
+        "duration_ms": 1983,
+        "duration_s": 1.98
+      },
+      {
+        "suite": "Beauty Routine Recommendations",
+        "name": "UC-3: All URLs in response resolve without error (HTTP 200)",
+        "method": "UC-3: All URLs in response resolve without error (HTTP 200)",
+        "fullName": ".TestRoutineRecosSkincare#test_all_response_urls_resolve_uc3",
+        "status": "passed",
+        "date": "2026-09-02",
+        "time": "17:53:42",
+        "duration_ms": 1658,
+        "duration_s": 1.66
+      },
+      {
+        "suite": "Beauty Routine Recommendations",
+        "name": "UC-2: All URLs in response resolve without error (HTTP 200)",
+        "method": "UC-2: All URLs in response resolve without error (HTTP 200)",
+        "fullName": ".TestRoutineRecosSkincare#test_all_response_urls_resolve_uc2",
+        "status": "passed",
+        "date": "2026-09-02",
+        "time": "17:53:41",
+        "duration_ms": 1221,
+        "duration_s": 1.22
+      },
+      {
+        "suite": "Beauty Routine Recommendations",
+        "name": "UC-1: All URLs in response resolve without error (HTTP 200)",
+        "method": "UC-1: All URLs in response resolve without error (HTTP 200)",
+        "fullName": ".TestRoutineRecosSkincare#test_all_response_urls_resolve_uc1",
+        "status": "passed",
+        "date": "2026-09-02",
+        "time": "17:53:40",
+        "duration_ms": 799,
+        "duration_s": 0.8
+      },
+      {
+        "suite": "Beauty Routine Recommendations",
+        "name": "Missing customerId \u2014 documents defect: returns 500 instead of 400",
+        "method": "Missing customerId \u2014 documents defect: returns 500 instead of 400",
+        "fullName": ".TestRoutineRecosSkincare#test_routine_recos_skincare_missing_customer_id",
+        "status": "skipped",
+        "date": "2026-09-02",
+        "time": "17:53:40",
+        "duration_ms": 190,
+        "duration_s": 0.19
+      },
+      {
+        "suite": "Beauty Routine Recommendations",
+        "name": "Non-existent customer ID returns empty body without error",
+        "method": "Non-existent customer ID returns empty body without error",
+        "fullName": ".TestRoutineRecosSkincare#test_routine_recos_skincare_nonexistent_customer",
+        "status": "passed",
+        "date": "2026-09-02",
+        "time": "17:53:40",
+        "duration_ms": 270,
+        "duration_s": 0.27
+      },
+      {
+        "suite": "Beauty Routine Recommendations",
+        "name": "Customer in DB but with no active reco returns empty body",
+        "method": "Customer in DB but with no active reco returns empty body",
+        "fullName": ".TestRoutineRecosSkincare#test_routine_recos_skincare_customer_with_no_recos",
+        "status": "passed",
+        "date": "2026-09-02",
+        "time": "17:53:39",
+        "duration_ms": 185,
+        "duration_s": 0.18
+      },
+      {
+        "suite": "Beauty Routine Recommendations",
+        "name": "UC-3b: Moisturizer reco URL uses correct slug and resolves HTTP 200",
+        "method": "UC-3b: Moisturizer reco URL uses correct slug and resolves HTTP 200",
+        "fullName": ".TestRoutineRecosSkincare#test_routine_recos_moisturizer_reco_url",
+        "status": "passed",
+        "date": "2026-09-02",
+        "time": "17:53:38",
+        "duration_ms": 1549,
+        "duration_s": 1.55
+      },
+      {
+        "suite": "Beauty Routine Recommendations",
+        "name": "UC-3: All 3 recoproductidNurl fields match categories and resolve HTTP 200",
+        "method": "UC-3: All 3 recoproductidNurl fields match categories and resolve HTTP 200",
+        "fullName": ".TestRoutineRecosSkincare#test_routine_recos_category_url_resolves_uc3",
+        "status": "passed",
+        "date": "2026-09-02",
+        "time": "17:53:35",
+        "duration_ms": 3222,
+        "duration_s": 3.22
+      },
+      {
+        "suite": "Beauty Routine Recommendations",
+        "name": "UC-2: recoproductid1url and recoproductid2url match categories and resolve HTTP 200",
+        "method": "UC-2: recoproductid1url and recoproductid2url match categories and resolve HTTP 200",
+        "fullName": ".TestRoutineRecosSkincare#test_routine_recos_category_url_resolves_uc2",
+        "status": "passed",
+        "date": "2026-09-02",
+        "time": "17:53:33",
+        "duration_ms": 1913,
+        "duration_s": 1.91
+      },
+      {
+        "suite": "Beauty Routine Recommendations",
+        "name": "UC-1: recoproductid1url matches category and resolves HTTP 200",
+        "method": "UC-1: recoproductid1url matches category and resolves HTTP 200",
+        "fullName": ".TestRoutineRecosSkincare#test_routine_recos_category_url_resolves_uc1",
+        "status": "passed",
+        "date": "2026-09-02",
+        "time": "17:53:32",
+        "duration_ms": 960,
+        "duration_s": 0.96
+      },
+      {
+        "suite": "Beauty Routine Recommendations",
+        "name": "Schema: All expected fields present and non-empty for 3-reco customer",
+        "method": "Schema: All expected fields present and non-empty for 3-reco customer",
+        "fullName": ".TestRoutineRecosSkincare#test_routine_recos_skincare_response_schema_all_fields",
+        "status": "passed",
+        "date": "2026-09-02",
+        "time": "17:53:31",
+        "duration_ms": 457,
+        "duration_s": 0.46
+      },
+      {
+        "suite": "Beauty Routine Recommendations",
+        "name": "UC-3: Customer with 3 recommendations returns full routine",
+        "method": "UC-3: Customer with 3 recommendations returns full routine",
+        "fullName": ".TestRoutineRecosSkincare#test_routine_recos_skincare_3_recos_full_routine",
+        "status": "passed",
+        "date": "2026-09-02",
+        "time": "17:53:30",
+        "duration_ms": 1067,
+        "duration_s": 1.07
+      },
+      {
+        "suite": "Beauty Routine Recommendations",
+        "name": "UC-2: Customer with 2 recommendations returns correct response",
+        "method": "UC-2: Customer with 2 recommendations returns correct response",
+        "fullName": ".TestRoutineRecosSkincare#test_routine_recos_skincare_2_recos",
+        "status": "passed",
+        "date": "2026-09-02",
+        "time": "17:53:30",
+        "duration_ms": 451,
+        "duration_s": 0.45
+      },
+      {
+        "suite": "Beauty Routine Recommendations",
+        "name": "UC-1: Customer with 1 recommendation returns correct response",
+        "method": "UC-1: Customer with 1 recommendation returns correct response",
+        "fullName": ".TestRoutineRecosSkincare#test_routine_recos_skincare_1_reco",
+        "status": "passed",
+        "date": "2026-09-02",
+        "time": "17:53:27",
+        "duration_ms": 2477,
+        "duration_s": 2.48
+      }
+    ]
+  },
+  {
+    "ts": 1788384648866,
+    "date": "2026-09-02 17:30",
+    "repo": "p13n-marketing-experiences-qa-automation",
+    "status": "passed",
+    "stats": {
+      "passed": 3,
+      "failed": 0,
+      "broken": 0,
+      "skipped": 0,
+      "total": 3
+    },
+    "tests": [
+      {
+        "suite": "Sephora - PUWLO - CA Locale - View and Click Impression Validations",
+        "name": "TC-CA: PUWLO flow for ca_fr locale",
+        "method": "TC-CA: PUWLO flow for ca_fr locale",
+        "fullName": ".TestSephoraHomepagePuwloAnalyticsCaLocale#test_puwlo_ui_and_sot_validations_ca_locale",
+        "status": "passed",
+        "date": "2026-09-02",
+        "time": "17:26:14",
+        "duration_ms": 272234,
+        "duration_s": 272.23
+      },
+      {
+        "suite": "Sephora - PUWLO - CA Locale - View and Click Impression Validations",
+        "name": "TC-CA: PUWLO flow for ca_en locale",
+        "method": "TC-CA: PUWLO flow for ca_en locale",
+        "fullName": ".TestSephoraHomepagePuwloAnalyticsCaLocale#test_puwlo_ui_and_sot_validations_ca_locale",
+        "status": "passed",
+        "date": "2026-09-02",
+        "time": "17:24:22",
+        "duration_ms": 110969,
+        "duration_s": 110.97
+      },
+      {
+        "suite": "Sephora - PUWLO - Unrecognized Flow - ABTEST ON - View and Click Impression Validations",
+        "name": "TC-1: Search product \u2192 add to basket \u2192 navigate home via logo \u2192 validate PUWLO recap + EVT impression + click events",
+        "method": "TC-1: Search product \u2192 add to basket \u2192 navigate home via logo \u2192 validate PUWLO recap + EVT impression + click events",
+        "fullName": ".TestSephoraHomepagePuwloAnalytics#test_puwlo_ui_and_sot_validations_us_locale",
+        "status": "passed",
+        "date": "2026-09-02",
+        "time": "17:22:10",
+        "duration_ms": 131680,
+        "duration_s": 131.68
+      }
+    ]
+  },
+  {
+    "ts": 1788383959572,
+    "date": "2026-09-02 17:19",
+    "repo": "p13n-marketing-experiences-qa-automation",
+    "status": "failed:1",
+    "stats": {
+      "passed": 8,
+      "failed": 1,
+      "broken": 0,
+      "skipped": 0,
+      "total": 9
+    },
+    "tests": [
+      {
+        "name": "TC-CA: PUWLO flow for ca_fr locale",
+        "suite": "test_puwlo_unrecognized_rtco_ui_analytics",
+        "status": "passed",
+        "date": "2026-09-02",
+        "time": "17:14:57",
+        "duration_ms": 259405,
+        "duration_s": 259.4
+      },
+      {
+        "name": "TC-REPLEN-CA: PUWLO replen recognized flow for ca_fr locale",
+        "suite": "test_puwlo_recognized_replen_ui_analytics",
+        "status": "passed",
+        "date": "2026-09-02",
+        "time": "17:13:30",
+        "duration_ms": 86725,
+        "duration_s": 86.72
+      },
+      {
+        "name": "TC-RECAP-RECOGNIZED-CA: PUWLO recognized recap RTCO flow for ca_fr locale",
+        "suite": "test_puwlo_recognized_recap_ui_analytics",
+        "status": "failed",
+        "date": "2026-09-02",
+        "time": "17:13:17",
+        "duration_ms": 12269,
+        "duration_s": 12.27
+      },
+      {
+        "name": "TC-CA: PUWLO flow for ca_en locale",
+        "suite": "test_puwlo_unrecognized_rtco_ui_analytics",
+        "status": "passed",
+        "date": "2026-09-02",
+        "time": "17:11:32",
+        "duration_ms": 105088,
+        "duration_s": 105.09
+      },
+      {
+        "name": "TC-1: Search product \u2192 add to basket \u2192 navigate home via logo \u2192 validate PUWLO recap + EVT impression + click events",
+        "suite": "test_puwlo_unrecognized_rtco_ui_analytics",
+        "status": "passed",
+        "date": "2026-09-02",
+        "time": "17:09:21",
+        "duration_ms": 129862,
+        "duration_s": 129.86
+      },
+      {
+        "name": "TC-REPLEN-CA: PUWLO replen recognized flow for ca_en locale",
+        "suite": "test_puwlo_recognized_replen_ui_analytics",
+        "status": "passed",
+        "date": "2026-09-02",
+        "time": "17:08:40",
+        "duration_ms": 40471,
+        "duration_s": 40.47
+      },
+      {
+        "name": "TC-REPLEN-US: Login \u2192 homepage \u2192 verify replen API + Ready to Restock card \u2192 click \u2192 PDP + EVT",
+        "suite": "test_puwlo_recognized_replen_ui_analytics",
+        "status": "passed",
+        "date": "2026-09-02",
+        "time": "17:08:04",
+        "duration_ms": 35966,
+        "duration_s": 35.97
+      },
+      {
+        "name": "TC-RECAP-RECOGNIZED-CA: PUWLO recognized recap RTCO flow for ca_en locale",
+        "suite": "test_puwlo_recognized_recap_ui_analytics",
+        "status": "passed",
+        "date": "2026-09-02",
+        "time": "17:03:50",
+        "duration_ms": 252830,
+        "duration_s": 252.83
+      },
+      {
+        "name": "TC-RECAP-RECOGNIZED-US: Login \u2192 search \u2192 add to basket \u2192 navigate home \u2192 validate PUWLO RTCO recap + EVT impression + click events \u2192 clear cart",
+        "suite": "test_puwlo_recognized_recap_ui_analytics",
+        "status": "passed",
+        "date": "2026-09-02",
+        "time": "17:00:56",
+        "duration_ms": 173884,
+        "duration_s": 173.88
+      }
+    ]
+  },
+  {
+    "ts": 1788372976108,
+    "date": "2026-09-02 14:16",
+    "repo": "p13n-marketing-experiences-qa-automation",
+    "status": "failed:1",
+    "stats": {
+      "passed": 6,
+      "failed": 1,
+      "broken": 2,
+      "skipped": 0,
+      "total": 9
+    },
+    "tests": [
+      {
+        "name": "TC-CA: PUWLO flow for ca_fr locale",
+        "suite": "test_puwlo_unrecognized_rtco_ui_analytics",
+        "status": "broken",
+        "date": "2026-09-02",
+        "time": "14:15:19",
+        "duration_ms": 54577,
+        "duration_s": 54.58
+      },
+      {
+        "name": "TC-REPLEN-CA: PUWLO replen recognized flow for ca_fr locale",
+        "suite": "test_puwlo_recognized_replen_ui_analytics",
+        "status": "passed",
+        "date": "2026-09-02",
+        "time": "14:13:49",
+        "duration_ms": 88752,
+        "duration_s": 88.75
+      },
+      {
+        "name": "TC-RECAP-RECOGNIZED-CA: PUWLO recognized recap RTCO flow for ca_fr locale",
+        "suite": "test_puwlo_recognized_recap_ui_analytics",
+        "status": "failed",
+        "date": "2026-09-02",
+        "time": "14:13:37",
+        "duration_ms": 10927,
+        "duration_s": 10.93
+      },
+      {
+        "name": "TC-CA: PUWLO flow for ca_en locale",
+        "suite": "test_puwlo_unrecognized_rtco_ui_analytics",
+        "status": "broken",
+        "date": "2026-09-02",
+        "time": "14:12:43",
+        "duration_ms": 54235,
+        "duration_s": 54.23
+      },
+      {
+        "name": "TC-1: Search product \u2192 add to basket \u2192 navigate home via logo \u2192 validate PUWLO recap + EVT impression + click events",
+        "suite": "test_puwlo_unrecognized_rtco_ui_analytics",
+        "status": "passed",
+        "date": "2026-09-02",
+        "time": "14:10:30",
+        "duration_ms": 132259,
+        "duration_s": 132.26
+      },
+      {
+        "name": "TC-REPLEN-CA: PUWLO replen recognized flow for ca_en locale",
+        "suite": "test_puwlo_recognized_replen_ui_analytics",
+        "status": "passed",
+        "date": "2026-09-02",
+        "time": "14:09:44",
+        "duration_ms": 45025,
+        "duration_s": 45.02
+      },
+      {
+        "name": "TC-REPLEN-US: Login \u2192 homepage \u2192 verify replen API + Ready to Restock card \u2192 click \u2192 PDP + EVT",
+        "suite": "test_puwlo_recognized_replen_ui_analytics",
+        "status": "passed",
+        "date": "2026-09-02",
+        "time": "14:09:02",
+        "duration_ms": 41645,
+        "duration_s": 41.65
+      },
+      {
+        "name": "TC-RECAP-RECOGNIZED-CA: PUWLO recognized recap RTCO flow for ca_en locale",
+        "suite": "test_puwlo_recognized_recap_ui_analytics",
+        "status": "passed",
+        "date": "2026-09-02",
+        "time": "14:04:12",
+        "duration_ms": 289691,
+        "duration_s": 289.69
+      },
+      {
+        "name": "TC-RECAP-RECOGNIZED-US: Login \u2192 search \u2192 add to basket \u2192 navigate home \u2192 validate PUWLO RTCO recap + EVT impression + click events \u2192 clear cart",
+        "suite": "test_puwlo_recognized_recap_ui_analytics",
+        "status": "passed",
+        "date": "2026-09-02",
+        "time": "13:52:15",
+        "duration_ms": 686553,
+        "duration_s": 686.55
+      }
+    ]
+  },
+  {
+    "ts": 1788214766248,
+    "date": "2026-08-31 18:19",
+    "repo": "p13n-marketing-experiences-qa-automation",
+    "status": "cancelled",
+    "stats": {
+      "passed": 4,
+      "failed": 1,
+      "broken": 1,
+      "skipped": 0,
+      "total": 6
+    }
+  },
+  {
     "ts": 1788105025950,
     "date": "2026-08-30 11:50",
     "repo": "p13n-marketing-experiences-qa-automation",

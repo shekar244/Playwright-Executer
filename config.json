@@ -53,5 +53,25 @@
     "comment": "Comment",
     "attachment_path": "Attachment Path",
     "update_steps": true
+  },
+  "git_commands": [
+    {
+      "name": "Git Pull",
+      "description": "Git Pull",
+      "command": "git pull"
+    },
+    {
+      "name": "Git Status",
+      "description": "Git Status",
+      "command": "git status"
+    }
+  ],
+  "ui_tabs": {
+    "dashboard": true,
+    "zephyr": false,
+    "cfg_git": true,
+    "cfg_tools": true,
+    "cfg_mapping": false,
+    "cfg_zephyr": false
   }
 }

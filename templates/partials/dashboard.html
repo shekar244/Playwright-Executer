@@ -1,0 +1,100 @@
+<!-- ── Dashboard page ── -->
+<div id="page-dashboard">
+  <div class="dash-body">
+
+    <div class="dash-title">
+      <span>📊</span> Test Dashboard
+      <span class="dash-sub" id="dashSubtitle">— select a repo and run tests to see results</span>
+      <div style="margin-left:auto;display:flex;gap:8px;align-items:center;">
+        <input type="text" id="dashSearch" placeholder="Search tests…" oninput="filterTests()" style="width:200px;font-size:12px;" />
+        <select id="dashStatusFilter" onchange="filterTests()" style="width:120px;font-size:12px;">
+          <option value="">All Status</option>
+          <option value="passed">Passed</option>
+          <option value="failed">Failed</option>
+          <option value="broken">Broken</option>
+          <option value="skipped">Skipped</option>
+        </select>
+        <button class="btn btn-sm" onclick="loadDashboard()">⟳ Refresh</button>
+        <button class="btn btn-sm" style="color:var(--red);border-color:var(--red);" onclick="clearHistory()">Clear History</button>
+      </div>
+    </div>
+
+    <div class="dash-stats">
+      <div class="stat-pill s-total"><div class="stat-pill-label">Total Tests</div><div class="stat-pill-value total" id="dashTotal">—</div></div>
+      <div class="stat-pill s-passed"><div class="stat-pill-label">Passed</div><div class="stat-pill-value passed" id="dashPassed">—</div></div>
+      <div class="stat-pill s-failed"><div class="stat-pill-label">Failed</div><div class="stat-pill-value failed" id="dashFailed">—</div></div>
+      <div class="stat-pill s-broken"><div class="stat-pill-label">Broken</div><div class="stat-pill-value broken" id="dashBroken">—</div></div>
+      <div class="stat-pill s-skipped"><div class="stat-pill-label">Skipped</div><div class="stat-pill-value skipped" id="dashSkipped">—</div></div>
+      <div class="stat-pill" style="border-left:2px solid var(--purple);">
+        <div class="stat-pill-label">Avg Duration</div>
+        <div class="stat-pill-value" style="color:var(--purple);font-size:22px;" id="dashAvgDur">—</div>
+      </div>
+      <div class="stat-pill" style="border-left:2px solid var(--teal);">
+        <div class="stat-pill-label">Pass Rate</div>
+        <div class="stat-pill-value" style="color:var(--teal);font-size:22px;" id="dashPassRate">—</div>
+      </div>
+    </div>
+
+    <div style="display:grid;grid-template-columns:1fr 220px 1fr;gap:16px;">
+      <div class="dash-card">
+        <div class="dash-card-title" id="dailyChartTitle">Tests Run by Day — Last 30 Days</div>
+        <div class="dash-chart-wrap" style="height:210px;"><canvas id="chartDailyRuns"></canvas></div>
+      </div>
+      <div class="dash-card">
+        <div class="dash-card-title">Status Distribution</div>
+        <div class="dash-chart-wrap" style="height:160px;"><canvas id="chartStatusDonut"></canvas></div>
+        <div class="dash-legend" id="legendStatus"></div>
+      </div>
+      <div class="dash-card">
+        <div class="dash-card-title">Run History Trend</div>
+        <div class="dash-chart-wrap" style="height:210px;"><canvas id="chartRunTrend"></canvas></div>
+      </div>
+    </div>
+
+    <div class="dash-table-wrap">
+      <div class="dash-table-header">
+        <h3>Test Cases — Current Run</h3>
+        <span style="font-size:11px;color:var(--text-dim);margin-left:auto;" id="dashTestCount">0 tests</span>
+      </div>
+      <div style="overflow-x:auto;max-height:420px;overflow-y:auto;">
+        <table class="history-tbl" id="dashTestTable">
+          <thead style="position:sticky;top:0;z-index:2;">
+            <tr>
+              <th style="cursor:pointer;" onclick="sortTests('file')">File ↕</th>
+              <th style="cursor:pointer;" onclick="sortTests('method')">Test Method ↕</th>
+              <th>Status</th>
+              <th style="cursor:pointer;" onclick="sortTests('duration')">Duration ↕</th>
+              <th>Run At</th>
+            </tr>
+          </thead>
+          <tbody id="dashTestTbody">
+            <tr><td colspan="5" style="text-align:center;color:var(--text-dim);padding:32px;">
+              No Allure results found — run tests with <code>--alluredir</code> enabled
+            </td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="dash-table-wrap">
+      <div class="dash-table-header">
+        <h3>Run History</h3>
+        <span style="font-size:11px;color:var(--text-dim);margin-left:auto;" id="dashRecordCount">0 records</span>
+      </div>
+      <div style="overflow-x:auto;">
+        <table class="history-tbl">
+          <thead>
+            <tr>
+              <th>Date</th><th>Repo</th><th>Status</th>
+              <th>Passed</th><th>Failed</th><th>Broken</th><th>Skipped</th><th>Total</th><th>Pass %</th>
+            </tr>
+          </thead>
+          <tbody id="historyTbody">
+            <tr><td colspan="9" style="text-align:center;color:var(--text-dim);padding:24px;">No runs recorded yet</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+  </div>
+</div>

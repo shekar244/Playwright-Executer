@@ -35,3 +35,4 @@ last_run.json
 .claude-flow/
 .claude/
 .firecrawl/
+report_history.json

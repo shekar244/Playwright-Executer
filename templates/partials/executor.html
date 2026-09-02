@@ -1,0 +1,396 @@
+<!-- ── Executor page ── -->
+<div id="page-executor" class="body">
+
+  <div class="panel-left">
+
+    <div class="section-block">
+      <div class="section-title"><span class="stitle-icon">📁</span>Repository</div>
+      <div class="section-content">
+        <div class="field">
+          <label>Select Local Repo</label>
+          <div class="field-row">
+            <select id="repoSelect" onchange="onRepoSelect()">
+              <option value="">— scanning… —</option>
+            </select>
+            <button class="browse-btn" onclick="scanRepos()" title="Re-scan for repos">⟳</button>
+          </div>
+        </div>
+        <div class="field">
+          <label>Or enter path manually</label>
+          <div class="field-row">
+            <input type="text" id="repo" placeholder="/path/to/your-playwright-repo" />
+            <button class="browse-btn" onclick="browseRepo()">Browse…</button>
+          </div>
+          <div class="hint">Must contain a <code>tests/</code> folder and pytest config</div>
+        </div>
+        <button class="btn btn-sm" onclick="discoverTests()">↻ Discover Tests</button>
+      </div>
+    </div>
+
+    <div class="section-block">
+      <div class="section-title"><span class="stitle-icon">🧪</span>Test Selection</div>
+      <div class="section-content">
+        <div class="field">
+          <label>Suite / Folder</label>
+          <select id="suite" onchange="onSuiteChange()"><option>All Tests</option></select>
+        </div>
+        <div class="field">
+          <label>Test File</label>
+          <select id="file" onchange="onFileChange()"><option>All in Suite</option></select>
+        </div>
+        <div class="field" id="nameFilterSection">
+          <div style="display:flex;align-items:center;gap:8px;margin-bottom:2px;">
+            <label style="margin:0;">Test Name Filter (-k)</label>
+            <label class="checkbox-label" style="margin-left:auto;font-size:10px;">
+              <input type="checkbox" id="manualKToggle" onchange="toggleKMode()" /> manual
+            </label>
+          </div>
+          <div id="testNameList" style="display:none;max-height:140px;overflow-y:auto;background:var(--input-bg);border:1px solid var(--input-border);border-radius:var(--radius);padding:6px 8px;gap:4px;flex-direction:column;"></div>
+          <input type="text" id="k_filter" placeholder="e.g. test_login or test_checkout" style="display:none;" />
+          <div class="hint" id="kHint">Select a specific test file to pick individual tests</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="section-block">
+      <div class="section-title"><span class="stitle-icon">⚙️</span>Execution Options</div>
+      <div class="section-content">
+        <div class="field">
+          <label>Browser</label>
+          <select id="browser">
+            <option value="chromium">chromium</option>
+            <option value="firefox">firefox</option>
+            <option value="webkit">webkit</option>
+          </select>
+        </div>
+        <div class="field"><label>Marker (-m)</label>
+          <select id="marker"><option value="">(none)</option></select>
+        </div>
+        <div class="field"><label>Workers (-n)</label>
+          <input type="number" id="workers" value="1" min="1" max="16" />
+        </div>
+        <div class="checkboxes">
+          <label class="checkbox-label"><input type="checkbox" id="headed" checked /> Headed</label>
+          <label class="checkbox-label"><input type="checkbox" id="verbose" /> Verbose (-v)</label>
+          <label class="checkbox-label"><input type="checkbox" id="auto_open" /> Auto-open Report</label>
+        </div>
+        <div class="field"><label>Extra Args</label>
+          <input type="text" id="extra" placeholder="e.g. --timeout=60000" />
+        </div>
+      </div>
+    </div>
+
+    <div class="section-block" id="extraOptionsSection" style="display:none;">
+      <div class="section-title"><span class="stitle-icon">🎛️</span>Custom Options</div>
+      <div class="section-content" id="extraOptionsContainer"></div>
+    </div>
+
+    <div class="section-block">
+      <div class="section-title"><span class="stitle-icon">▶</span>Actions</div>
+      <div class="section-content">
+        <div class="action-row">
+          <button class="btn btn-run" id="runBtn" onclick="runTests()">▶ RUN</button>
+          <button class="btn btn-stop" id="stopBtn" onclick="stopTests()" disabled>■ STOP</button>
+          <button class="btn btn-sm" onclick="clearLog()">Clear Log</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="section-block">
+      <div class="section-title"><span class="stitle-icon">📋</span>Reports</div>
+      <div class="section-content">
+        <div class="report-box">
+          <div class="report-label">📄 Individual Run</div>
+          <div class="report-path" id="reportIndividualPath">No report found</div>
+          <button class="btn btn-sm" id="openIndividualBtn" onclick="openReport('individual')" disabled>Open Latest</button>
+        </div>
+        <div class="report-box">
+          <div class="report-label">📚 Consolidated</div>
+          <div class="report-path" id="reportConsolidatedPath">No report found</div>
+          <button class="btn btn-sm" id="openConsolidatedBtn" onclick="openReport('consolidated')" disabled>Open Latest</button>
+        </div>
+        <button class="btn btn-sm" onclick="refreshReport()">↻ Refresh Reports</button>
+      </div>
+    </div>
+
+  </div>
+
+  <div class="panel-right">
+    <div class="log-header">
+      <span class="log-title">Output Log</span>
+      <div class="log-actions">
+        <button class="btn btn-sm" onclick="scrollToBottom()">↓ Bottom</button>
+      </div>
+    </div>
+    <div id="log"></div>
+  </div>
+
+</div>
+
+<!-- ── Config page ── -->
+<div id="page-tools" style="flex-direction:column;">
+
+  <div style="background:var(--surface);border-bottom:1px solid var(--border);display:flex;gap:2px;padding:8px 16px 0;flex-shrink:0;">
+    <button type="button" class="cfg-tab-btn active" onclick="switchCfgTab('features')" id="ctab-features">🔌 Features</button>
+    <button type="button" class="cfg-tab-btn" onclick="switchCfgTab('git')" id="ctab-git">🔀 Git</button>
+    <button type="button" class="cfg-tab-btn" onclick="switchCfgTab('tools')" id="ctab-tools">🔧 CLI Tools</button>
+    <button type="button" class="cfg-tab-btn" onclick="switchCfgTab('mapping')" id="ctab-mapping">🗂️ Field Mapping</button>
+    <button type="button" class="cfg-tab-btn" onclick="switchCfgTab('zephyr')" id="ctab-zephyr">🔷 Zephyr Config</button>
+    <button type="button" class="cfg-tab-btn" onclick="switchCfgTab('uitabs')" id="ctab-uitabs" style="margin-left:auto;">🎛️ Tabs</button>
+  </div>
+
+  <div style="display:flex;flex:1;min-height:0;">
+  <div class="features-left" style="width:460px;padding:16px;gap:14px;">
+
+    <!-- Panel: Features -->
+    <div id="cfgFeatures" style="display:flex;flex-direction:column;gap:10px;">
+      <div class="hint">Run Python, Node.js, or shell scripts directly from the executor.</div>
+      <div class="feat-form" id="featForm" style="display:none;">
+        <h3 id="featFormTitle">Add Feature</h3>
+        <input type="hidden" id="ff_index" value="-1" />
+        <div class="field"><label>Name</label><input type="text" id="ff_name" placeholder="e.g. Seed Test Data" /></div>
+        <div class="field"><label>Description</label><input type="text" id="ff_desc" placeholder="(optional)" /></div>
+        <div class="field"><label>Runtime</label>
+          <select id="ff_runtime">
+            <option value="python">Python</option>
+            <option value="node">Node.js</option>
+            <option value="shell">Shell / bash</option>
+          </select>
+        </div>
+        <div class="field"><label>Script Path</label><input type="text" id="ff_script" placeholder="/path/to/script.py" /></div>
+        <div class="field"><label>Working Directory</label><input type="text" id="ff_cwd" placeholder="(defaults to script folder)" /></div>
+        <div class="field"><label>Arguments</label><input type="text" id="ff_args" placeholder="e.g. --env=qa3 --dry-run" /></div>
+        <div class="feat-form-actions">
+          <button type="button" class="btn btn-sm" onclick="cancelFeatForm()">Cancel</button>
+          <button type="button" class="btn btn-run" onclick="saveFeatForm()" style="padding:6px 16px;font-size:12px;">Save</button>
+        </div>
+      </div>
+      <div class="action-row">
+        <button type="button" class="btn btn-run" id="featRunBtn" onclick="runFeature()" disabled>▶ RUN</button>
+        <button type="button" class="btn btn-stop" id="featStopBtn" onclick="stopTests()" disabled>■ STOP</button>
+        <button type="button" class="btn btn-sm" style="margin-left:auto;" onclick="showFeatAddForm()">+ Add</button>
+      </div>
+      <div id="featList" style="display:flex;flex-direction:column;gap:8px;"></div>
+    </div>
+
+    <!-- Panel: Git Commands -->
+    <div id="cfgGit" style="display:none;flex-direction:column;gap:10px;">
+      <div class="hint">Configure git commands and run them in your repo with a single click.</div>
+      <div class="feat-form" id="gitForm" style="display:none;">
+        <h3 id="gitFormTitle">Add Git Command</h3>
+        <input type="hidden" id="gf_index" value="-1" />
+        <div class="field"><label>Name</label><input type="text" id="gf_name" placeholder="e.g. Pull Latest" /></div>
+        <div class="field"><label>Description</label><input type="text" id="gf_desc" placeholder="(optional)" /></div>
+        <div class="field">
+          <label>Git Command</label>
+          <input type="text" id="gf_cmd" placeholder="e.g. git pull origin main" style="font-family:'JetBrains Mono',monospace;" />
+          <div class="hint">Full command, e.g. <code>git pull</code> · <code>git status</code> · <code>git log --oneline -10</code></div>
+        </div>
+        <div class="feat-form-actions">
+          <button type="button" class="btn btn-sm" onclick="cancelGitForm()">Cancel</button>
+          <button type="button" class="btn btn-run" onclick="saveGitForm()" style="padding:6px 16px;font-size:12px;">Save</button>
+        </div>
+      </div>
+      <div class="action-row">
+        <span id="gitRepoLabel" style="font-size:11px;color:var(--text-dim);"></span>
+        <button type="button" class="btn btn-sm" style="margin-left:auto;" onclick="showGitAddForm()">+ Add Command</button>
+      </div>
+      <div id="gitCmdList" style="display:flex;flex-direction:column;gap:8px;"></div>
+    </div>
+
+    <!-- Panel: CLI Tools -->
+    <div id="cfgTools" style="display:none;flex-direction:column;gap:10px;">
+      <div style="display:flex;align-items:center;gap:8px;">
+        <span class="hint" style="margin:0;">These become "Custom Options" controls on the Executor tab</span>
+        <button class="btn btn-sm" style="margin-left:auto;flex-shrink:0;" onclick="showAddForm()">+ Add Tool</button>
+      </div>
+      <div class="tool-form" id="toolForm" style="display:none;">
+        <h3 id="toolFormTitle">Add New Tool</h3>
+        <input type="hidden" id="toolFormIndex" value="-1" />
+        <div class="tool-form-grid">
+          <div class="field"><label>Label</label><input type="text" id="tf_label" placeholder="e.g. Environment" /></div>
+          <div class="field"><label>CLI Flag</label><input type="text" id="tf_flag" placeholder="e.g. --env" /></div>
+          <div class="field"><label>Type</label>
+            <select id="tf_type" onchange="onToolTypeChange()">
+              <option value="checkbox">checkbox</option>
+              <option value="dropdown">dropdown</option>
+              <option value="text">text</option>
+            </select>
+          </div>
+          <div class="field" id="tf_default_wrap"><label>Default</label><input type="text" id="tf_default" placeholder="leave blank for none" /></div>
+          <div class="field full" id="tf_values_wrap" style="display:none;"><label>Values (comma-separated)</label><input type="text" id="tf_values" placeholder="e.g. qa3, qa4, int, prod" /></div>
+          <div class="field full" id="tf_placeholder_wrap" style="display:none;"><label>Placeholder</label><input type="text" id="tf_placeholder" placeholder="e.g. /path/to/file" /></div>
+        </div>
+        <div class="tool-form-actions">
+          <button type="button" class="btn btn-sm" onclick="cancelToolForm()">Cancel</button>
+          <button type="button" class="btn btn-run" onclick="saveToolForm()" style="padding:6px 16px;font-size:12px;">Save</button>
+        </div>
+      </div>
+      <div id="toolsList"></div>
+    </div>
+
+    <!-- Panel: Field Mapping -->
+    <div id="cfgMapping" style="display:none;flex-direction:column;gap:20px;">
+      <div class="section-block" style="border-radius:var(--radius-lg);overflow:hidden;border-color:rgba(137,180,250,0.25);">
+        <div class="section-title" style="background:rgba(137,180,250,0.08);">
+          <span class="stitle-icon">📋</span>Test Case Upload — Field Mapping
+        </div>
+        <div class="section-content" style="flex-direction:column;gap:10px;">
+          <div class="hint">Map your CSV column headers to Jira/Zephyr fields. Case-sensitive. Leave blank to skip.</div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
+            <div class="field" style="grid-column:1/-1;"><label>Story ID column — groups tests into sub-folders &amp; links to story</label><input type="text" id="m_story_id" placeholder="e.g. Story ID, Epic Key" /></div>
+            <div class="field"><label>Summary / Name * (required)</label><input type="text" id="m_summary" placeholder="e.g. Test Name" /></div>
+            <div class="field"><label>Description</label><input type="text" id="m_description" placeholder="e.g. Description" /></div>
+            <div class="field"><label>Priority</label><input type="text" id="m_priority" placeholder="e.g. Priority" /></div>
+            <div class="field"><label>Labels</label><input type="text" id="m_labels" placeholder="e.g. Tags" /></div>
+            <div class="field"><label>Components</label><input type="text" id="m_components" placeholder="e.g. Component" /></div>
+            <div class="field"><label>Issue Type Name</label><input type="text" id="m_issue_type" placeholder="Test" /></div>
+            <div class="field">
+              <label>Issue Type ID <span style="font-weight:400;color:var(--green);">(paste numeric ID — most reliable)</span></label>
+              <input type="text" id="m_issue_type_id" placeholder="e.g. 19100" style="font-family:'JetBrains Mono',monospace;" />
+              <div class="hint">Get from: /rest/api/latest/project/BBX → issueTypes[].id</div>
+            </div>
+          </div>
+          <div class="mapping-group-title">Zephyr Test Steps</div>
+          <div class="field"><label>Steps Format</label>
+            <select id="m_steps_format" onchange="onMappingStepsFormatChange()">
+              <option value="columns">Numbered columns — Step Action 1, Step Data 1, Expected Result 1…</option>
+              <option value="rows">One step per row (same Summary = same test case)</option>
+              <option value="single_col">All steps in one column (newline-separated)</option>
+              <option value="none">No steps</option>
+            </select>
+          </div>
+          <div id="m_columns_fields" style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;">
+            <div class="field"><label>Step Action prefix</label><input type="text" id="m_step_action" placeholder="Step Action" /></div>
+            <div class="field"><label>Step Data prefix</label><input type="text" id="m_step_data" placeholder="Step Data" /></div>
+            <div class="field"><label>Expected Result prefix</label><input type="text" id="m_step_expected" placeholder="Expected Result" /></div>
+          </div>
+          <div id="m_single_col_fields" style="display:none;">
+            <div class="field"><label>Steps column</label><input type="text" id="m_step_single" placeholder="Steps" /></div>
+          </div>
+          <div class="mapping-group-title" style="margin-top:4px;">
+            Custom Jira Fields
+            <span style="font-size:10px;font-weight:400;color:var(--text-dim);text-transform:none;letter-spacing:0;margin-left:6px;">Map any CSV column → any Jira field (e.g. customfield_10001)</span>
+          </div>
+          <div id="customFieldRows" style="display:flex;flex-direction:column;gap:6px;"></div>
+          <button class="btn btn-sm" onclick="addCustomFieldRow()" style="align-self:flex-start;">+ Add Field</button>
+          <div class="action-row">
+            <button class="btn btn-sm" onclick="saveTcMapping()">💾 Save Test Case Mapping</button>
+            <button class="btn btn-sm" onclick="loadMappingConfig()">↺ Reload</button>
+            <span id="mappingSaveStatus" style="font-size:11px;color:var(--text-dim);margin-left:6px;"></span>
+          </div>
+        </div>
+      </div>
+
+      <div class="section-block" style="border-radius:var(--radius-lg);overflow:hidden;border-color:rgba(166,227,161,0.25);">
+        <div class="section-title" style="background:rgba(166,227,161,0.08);">
+          <span class="stitle-icon">📊</span>Results Upload — Field Mapping
+        </div>
+        <div class="section-content" style="flex-direction:column;gap:10px;">
+          <div class="hint">Map CSV columns used when bulk-uploading execution results.</div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
+            <div class="field"><label>Issue Key column</label><input type="text" id="rm_issue_key" placeholder="Issue Key" /></div>
+            <div class="field"><label>Status column</label><input type="text" id="rm_status" placeholder="Status" /></div>
+            <div class="field"><label>Comment column</label><input type="text" id="rm_comment" placeholder="Comment" /></div>
+            <div class="field"><label>Attachment Path column</label><input type="text" id="rm_attach_path" placeholder="Attachment Path" /></div>
+          </div>
+          <div class="hint">Status: <code>pass</code> <code>fail</code> <code>wip</code> <code>blocked</code> · Attachment Path: local file path per test row</div>
+          <div class="field"><label>Update test steps to match execution status?</label>
+            <select id="rm_update_steps">
+              <option value="true">Yes — set all steps to same status</option>
+              <option value="false">No — leave steps unchanged</option>
+            </select>
+          </div>
+          <div class="action-row">
+            <button class="btn btn-sm" onclick="saveResultsMapping()">💾 Save Results Mapping</button>
+            <button class="btn btn-sm" onclick="loadMappingConfig()">↺ Reload</button>
+            <span id="mappingSaveStatus2" style="font-size:11px;color:var(--text-dim);margin-left:6px;"></span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Panel: Zephyr Config -->
+    <div id="cfgZephyr" style="display:none;flex-direction:column;gap:10px;">
+      <div class="field"><label>Jira Base URL</label><input type="text" id="z_jira_url" placeholder="https://yourcompany.atlassian.net" /></div>
+      <div class="field"><label>Jira Username (email)</label><input type="text" id="z_username" placeholder="you@company.com" /></div>
+      <div class="field"><label>Jira API Token</label><input type="password" id="z_api_token" placeholder="Jira API token (for projects/versions)" /></div>
+      <div class="field"><label>Zephyr Access Key</label><input type="password" id="z_access_key" placeholder="zapiAccessKey from Zephyr app" /></div>
+      <div class="field"><label>Zephyr Secret Key</label><input type="password" id="z_secret_key" placeholder="Secret key from Zephyr app" /></div>
+      <div class="field"><label>Atlassian Account ID</label><input type="text" id="z_account_id" placeholder="e.g. 5b10a2844c20165700ede21g" /></div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
+        <div class="field">
+          <label>Project Key</label>
+          <input type="text" id="z_project_key" placeholder="e.g. BBX, PROJ, QA" style="text-transform:uppercase;" />
+          <div class="hint">Short key — used in Zephyr API &amp; issue creation</div>
+        </div>
+        <div class="field">
+          <label>Project Name</label>
+          <input type="text" id="z_project_name" placeholder="e.g. BBX QA Automation" />
+          <div class="hint">Full display name shown in context banners</div>
+        </div>
+      </div>
+      <div class="field">
+        <label class="checkbox-label" style="gap:8px;"><input type="checkbox" id="z_verify_ssl" /> Verify SSL certificate</label>
+        <div class="hint">Uncheck if you get SSL certificate errors</div>
+      </div>
+      <div class="action-row">
+        <button class="btn btn-run" onclick="saveZephyrConfig()">💾 Save</button>
+        <button class="btn btn-sm" onclick="testZephyrConnection()">⚡ Test Connection</button>
+        <span id="zConnectStatus" style="font-size:11px;color:var(--text-dim);margin-left:4px;"></span>
+      </div>
+    </div>
+
+    <!-- Panel: UI Tab Visibility -->
+    <div id="cfgUiTabs" style="display:none;flex-direction:column;gap:14px;">
+      <div class="hint">Show or hide tabs and config sections. Changes apply instantly and are saved to config.</div>
+
+      <div style="font-size:11px;font-weight:600;color:var(--text-dim);text-transform:uppercase;letter-spacing:.05em;">Main Navigation</div>
+      <div style="display:flex;flex-direction:column;gap:8px;">
+        <label class="checkbox-label" style="gap:10px;cursor:pointer;">
+          <input type="checkbox" id="uitab_dashboard" onchange="saveUiTabs()" />
+          <span>📊 Reports Dashboard</span>
+        </label>
+        <label class="checkbox-label" style="gap:10px;cursor:pointer;">
+          <input type="checkbox" id="uitab_zephyr" onchange="saveUiTabs()" />
+          <span>🔷 Test Management</span>
+        </label>
+      </div>
+
+      <div style="font-size:11px;font-weight:600;color:var(--text-dim);text-transform:uppercase;letter-spacing:.05em;margin-top:4px;">Config Sub-Tabs</div>
+      <div style="display:flex;flex-direction:column;gap:8px;">
+        <label class="checkbox-label" style="gap:10px;cursor:pointer;">
+          <input type="checkbox" id="uitab_cfg_git" onchange="saveUiTabs()" />
+          <span>🔀 Git</span>
+        </label>
+        <label class="checkbox-label" style="gap:10px;cursor:pointer;">
+          <input type="checkbox" id="uitab_cfg_tools" onchange="saveUiTabs()" />
+          <span>🔧 CLI Tools</span>
+        </label>
+        <label class="checkbox-label" style="gap:10px;cursor:pointer;">
+          <input type="checkbox" id="uitab_cfg_mapping" onchange="saveUiTabs()" />
+          <span>🗂️ Field Mapping</span>
+        </label>
+        <label class="checkbox-label" style="gap:10px;cursor:pointer;">
+          <input type="checkbox" id="uitab_cfg_zephyr" onchange="saveUiTabs()" />
+          <span>🔷 Zephyr Config</span>
+        </label>
+      </div>
+      <div style="font-size:11px;color:var(--text-dim);">Executor and Config are always visible and cannot be hidden.</div>
+    </div>
+
+  </div><!-- end features-left -->
+
+  <div class="features-right">
+    <div class="log-header">
+      <span class="log-title">Feature Output</span>
+      <div class="log-actions">
+        <button type="button" class="btn btn-sm" onclick="clearFeatLog()">Clear</button>
+        <button type="button" class="btn btn-sm" onclick="featScrollToBottom()">↓ Bottom</button>
+      </div>
+    </div>
+    <div id="features-log" style="flex:1;overflow-y:auto;padding:12px 16px;font-family:'JetBrains Mono','Menlo',monospace;font-size:12px;line-height:1.6;white-space:pre-wrap;word-break:break-all;"></div>
+  </div>
+
+  </div><!-- end content+log row -->
+</div>

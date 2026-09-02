@@ -1036,6 +1036,7 @@
   <!-- Horizontal sub-tab bar -->
   <div style="background:var(--surface);border-bottom:1px solid var(--border);display:flex;gap:2px;padding:8px 16px 0;flex-shrink:0;">
     <button type="button" class="cfg-tab-btn active" onclick="switchCfgTab('features')" id="ctab-features">🔌 Features</button>
+    <button type="button" class="cfg-tab-btn" onclick="switchCfgTab('git')" id="ctab-git">🔀 Git</button>
     <button type="button" class="cfg-tab-btn" onclick="switchCfgTab('tools')" id="ctab-tools">🔧 CLI Tools</button>
     <button type="button" class="cfg-tab-btn" onclick="switchCfgTab('mapping')" id="ctab-mapping">🗂️ Field Mapping</button>
     <button type="button" class="cfg-tab-btn" onclick="switchCfgTab('zephyr')" id="ctab-zephyr">🔷 Zephyr Config</button>
@@ -1075,6 +1076,35 @@
         <button type="button" class="btn btn-sm" style="margin-left:auto;" onclick="showFeatAddForm()">+ Add</button>
       </div>
       <div id="featList" style="display:flex;flex-direction:column;gap:8px;"></div>
+    </div>
+
+    <!-- Panel: Git Commands -->
+    <div id="cfgGit" style="display:none;flex-direction:column;gap:10px;">
+      <div class="hint">Configure git commands and run them in your repo with a single click.</div>
+
+      <!-- Add / Edit form -->
+      <div class="feat-form" id="gitForm" style="display:none;">
+        <h3 id="gitFormTitle">Add Git Command</h3>
+        <input type="hidden" id="gf_index" value="-1" />
+        <div class="field"><label>Name</label><input type="text" id="gf_name" placeholder="e.g. Pull Latest" /></div>
+        <div class="field"><label>Description</label><input type="text" id="gf_desc" placeholder="(optional)" /></div>
+        <div class="field">
+          <label>Git Command</label>
+          <input type="text" id="gf_cmd" placeholder="e.g. git pull origin main"
+                 style="font-family:'JetBrains Mono',monospace;" />
+          <div class="hint">Full command, e.g. <code>git pull</code> · <code>git status</code> · <code>git log --oneline -10</code></div>
+        </div>
+        <div class="feat-form-actions">
+          <button type="button" class="btn btn-sm" onclick="cancelGitForm()">Cancel</button>
+          <button type="button" class="btn btn-run" onclick="saveGitForm()" style="padding:6px 16px;font-size:12px;">Save</button>
+        </div>
+      </div>
+
+      <div class="action-row">
+        <span id="gitRepoLabel" style="font-size:11px;color:var(--text-dim);"></span>
+        <button type="button" class="btn btn-sm" style="margin-left:auto;" onclick="showGitAddForm()">+ Add Command</button>
+      </div>
+      <div id="gitCmdList" style="display:flex;flex-direction:column;gap:8px;"></div>
     </div>
 
     <!-- Panel: CLI Tools -->
@@ -1341,16 +1371,15 @@
         <table class="history-tbl" id="dashTestTable">
           <thead style="position:sticky;top:0;z-index:2;">
             <tr>
-              <th style="cursor:pointer;" onclick="sortTests('suite')">Suite ↕</th>
-              <th style="cursor:pointer;" onclick="sortTests('name')">Test Name ↕</th>
+              <th style="cursor:pointer;" onclick="sortTests('file')">File ↕</th>
+              <th style="cursor:pointer;" onclick="sortTests('method')">Test Method ↕</th>
               <th>Status</th>
               <th style="cursor:pointer;" onclick="sortTests('duration')">Duration ↕</th>
               <th>Run At</th>
-              <th>History</th>
             </tr>
           </thead>
           <tbody id="dashTestTbody">
-            <tr><td colspan="6" style="text-align:center;color:var(--text-dim);padding:32px;">
+            <tr><td colspan="5" style="text-align:center;color:var(--text-dim);padding:32px;">
               No Allure results found — run tests with <code>--alluredir</code> enabled
             </td></tr>
           </tbody>
@@ -2506,6 +2535,132 @@ async function runFeature() {
 // Reset run context to executor after a feature run finishes
 // (patched into existing stream status handler below)
 
+// ── Git Commands ──────────────────────────────────────────────────────────────
+let _gitCmds = [];
+let _gitRepo  = '';
+
+async function loadGitCommands() {
+  const cfg  = await fetch('/api/config').then(r => r.json()).catch(() => ({}));
+  _gitCmds   = cfg.git_commands || [];
+  _gitRepo   = cfg.repo_root    || '';
+  const lbl  = document.getElementById('gitRepoLabel');
+  if (lbl) lbl.textContent = _gitRepo ? `Repo: ${_gitRepo.split(/[\\/]/).pop()}` : 'No repo configured';
+  renderGitCommands();
+}
+
+function renderGitCommands() {
+  const list = document.getElementById('gitCmdList');
+  if (!_gitCmds.length) {
+    list.innerHTML = '<div class="empty-state">No git commands yet — click "+ Add Command" to create one.</div>';
+    return;
+  }
+  list.innerHTML = _gitCmds.map((g, i) => `
+    <div class="feature-card" style="border-color:var(--border);">
+      <div class="feature-card-top">
+        <span class="feature-card-name">${escHtml(g.name || 'Unnamed')}</span>
+        <span class="badge" style="background:rgba(137,180,250,0.15);color:#89b4fa;border:1px solid rgba(137,180,250,0.3);">git</span>
+      </div>
+      ${g.description ? `<div class="feature-card-desc">${escHtml(g.description)}</div>` : ''}
+      <div class="feature-card-script">${escHtml(g.command || '')}</div>
+      <div class="feature-card-actions">
+        <button type="button" class="btn btn-run" style="padding:4px 14px;font-size:11px;"
+                onclick="runGitCmd(${i})">▶ Run</button>
+        <button type="button" class="btn btn-sm" onclick="editGitCmd(${i})">Edit</button>
+        <button type="button" class="btn btn-sm" style="color:var(--red);border-color:var(--red);"
+                onclick="deleteGitCmd(${i})">Delete</button>
+      </div>
+    </div>`).join('');
+}
+
+function showGitAddForm() {
+  document.getElementById('gf_index').value = '-1';
+  document.getElementById('gitFormTitle').textContent = 'Add Git Command';
+  document.getElementById('gf_name').value = '';
+  document.getElementById('gf_desc').value = '';
+  document.getElementById('gf_cmd').value  = '';
+  document.getElementById('gitForm').style.display = '';
+  document.getElementById('gf_name').focus();
+}
+
+function editGitCmd(i) {
+  const g = _gitCmds[i];
+  document.getElementById('gf_index').value = i;
+  document.getElementById('gitFormTitle').textContent = 'Edit Git Command';
+  document.getElementById('gf_name').value = g.name    || '';
+  document.getElementById('gf_desc').value = g.description || '';
+  document.getElementById('gf_cmd').value  = g.command || '';
+  document.getElementById('gitForm').style.display = '';
+  document.getElementById('gf_name').focus();
+}
+
+function cancelGitForm() {
+  document.getElementById('gitForm').style.display = 'none';
+}
+
+async function saveGitForm() {
+  const name = document.getElementById('gf_name').value.trim();
+  const cmd  = document.getElementById('gf_cmd').value.trim();
+  if (!name) { alert('Name is required.'); return; }
+  if (!cmd)  { alert('Git command is required.'); return; }
+
+  const entry = {
+    name,
+    description: document.getElementById('gf_desc').value.trim(),
+    command: cmd,
+  };
+  const idx = parseInt(document.getElementById('gf_index').value, 10);
+  if (idx >= 0) _gitCmds[idx] = entry;
+  else          _gitCmds.push(entry);
+
+  await persistGitCommands();
+  cancelGitForm();
+  renderGitCommands();
+}
+
+async function deleteGitCmd(i) {
+  if (!confirm(`Delete "${_gitCmds[i].name}"?`)) return;
+  _gitCmds.splice(i, 1);
+  await persistGitCommands();
+  renderGitCommands();
+}
+
+async function persistGitCommands() {
+  const res = await fetch('/api/git/commands', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ git_commands: _gitCmds }),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    alert('Save failed: ' + (err.error || 'unknown error'));
+  }
+}
+
+async function runGitCmd(i) {
+  const g = _gitCmds[i];
+  if (!g) return;
+
+  const repo = _gitRepo ||
+    (await fetch('/api/config').then(r => r.json()).catch(() => ({}))).repo_root || '';
+
+  clearFeatLog();
+  _runContext = 'features';
+  setRunning(true);
+
+  const res = await fetch('/api/git/run', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ command: g.command, repo }),
+  });
+
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    appendLine('✗  ' + (err.error || 'Failed to start'), 'failed');
+    _runContext = 'executor';
+    setRunning(false);
+  }
+}
+
 // ── Tools management ──────────────────────────────────────────────────────────
 let _tools = [];
 
@@ -2798,11 +2953,13 @@ function _renderDailyChart(tests, summaries, runHistory) {
   const id = 'chartDailyRuns';
   const ch = Chart.getChart(id); if (ch) ch.destroy();
 
-  // Gather all timestamps to determine date range
+  // Gather all timestamps to determine date range — runHistory is authoritative (server clock)
   const allTs = [];
-  if (summaries.length) summaries.forEach(s => { if (s.startTime) allTs.push(s.startTime); });
-  else if (tests.length) tests.forEach(t => { if (t.start) allTs.push(t.start); });
-  else runHistory.forEach(r => { if (r.ts) allTs.push(r.ts); });
+  runHistory.forEach(r => { if (r.ts) allTs.push(r.ts); });
+  if (!allTs.length) {
+    if (summaries.length) summaries.forEach(s => { if (s.startTime) allTs.push(s.startTime); });
+    else tests.forEach(t => { if (t.start) allTs.push(t.start); });
+  }
 
   // Pick window: at least 7 days, expand to cover all data up to 60 days
   const now = Date.now();
@@ -2838,14 +2995,9 @@ function _renderDailyChart(tests, summaries, runHistory) {
     return st;
   };
 
-  if (summaries.length) {
-    summaries.forEach(s => {
-      const ts = s.startTime || 0;
-      (s.results || []).forEach(r => bucket(ts, normalise(r.status)));
-    });
-  } else if (tests.length) {
-    tests.forEach(t => { if (t.start) bucket(t.start, t.status || 'unknown'); });
-  } else {
+  // Always bucket from runHistory first — it has accurate server-side timestamps and stats.
+  // Fall back to summaries or individual test timestamps only when no history exists.
+  if (runHistory.length) {
     runHistory.forEach(r => {
       const ts = r.ts || 0; if (!ts) return;
       const date = new Date(ts); date.setHours(0, 0, 0, 0);
@@ -2857,6 +3009,13 @@ function _renderDailyChart(tests, summaries, runHistory) {
       byDay.broken[idx]  += s.broken  || 0;
       byDay.skipped[idx] += s.skipped || 0;
     });
+  } else if (summaries.length) {
+    summaries.forEach(s => {
+      const ts = s.startTime || 0;
+      (s.results || []).forEach(r => bucket(ts, normalise(r.status)));
+    });
+  } else {
+    tests.forEach(t => { if (t.start) bucket(t.start, t.status || 'unknown'); });
   }
 
   const bar = c => ({ borderColor: c, backgroundColor: c + '44', borderWidth: 2, borderRadius: 3, borderSkipped: false });
@@ -2896,10 +3055,18 @@ function _renderRunTrend(summaries, allureTrend, runHistory) {
 
   let labels, passed, failed, broken, skipped;
 
-  if (summaries.length) {
-    // Smart-reporter: each summary = one run, aggregate per-run counts
+  // runHistory is the authoritative source — it has accurate server-side timestamps.
+  // Fall back to summaries / allureTrend only when no recorded history exists.
+  if (runHistory.length) {
+    const slice = [...runHistory].reverse().slice(-20);
+    labels  = slice.map(r => r.date?.slice(5, 16) || '');
+    passed  = slice.map(r => r.stats?.passed  || 0);
+    failed  = slice.map(r => r.stats?.failed  || 0);
+    broken  = slice.map(r => r.stats?.broken  || 0);
+    skipped = slice.map(r => r.stats?.skipped || 0);
+  } else if (summaries.length) {
     const slice = summaries.slice(-20);
-    labels  = slice.map((s, i) => {
+    labels  = slice.map(s => {
       const d = new Date(s.startTime || 0);
       return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) + '\n' +
              d.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
@@ -2924,12 +3091,7 @@ function _renderRunTrend(summaries, allureTrend, runHistory) {
     broken  = slice.map(b => b.data?.broken  ?? b.broken  ?? 0);
     skipped = slice.map(b => b.data?.skipped ?? b.skipped ?? 0);
   } else {
-    const slice = [...runHistory].reverse().slice(-20);
-    labels  = slice.map(r => r.date?.slice(5, 16) || '');
-    passed  = slice.map(r => r.stats?.passed  || 0);
-    failed  = slice.map(r => r.stats?.failed  || 0);
-    broken  = slice.map(r => r.stats?.broken  || 0);
-    skipped = slice.map(r => r.stats?.skipped || 0);
+    labels = []; passed = []; failed = []; broken = []; skipped = [];
   }
 
   new Chart(document.getElementById(id).getContext('2d'), {
@@ -2993,7 +3155,7 @@ function _renderTestTable(tests) {
   document.getElementById('dashTestCount').textContent = `${tests.length} tests`;
 
   if (!tests.length) {
-    tbody.innerHTML = `<tr><td colspan="6" style="text-align:center;color:var(--text-dim);padding:32px;">
+    tbody.innerHTML = `<tr><td colspan="5" style="text-align:center;color:var(--text-dim);padding:32px;">
       ${_dashTests.length ? 'No tests match the filter' : 'No Allure results found — run tests with <code>--alluredir</code> enabled'}
     </td></tr>`;
     return;
@@ -3007,8 +3169,8 @@ function _renderTestTable(tests) {
     const runAt = t.start
       ? new Date(t.start).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })
       : '—';
-    const suite = escHtml(t.suite || t.fullName?.split('::').slice(-2,-1)[0] || '—');
-    const name  = escHtml(t.name  || t.fullName || '—');
+    const suite = escHtml(t.file  || t.fullName?.split('#')[0]?.replace(/^\./, '') || t.suite || '—');
+    const name  = escHtml(t.method || t.fullName?.split('#').pop() || t.name || '—');
 
     // Build history dots — match by fullName or name
     const histKey = t.fullName || ('::' + t.suite + '::' + t.name);
@@ -3024,7 +3186,6 @@ function _renderTestTable(tests) {
       <td><span class="tbl-status-badge ${s}">${SI[s] || '?'} ${s}</span></td>
       <td class="tbl-num" style="color:var(--text-muted);">${_fmtDur(t.duration)}</td>
       <td style="font-size:11px;color:var(--text-dim);white-space:nowrap;">${runAt}</td>
-      <td style="white-space:nowrap;">${histCell}</td>
     </tr>`;
   }).join('');
 }
@@ -3096,13 +3257,14 @@ function switchMappingTab(tab) {
 }
 
 function switchCfgTab(tab) {
-  const panels = { features: 'cfgFeatures', tools: 'cfgTools', mapping: 'cfgMapping', zephyr: 'cfgZephyr' };
+  const panels = { features: 'cfgFeatures', git: 'cfgGit', tools: 'cfgTools', mapping: 'cfgMapping', zephyr: 'cfgZephyr' };
   Object.entries(panels).forEach(([key, id]) => {
     const panel = document.getElementById(id);
-    if (panel) panel.style.display = key === tab ? (key === 'mapping' ? 'flex' : 'flex') : 'none';
+    if (panel) panel.style.display = key === tab ? 'flex' : 'none';
     document.getElementById('ctab-' + key)?.classList.toggle('active', key === tab);
   });
   if (tab === 'mapping') onMappingStepsFormatChange();
+  if (tab === 'git')     loadGitCommands();
 }
 
 // ── Zephyr sub-tabs (Import / Upload Results / Executions) ────────────────────
