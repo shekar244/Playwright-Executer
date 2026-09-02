@@ -2,12 +2,13 @@
 <div id="page-dashboard">
   <div class="dash-body">
 
+    <!-- ── Title bar ──────────────────────────────────────────────────────── -->
     <div class="dash-title">
       <span>📊</span> Test Dashboard
       <span class="dash-sub" id="dashSubtitle">— select a repo and run tests to see results</span>
       <div style="margin-left:auto;display:flex;gap:8px;align-items:center;">
-        <input type="text" id="dashSearch" placeholder="Search tests…" oninput="filterTests()" style="width:200px;font-size:12px;" />
-        <select id="dashStatusFilter" onchange="filterTests()" style="width:120px;font-size:12px;">
+        <input type="text" id="dashSearch" placeholder="Search tests…" oninput="filterTests()" style="width:180px;font-size:12px;" />
+        <select id="dashStatusFilter" onchange="filterTests()" style="width:110px;font-size:12px;">
           <option value="">All Status</option>
           <option value="passed">Passed</option>
           <option value="failed">Failed</option>
@@ -19,44 +20,67 @@
       </div>
     </div>
 
-    <div class="dash-stats">
-      <div class="stat-pill s-total"><div class="stat-pill-label">Total Tests</div><div class="stat-pill-value total" id="dashTotal">—</div></div>
-      <div class="stat-pill s-passed"><div class="stat-pill-label">Passed</div><div class="stat-pill-value passed" id="dashPassed">—</div></div>
-      <div class="stat-pill s-failed"><div class="stat-pill-label">Failed</div><div class="stat-pill-value failed" id="dashFailed">—</div></div>
-      <div class="stat-pill s-broken"><div class="stat-pill-label">Broken</div><div class="stat-pill-value broken" id="dashBroken">—</div></div>
-      <div class="stat-pill s-skipped"><div class="stat-pill-label">Skipped</div><div class="stat-pill-value skipped" id="dashSkipped">—</div></div>
-      <div class="stat-pill" style="border-left:2px solid var(--purple);">
-        <div class="stat-pill-label">Avg Duration</div>
-        <div class="stat-pill-value" style="color:var(--purple);font-size:22px;" id="dashAvgDur">—</div>
-      </div>
-      <div class="stat-pill" style="border-left:2px solid var(--teal);">
-        <div class="stat-pill-label">Pass Rate</div>
-        <div class="stat-pill-value" style="color:var(--teal);font-size:22px;" id="dashPassRate">—</div>
-      </div>
-    </div>
+    <!-- ── Section 1: Current Run — 3 equal columns ───────────────────────── -->
+    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:16px;">
 
-    <div style="display:grid;grid-template-columns:1fr 220px 1fr;gap:16px;">
+      <!-- Col 1: Distribution donut -->
       <div class="dash-card">
-        <div class="dash-card-title" id="dailyChartTitle">Tests Run by Day — Last 30 Days</div>
-        <div class="dash-chart-wrap" style="height:210px;"><canvas id="chartDailyRuns"></canvas></div>
-      </div>
-      <div class="dash-card">
-        <div class="dash-card-title">Status Distribution</div>
-        <div class="dash-chart-wrap" style="height:160px;"><canvas id="chartStatusDonut"></canvas></div>
+        <div class="dash-card-title">Current Run Distribution</div>
+        <div class="dash-chart-wrap" style="height:140px;"><canvas id="chartStatusDonut"></canvas></div>
         <div class="dash-legend" id="legendStatus"></div>
       </div>
-      <div class="dash-card">
-        <div class="dash-card-title">Run History Trend</div>
-        <div class="dash-chart-wrap" style="height:210px;"><canvas id="chartRunTrend"></canvas></div>
+
+      <!-- Col 2: Pass / Fail counts -->
+      <div class="dash-card" style="justify-content:space-between;">
+        <div class="dash-card-title">Results</div>
+        <div style="display:flex;flex-direction:column;gap:10px;flex:1;justify-content:center;">
+          <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 12px;background:rgba(255,255,255,0.03);border-radius:6px;border-left:3px solid var(--text-dim);">
+            <span style="font-size:12px;color:var(--text-dim);">Total</span>
+            <span style="font-size:26px;font-weight:700;color:var(--text);" id="dashTotal">—</span>
+          </div>
+          <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 12px;background:rgba(166,227,161,0.06);border-radius:6px;border-left:3px solid var(--green);">
+            <span style="font-size:12px;color:var(--green);">Passed</span>
+            <span style="font-size:26px;font-weight:700;color:var(--green);" id="dashPassed">—</span>
+          </div>
+          <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 12px;background:rgba(243,139,168,0.06);border-radius:6px;border-left:3px solid var(--red);">
+            <span style="font-size:12px;color:var(--red);">Failed</span>
+            <span style="font-size:26px;font-weight:700;color:var(--red);" id="dashFailed">—</span>
+          </div>
+        </div>
       </div>
+
+      <!-- Col 3: Broken / Skipped / Duration / Pass Rate -->
+      <div class="dash-card" style="justify-content:space-between;">
+        <div class="dash-card-title">Performance</div>
+        <div style="display:flex;flex-direction:column;gap:10px;flex:1;justify-content:center;">
+          <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 12px;background:rgba(250,179,135,0.06);border-radius:6px;border-left:3px solid var(--peach);">
+            <span style="font-size:12px;color:var(--peach);">Broken</span>
+            <span style="font-size:26px;font-weight:700;color:var(--peach);" id="dashBroken">—</span>
+          </div>
+          <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 12px;background:rgba(137,180,250,0.06);border-radius:6px;border-left:3px solid var(--accent);">
+            <span style="font-size:12px;color:var(--accent);">Skipped</span>
+            <span style="font-size:26px;font-weight:700;color:var(--accent);" id="dashSkipped">—</span>
+          </div>
+          <div style="display:flex;justify-content:space-between;align-items:center;padding:6px 12px;background:rgba(255,255,255,0.03);border-radius:6px;border-left:3px solid var(--purple);">
+            <span style="font-size:12px;color:var(--text-dim);">Avg Duration</span>
+            <span style="font-size:18px;font-weight:600;color:var(--purple);" id="dashAvgDur">—</span>
+          </div>
+          <div style="display:flex;justify-content:space-between;align-items:center;padding:6px 12px;background:rgba(255,255,255,0.03);border-radius:6px;border-left:3px solid var(--teal);">
+            <span style="font-size:12px;color:var(--text-dim);">Pass Rate</span>
+            <span style="font-size:18px;font-weight:600;color:var(--teal);" id="dashPassRate">—</span>
+          </div>
+        </div>
+      </div>
+
     </div>
 
+    <!-- ── Section 2: Test Cases — Current Run ────────────────────────────── -->
     <div class="dash-table-wrap">
       <div class="dash-table-header">
         <h3>Test Cases — Current Run</h3>
         <span style="font-size:11px;color:var(--text-dim);margin-left:auto;" id="dashTestCount">0 tests</span>
       </div>
-      <div style="overflow-x:auto;max-height:420px;overflow-y:auto;">
+      <div style="overflow-x:auto;max-height:380px;overflow-y:auto;">
         <table class="history-tbl" id="dashTestTable">
           <thead style="position:sticky;top:0;z-index:2;">
             <tr>
@@ -76,6 +100,19 @@
       </div>
     </div>
 
+    <!-- ── Section 3: Tests Run by Day + Run History Trend in one row ────── -->
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;">
+      <div class="dash-card">
+        <div class="dash-card-title" id="dailyChartTitle">Tests Run by Day — Last 7 Days</div>
+        <div class="dash-chart-wrap" style="height:200px;"><canvas id="chartDailyRuns"></canvas></div>
+      </div>
+      <div class="dash-card">
+        <div class="dash-card-title">Run History Trend</div>
+        <div class="dash-chart-wrap" style="height:200px;"><canvas id="chartRunTrend"></canvas></div>
+      </div>
+    </div>
+
+    <!-- ── Section 4: Run History table ──────────────────────────────────── -->
     <div class="dash-table-wrap">
       <div class="dash-table-header">
         <h3>Run History</h3>
