@@ -61,6 +61,15 @@ async function scanRepos(preferredPath) {
     const norm = p => p.replace(/\\/g, '/').toLowerCase();
     const match = repos.find(r => norm(r.path) === norm(preferredPath));
     if (match) { sel.value = match.path; applyRepo(match.path); return; }
+    // Not in scan results but saved in config — inject it so it's always available
+    const name = preferredPath.split(/[/\\]/).filter(Boolean).pop() || preferredPath;
+    const opt  = new Option('📁 ' + name, preferredPath, true, true);
+    sel.add(opt);
+    document.getElementById('repo').value = preferredPath;
+    document.getElementById('repoSubtitle').textContent = '📁 ' + name;
+    document.title = 'Playwright Executor — ' + name;
+    discoverTests();
+    return;
   }
   if (repos.length === 1) { sel.value = repos[0].path; applyRepo(repos[0].path); }
 }
@@ -181,6 +190,7 @@ async function runTests() {
   const repo = document.getElementById('repo').value.trim();
   if (!repo) { alert('Please set the Framework Repository Root first.'); return; }
   clearLog();
+  _runContext = 'executor'; _activeLogEl = document.getElementById('log');
   setRunning(true);
   const body = {
     repo,
@@ -347,7 +357,7 @@ async function persistFeatures() {
 async function runFeature() {
   if (_selectedFeat === null || _selectedFeat === undefined) return;
   const feat = _features[_selectedFeat]; if (!feat) return;
-  clearFeatLog(); _runContext = 'features'; setRunning(true);
+  clearFeatLog(); _runContext = 'features'; _activeLogEl = document.getElementById('features-log'); setRunning(true);
   const res = await fetch('/api/features/run', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ feature: feat }) });
   if (!res.ok) { const err = await res.json().catch(() => ({})); appendLine('✗  ' + (err.error || 'Failed to start'), 'failed'); _runContext = 'executor'; setRunning(false); }
 }
@@ -428,7 +438,12 @@ async function persistGitCommands() {
 async function runGitCmd(i) {
   const g = _gitCmds[i]; if (!g) return;
   const repo = _gitRepo || (await fetch('/api/config').then(r => r.json()).catch(() => ({}))).repo_root || '';
-  clearFeatLog(); _runContext = 'features'; setRunning(true);
+  // Clear git log and use dedicated 'git' context so output goes to git-log panel
+  const gitLogEl = document.getElementById('git-log');
+  if (gitLogEl) gitLogEl.innerHTML = '';
+  _runContext = 'git';
+  _activeLogEl = gitLogEl;  // Pin BEFORE the async fetch so SSE events always find the right div
+  setRunning(true);
   const res = await fetch('/api/git/run', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ command: g.command, repo }) });
   if (!res.ok) { const err = await res.json().catch(() => ({})); appendLine('✗  ' + (err.error || 'Failed to start'), 'failed'); _runContext = 'executor'; setRunning(false); }
 }
@@ -528,6 +543,12 @@ function switchCfgTab(tab) {
     if (panel) panel.style.display = key === tab ? 'flex' : 'none';
     document.getElementById('ctab-' + key)?.classList.toggle('active', key === tab);
   });
+  // Toggle right-side log panel: git tab gets Git Output, everything else gets Feature Output
+  const featPanel = document.getElementById('feat-log-panel');
+  const gitPanel  = document.getElementById('git-log-panel');
+  if (featPanel) featPanel.style.display = tab === 'git' ? 'none' : 'flex';
+  if (gitPanel)  gitPanel.style.display  = tab === 'git' ? 'flex' : 'none';
+
   if (tab === 'mapping') onMappingStepsFormatChange();
   if (tab === 'git')     loadGitCommands();
   if (tab === 'uitabs')  loadUiTabs();

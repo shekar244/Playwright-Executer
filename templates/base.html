@@ -265,6 +265,7 @@ let eventSource = null;
 let autoScroll = true;
 let _runContext = 'executor';
 let _selectedFeat = null;
+let _activeLogEl = null;  // Direct reference to target log div — set at run-start, never clobbered
 
 function escHtml(s) {
   return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
@@ -290,16 +291,17 @@ function classifyLine(line) {
 }
 
 function appendLine(text, cls) {
-  const logId = _runContext === 'features' ? 'features-log' : 'log';
-  const log = document.getElementById(logId);
+  // Use the pinned element reference if available, else fall back to context string
+  const log = _activeLogEl || document.getElementById(
+    _runContext === 'features' ? 'features-log' :
+    _runContext === 'git'      ? 'git-log'       : 'log'
+  );
+  if (!log) return;
   const span = document.createElement('span');
   span.className = 'log-line log-' + (cls || 'default');
   span.textContent = text;
   log.appendChild(span);
-  if (autoScroll) {
-    if (_runContext === 'features') featScrollToBottom();
-    else scrollToBottom();
-  }
+  if (autoScroll) log.scrollTop = log.scrollHeight;
 }
 
 function clearLog()     { document.getElementById('log').innerHTML = ''; }
@@ -356,7 +358,7 @@ function connectStream() {
     const s = JSON.parse(e.data);
     appendLine('─'.repeat(72), 'sep');
     if (s === 'passed') {
-      appendLine(_runContext === 'features' ? '✓  Done.' : '✓  All tests passed!', 'passed');
+      appendLine((_runContext === 'features' || _runContext === 'git') ? '✓  Done.' : '✓  All tests passed!', 'passed');
       setStatus('passed', 'PASSED');
     } else if (s === 'cancelled') {
       appendLine('⚠  Execution cancelled by user.', 'warning');
@@ -368,6 +370,7 @@ function connectStream() {
     }
     setRunning(false);
     _runContext = 'executor';
+    _activeLogEl = null;  // Release the pinned log so next run can set its own
   });
   eventSource.addEventListener('done', e => {
     refreshReport();
