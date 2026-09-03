@@ -65,6 +65,7 @@ function onZephyrCycleChange() {
   _zCycleId  = document.getElementById('z_cycle').value;
   _zFolderId = '';
   updateZephyrBreadcrumb(); _updateZephyrContextBanners();
+  if (_zCycleId) loadZephyrFolders();
 }
 
 async function loadZephyrCycles() {
@@ -74,6 +75,7 @@ async function loadZephyrCycles() {
   const pRes = await fetch(`/api/zephyr/versions?projectKey=${encodeURIComponent(_zProject)}`);
   let projectId = '';
   if (pRes.ok) { const pData = await pRes.json(); const arr = Array.isArray(pData) ? pData : (pData.values || []); if (arr.length) projectId = String(arr[0].projectId || ''); }
+  if (projectId) _zProjectId = projectId;  // persist so loadZephyrFolders can use it
   const params = new URLSearchParams({ versionId });
   if (projectId) params.set('projectId', projectId);
   const res = await fetch(`/api/zephyr/cycles?${params}`);
