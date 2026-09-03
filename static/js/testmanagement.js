@@ -2,13 +2,13 @@
 
 let _zProject     = '';
 let _zProjectId   = '';
-let _zProjectName = '';
+var _zProjectName = '';   // var = window property so executor.js can write to it
 let _zVersionId   = '-1';
 let _zCycleId     = '';
 let _zFolderId    = '';
 let _zFile        = null;
-let _csvMapping   = {};
-let _csvHeaders   = [];
+var _csvMapping   = {};   // var = window property so executor.js loadMappingConfig can update it
+var _csvHeaders   = [];   // var = window property so executor.js can share header state
 let _createFile   = null;
 let _importKeys   = [];
 let _filterIssues = [];

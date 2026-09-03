@@ -152,7 +152,7 @@ def get_repos():
                 key = str(item.resolve())
                 if item.is_dir() and key not in seen and _looks_like_playwright_repo(item):
                     seen.add(key)
-                    repos.append({"name": item.name, "path": str(item)})
+                    repos.append({"name": item.name, "path": str(item.resolve())})
         except PermissionError:
             pass
     return jsonify({"repos": repos})

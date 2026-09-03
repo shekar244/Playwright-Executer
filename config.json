@@ -31,7 +31,15 @@
     }
   ],
   "zephyr": {
-    "project_name": ""
+    "jira_url": "",
+    "username": "",
+    "api_token": "",
+    "access_key": "",
+    "secret_key": "",
+    "account_id": "",
+    "project_key": "ABC",
+    "project_name": "123",
+    "verify_ssl": false
   },
   "zephyr_tc_mapping": {
     "story_id": "",
@@ -68,10 +76,10 @@
   ],
   "ui_tabs": {
     "dashboard": true,
-    "zephyr": false,
+    "zephyr": true,
     "cfg_git": true,
     "cfg_tools": true,
-    "cfg_mapping": false,
-    "cfg_zephyr": false
+    "cfg_mapping": true,
+    "cfg_zephyr": true
   }
 }

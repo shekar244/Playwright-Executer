@@ -57,8 +57,10 @@ async function scanRepos(preferredPath) {
     repos.map(r => `<option value="${r.path}" title="${r.path}">${r.name}</option>`).join('');
   if (!repos.length) sel.innerHTML = '<option value="">No Playwright repos found — enter path manually</option>';
   if (preferredPath) {
-    const match = repos.find(r => r.path === preferredPath);
-    if (match) { sel.value = preferredPath; applyRepo(preferredPath); return; }
+    // Normalise separators + case for Windows compatibility (\ vs /, C: vs c:)
+    const norm = p => p.replace(/\\/g, '/').toLowerCase();
+    const match = repos.find(r => norm(r.path) === norm(preferredPath));
+    if (match) { sel.value = match.path; applyRepo(match.path); return; }
   }
   if (repos.length === 1) { sel.value = repos[0].path; applyRepo(repos[0].path); }
 }
@@ -73,6 +75,12 @@ function applyRepo(path) {
   const name = path.split(/[/\\]/).filter(Boolean).pop() || path;
   document.getElementById('repoSubtitle').textContent = '📁 ' + name;
   document.title = 'Playwright Executor — ' + name;
+  // Persist so the repo survives page refresh
+  fetch('/api/config/repo-root', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ repo_root: path }),
+  }).catch(() => {});
   discoverTests();
 }
 
@@ -574,9 +582,6 @@ function switchMappingTab(tab) {
 }
 
 // ── Field Mapping Config ───────────────────────────────────────────────────────
-let _csvMapping     = {};
-let _csvHeaders     = [];
-let _createFile     = null;
 let _customFieldRows = [];
 
 function onMappingStepsFormatChange() {
