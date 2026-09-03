@@ -45,8 +45,16 @@ class CommandBuilder:
             cmd.append(target)
 
         # ── Config file ───────────────────────────────────────────────────────
-        ini = self.repo_root / "config" / "pytest.ini"
-        if ini.exists():
+        # Check root first (standard), then config/ subfolder
+        ini = None
+        for candidate in [
+            self.repo_root / "pytest.ini",
+            self.repo_root / "config" / "pytest.ini",
+        ]:
+            if candidate.exists():
+                ini = candidate
+                break
+        if ini:
             cmd.extend(["-c", str(ini)])
             # Clear addopts so the UI has full control over options.
             # Without this, pytest.ini's addopts (e.g. --browser chromium -n 4)
