@@ -207,6 +207,22 @@ def _find_report_path(repo: str, cfg: dict) -> str:
         return ""
 
 
+def _report_paths(repo: str, abs_path: str) -> tuple[str, str]:
+    """
+    Return (absolute_path, relative_path) both using forward slashes.
+    relative_path is relative to repo root; empty string if it can't be computed.
+    """
+    abs_fwd = abs_path.replace("\\", "/")
+    rel_fwd = ""
+    if repo and abs_path:
+        try:
+            rel = Path(abs_path).relative_to(Path(repo))
+            rel_fwd = str(rel).replace("\\", "/")
+        except ValueError:
+            pass
+    return abs_fwd, rel_fwd
+
+
 def record_run_history(repo: str, status: str, cfg: dict) -> None:
     results_rel = cfg.get("allure_results_dir", "allure/results")
     results_dir = str(Path(repo) / results_rel) if repo else ""
@@ -214,7 +230,7 @@ def record_run_history(repo: str, status: str, cfg: dict) -> None:
         "passed": 0, "failed": 0, "broken": 0, "skipped": 0, "total": 0
     }
 
-    run_report  = _find_report_path(repo, cfg)
+    run_abs, run_rel = _report_paths(repo, _find_report_path(repo, cfg))
     tests_detail: list[dict] = []
     if results_dir:
         for t in parse_allure_results_full(results_dir):
@@ -224,26 +240,29 @@ def record_run_history(repo: str, status: str, cfg: dict) -> None:
             full_name = t.get("fullName", "")
             method_name = full_name.split("::")[-1] if "::" in full_name else t["name"]
             tests_detail.append({
-                "suite":       t.get("suite", ""),
-                "name":        t["name"],
-                "method":      method_name,
-                "fullName":    full_name,
-                "status":      t["status"],
-                "date":        datetime.datetime.fromtimestamp(start_ms / 1000).strftime("%Y-%m-%d") if start_ms else "",
-                "time":        datetime.datetime.fromtimestamp(start_ms / 1000).strftime("%H:%M:%S") if start_ms else "",
-                "duration_ms": dur_ms,
-                "duration_s":  round(dur_ms / 1000, 2),
-                "report_path": run_report,  # same consolidated report for every test in this run
+                "suite":        t.get("suite", ""),
+                "name":         t["name"],
+                "method":       method_name,
+                "fullName":     full_name,
+                "status":       t["status"],
+                "date":         datetime.datetime.fromtimestamp(start_ms / 1000).strftime("%Y-%m-%d") if start_ms else "",
+                "time":         datetime.datetime.fromtimestamp(start_ms / 1000).strftime("%H:%M:%S") if start_ms else "",
+                "duration_ms":  dur_ms,
+                "duration_s":   round(dur_ms / 1000, 2),
+                "report_path":  run_abs,   # absolute path (forward slashes)
+                "report_relpath": run_rel, # relative to repo root (fallback)
             })
 
     record = {
-        "ts":          int(time.time() * 1000),
-        "date":        datetime.datetime.now().strftime("%Y-%m-%d %H:%M"),
-        "repo":        Path(repo).name if repo else "unknown",
-        "status":      status,
-        "stats":       stats,
-        "tests":       tests_detail,
-        "report_path": _find_report_path(repo, cfg),
+        "ts":              int(time.time() * 1000),
+        "date":            datetime.datetime.now().strftime("%Y-%m-%d %H:%M"),
+        "repo":            Path(repo).name if repo else "unknown",
+        "repo_root":       repo,
+        "status":          status,
+        "stats":           stats,
+        "tests":           tests_detail,
+        "report_path":     run_abs,
+        "report_relpath":  run_rel,
     }
     records = load_history(repo)
     records.insert(0, record)

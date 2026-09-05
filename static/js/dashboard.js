@@ -119,12 +119,12 @@ function dashOpenDetailReport(event) {
   _openReportPath(path);
 }
 
-async function _openReportPath(path) {
-  if (!path) return;
+async function _openReportPath(path, relpath) {
+  if (!path && !relpath) return;
   const res = await fetch('/api/report/open', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ path }),
+    body: JSON.stringify({ path: path || '', relpath: relpath || '' }),
   }).then(r => r.json()).catch(() => ({}));
   if (res.error) alert('Could not open report: ' + res.error);
 }
@@ -439,9 +439,10 @@ function _renderTestTable(tests) {
     const suite    = escHtml(t.file  || t.fullName?.split('#')[0]?.replace(/^\./, '') || t.suite || '—');
     const name     = escHtml(t.method || t.fullName?.split('#').pop() || t.name || '—');
     // Per-test report: use stored report_path / report_relpath, fall back to suite-level report
-    const testPath = t.report_path || t.report_relpath || _currentReportPath;
-    const reportCell = testPath
-      ? `<a href="#" onclick="event.preventDefault();_openReportPath('${escHtml(testPath)}')" style="font-size:10px;font-weight:600;color:var(--accent);text-decoration:none;border:1px solid rgba(137,180,250,0.25);border-radius:4px;padding:2px 7px;background:var(--accent-glow);">📊 View</a>`
+    const testPath    = t.report_path    || _currentReportPath;
+    const testRelPath = t.report_relpath || '';
+    const reportCell = (testPath || testRelPath)
+      ? `<a href="#" onclick="event.preventDefault();_openReportPath(this.dataset.path,this.dataset.relpath)" data-path="${escHtml(testPath)}" data-relpath="${escHtml(testRelPath)}" style="font-size:10px;font-weight:600;color:var(--accent);text-decoration:none;border:1px solid rgba(137,180,250,0.25);border-radius:4px;padding:2px 7px;background:var(--accent-glow);">📊 View</a>`
       : `<span style="font-size:10px;color:var(--text-dim);">N/A</span>`;
     return `<tr>
       <td style="color:var(--text-dim);font-size:11px;max-width:130px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${suite}">${suite}</td>
@@ -488,8 +489,8 @@ function _renderHistoryPage() {
     const statusLbl  = statusKey;
     const isSelected = absIdx === _historySelected;
 
-    const reportCell = r.report_path
-      ? `<button class="btn btn-sm" onclick="event.stopPropagation();_openReportPath('${escHtml(r.report_path)}')" style="padding:3px 10px;font-size:10px;" title="${escHtml(r.report_path)}">📊 View</button>`
+    const reportCell = (r.report_path || r.report_relpath)
+      ? `<button class="btn btn-sm" onclick="event.stopPropagation();_openReportPath(this.dataset.path,this.dataset.relpath)" data-path="${escHtml(r.report_path||'')}" data-relpath="${escHtml(r.report_relpath||'')}" style="padding:3px 10px;font-size:10px;" title="${escHtml(r.report_path||r.report_relpath||'')}">📊 View</button>`
       : `<span style="font-size:10px;color:var(--text-dim);">N/A</span>`;
 
     return `<tr onclick="showRunDetail(${absIdx})" style="cursor:pointer;" class="${isSelected ? 'hist-row-selected' : ''}">

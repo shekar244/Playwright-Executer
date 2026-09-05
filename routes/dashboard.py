@@ -78,12 +78,47 @@ def get_report():
 @bp.route("/api/report/open", methods=["POST"])
 def open_report():
     import webbrowser
+    from pathlib import Path as _Path
+    from ui_launcher.config_reader import ConfigReader as _CR
+
     body = request.json or {}
-    path = body.get("path", "").strip()
-    if not path or not os.path.exists(path):
-        return jsonify({"error": "Report file not found"}), 404
-    webbrowser.open(f"file://{path}")
-    return jsonify({"ok": True})
+    path     = body.get("path", "").strip()
+    rel_path = body.get("relpath", "").strip()
+    if not path and not rel_path:
+        return jsonify({"error": "No path provided"}), 400
+
+    # Build candidate list — try in order, open the first one that exists.
+    candidates: list[str] = []
+    if path:
+        candidates.append(path)
+
+    # Also resolve relative path against current repo root and the tool root.
+    rp = rel_path or path
+    if rp:
+        try:
+            cfg      = _CR().load()
+            repo_root = cfg.get("repo_root", "").strip()
+            if repo_root:
+                candidates.append(str(_Path(repo_root) / rp))
+            # Fallback: relative to the tool directory
+            candidates.append(str(_Path(__file__).parent.parent / rp))
+        except Exception:
+            pass
+
+    for c in candidates:
+        try:
+            p = _Path(c)
+            if p.exists():
+                # Path.as_uri() produces the correct file:// URL on all platforms:
+                #   Windows: C:\dir\index.html  →  file:///C:/dir/index.html
+                #   Mac/Linux: /dir/index.html  →  file:///dir/index.html
+                webbrowser.open(p.as_uri())
+                return jsonify({"ok": True, "resolved": str(p)})
+        except Exception:
+            continue
+
+    tried = " | ".join(candidates)
+    return jsonify({"error": f"Report not found. Tried: {tried}"}), 404
 
 
 @bp.route("/api/report/history")
