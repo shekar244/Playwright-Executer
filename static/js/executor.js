@@ -411,12 +411,21 @@ async function venvInstallReqs() {
   const repo    = document.getElementById('repo').value.trim();
   const reqFile = document.getElementById('venvReqFile')?.dataset.full || '';
   const btn     = document.getElementById('venvInstallBtn');
+  const venvLog = document.getElementById('venv-log');
 
-  // Switch to Executor tab and clear log so pip output is visible
-  switchTab('executor');
-  _runContext = 'executor'; _activeLogEl = document.getElementById('log');
-  clearLog(); setRunning(true);
+  // Route SSE output to the dedicated venv log — leave the test Output Log untouched
+  _runContext  = 'venv';
+  _activeLogEl = venvLog;
+  if (venvLog) { venvLog.innerHTML = ''; venvLog.style.display = ''; }
   if (btn) { btn.disabled = true; btn.textContent = '⟳ Installing…'; }
+
+  // Expand the Venv section so the log is visible
+  const venvBody  = document.getElementById('venvBody');
+  const venvArrow = document.getElementById('venvArrow');
+  if (venvBody && venvBody.style.display === 'none') {
+    venvBody.style.display = '';
+    if (venvArrow) venvArrow.textContent = '▼ Collapse';
+  }
 
   const res = await fetch('/api/venv/install', {
     method: 'POST',
@@ -425,11 +434,17 @@ async function venvInstallReqs() {
   });
   const d = await res.json().catch(() => ({}));
   if (!res.ok) {
-    appendLine('✗  ' + (d.error || 'pip install failed'), 'failed');
-    setRunning(false);
-  } else {
-    appendLine('⟳  ' + (d.cmd || 'pip install -r requirements.txt') + '  …streaming output…', 'info');
+    // Show error in venv log; release context so next test run goes to #log
+    if (venvLog) {
+      const span = document.createElement('span');
+      span.className = 'log-line log-failed';
+      span.textContent = '✗  ' + (d.error || 'pip install failed');
+      venvLog.appendChild(span);
+    }
+    _runContext = 'executor'; _activeLogEl = null;
   }
+  // On success: SSE stream will write lines to #venv-log via _activeLogEl;
+  // the SSE 'status' event releases _activeLogEl and resets _runContext.
   if (btn) { btn.disabled = false; btn.textContent = '▶ pip install -r requirements.txt'; }
 }
 

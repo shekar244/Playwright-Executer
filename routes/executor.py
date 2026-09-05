@@ -17,7 +17,7 @@ from flask import Blueprint, Response, jsonify, request
 
 from routes import state
 from routes.history import record_run_history
-from ui_launcher.command_builder import CommandBuilder, resolve_python
+from ui_launcher.command_builder import CommandBuilder, resolve_python, venv_env_overrides
 from ui_launcher.config_reader import ConfigReader
 from ui_launcher.runner import TestRunner
 from ui_launcher.test_discovery import TestDiscovery
@@ -318,8 +318,9 @@ def run_tests():
             record_run_history(repo, run_status, cfg)
             state.broadcast("done", "")
 
+        python = cmd[0] if cmd else sys.executable
         state._runner = TestRunner(
-            cmd=cmd, cwd=repo, env_overrides={},
+            cmd=cmd, cwd=repo, env_overrides=venv_env_overrides(python),
             on_output=on_output, on_finish=on_finish,
         )
         state._runner.start()
@@ -509,7 +510,7 @@ def venv_install():
 
         try:
             state._runner = TestRunner(
-                cmd=cmd, cwd=repo or str(_ROOT), env_overrides={"PYTHONUNBUFFERED": "1"},
+                cmd=cmd, cwd=repo or str(_ROOT), env_overrides=venv_env_overrides(python),
                 on_output=on_output, on_finish=on_finish,
             )
             state._runner.start()

@@ -15,6 +15,25 @@ def resolve_python(repo_root: str, venv_path: str = "") -> str:
     return CommandBuilder(repo_root, venv_path)._resolve_python()
 
 
+def venv_env_overrides(python_path: str) -> dict:
+    """
+    Return environment variable overrides that mimic `source venv/bin/activate`
+    (or `venv\\Scripts\\activate` on Windows), so subprocesses behave as if the
+    venv is activated — correct VIRTUAL_ENV, PATH, and no PYTHONHOME.
+    """
+    p = Path(python_path)
+    # python lives at <venv>/bin/python  or  <venv>/Scripts/python.exe
+    venv_root = p.parent.parent  # go up two levels from the executable
+    env = os.environ.copy()
+    env["VIRTUAL_ENV"] = str(venv_root)
+    env.pop("PYTHONHOME", None)          # activation always unsets this
+    env["PYTHONUNBUFFERED"] = "1"        # ensure streaming output
+    # Prepend venv's bin/Scripts to PATH so `python`, `pip`, etc. resolve correctly
+    bin_dir = str(p.parent)
+    env["PATH"] = bin_dir + os.pathsep + env.get("PATH", "")
+    return env
+
+
 class CommandBuilder:
     """Build the pytest invocation from user selections."""
 

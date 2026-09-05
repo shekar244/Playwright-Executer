@@ -293,10 +293,10 @@ function classifyLine(line) {
 }
 
 function appendLine(text, cls) {
-  // Use the pinned element reference if available, else fall back to context string
   const log = _activeLogEl || document.getElementById(
     _runContext === 'features' ? 'features-log' :
-    _runContext === 'git'      ? 'git-log'       : 'log'
+    _runContext === 'git'      ? 'git-log'       :
+    _runContext === 'venv'     ? 'venv-log'      : 'log'
   );
   if (!log) return;
   const span = document.createElement('span');
@@ -306,8 +306,9 @@ function appendLine(text, cls) {
   if (autoScroll) log.scrollTop = log.scrollHeight;
 }
 
-function clearLog()     { document.getElementById('log').innerHTML = ''; }
+function clearLog()     { autoScroll = true; const l = document.getElementById('log'); l.innerHTML = ''; l.scrollTop = 0; }
 function clearFeatLog() { document.getElementById('features-log').innerHTML = ''; }
+function clearVenvLog() { const l = document.getElementById('venv-log'); if (l) { l.innerHTML = ''; l.scrollTop = 0; } }
 function scrollToBottom()     { const l = document.getElementById('log');          l.scrollTop = l.scrollHeight; }
 function featScrollToBottom() { const l = document.getElementById('features-log'); l.scrollTop = l.scrollHeight; }
 
@@ -361,21 +362,27 @@ function connectStream() {
   });
   eventSource.addEventListener('status', e => {
     const s = JSON.parse(e.data);
-    appendLine('─'.repeat(72), 'sep');
+    appendLine('─'.repeat(60), 'sep');
     if (s === 'passed') {
-      appendLine((_runContext === 'features' || _runContext === 'git') ? '✓  Done.' : '✓  All tests passed!', 'passed');
-      setStatus('passed', 'PASSED');
+      const msg = (_runContext === 'features' || _runContext === 'git') ? '✓  Done.'
+                : _runContext === 'venv' ? '✓  pip install completed successfully.'
+                : '✓  All tests passed!';
+      appendLine(msg, 'passed');
+      if (_runContext !== 'venv') setStatus('passed', 'PASSED');
     } else if (s === 'cancelled') {
-      appendLine('⚠  Execution cancelled by user.', 'warning');
-      setStatus('idle', 'CANCELLED');
+      appendLine('⚠  Cancelled by user.', 'warning');
+      if (_runContext !== 'venv') setStatus('idle', 'CANCELLED');
     } else {
       const code = s.split(':')[1] || '?';
-      appendLine(`✗  Finished with failures  (exit code ${code}).`, 'failed');
-      setStatus('failed', 'FAILED');
+      const msg = _runContext === 'venv'
+        ? `✗  pip install failed  (exit code ${code}).`
+        : `✗  Finished with failures  (exit code ${code}).`;
+      appendLine(msg, 'failed');
+      if (_runContext !== 'venv') setStatus('failed', 'FAILED');
     }
     setRunning(false);
-    _runContext = 'executor';
-    _activeLogEl = null;  // Release the pinned log so next run can set its own
+    _runContext  = 'executor';
+    _activeLogEl = null;  // Release so next run sets its own target
   });
   eventSource.addEventListener('done', e => {
     refreshReport();
