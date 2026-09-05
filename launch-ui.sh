@@ -37,12 +37,24 @@ else
 fi
 
 # ----------------------------------------------------------
-# Verify Flask is available
+# Verify required packages are available
 # ----------------------------------------------------------
 if ! "$PYTHON" -c "import flask" 2>/dev/null; then
     echo ""
     echo "[INFO] Flask not found — installing..."
     "$PYTHON" -m pip install flask --break-system-packages --quiet
+fi
+
+if ! "$PYTHON" -c "import openpyxl" 2>/dev/null; then
+    echo ""
+    echo "[INFO] openpyxl not found — installing (needed for Excel support)..."
+    "$PYTHON" -m pip install openpyxl --break-system-packages --quiet
+fi
+
+if ! "$PYTHON" -c "import yaml" 2>/dev/null; then
+    echo ""
+    echo "[INFO] pyyaml not found — installing (needed for YAML support)..."
+    "$PYTHON" -m pip install pyyaml --break-system-packages --quiet
 fi
 
 # ----------------------------------------------------------

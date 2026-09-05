@@ -1,0 +1,936 @@
+<!-- ── File Manager page ── -->
+<div id="page-filemanager" style="display:none;flex:1;min-height:0;">
+<style>
+/* ── Layout ──────────────────────────────────────────────────────────────── */
+#page-filemanager { flex-direction:row; }
+.fm-left {
+  width:280px;flex-shrink:0;background:var(--surface);
+  border-right:1px solid var(--border);display:flex;flex-direction:column;overflow:hidden;
+}
+.fm-toolbar {
+  padding:8px 10px;border-bottom:1px solid var(--border);
+  display:flex;gap:5px;align-items:center;flex-shrink:0;background:rgba(255,255,255,0.02);
+}
+.fm-path-bar {
+  flex:1;font-size:10px;font-family:'JetBrains Mono',monospace;
+  color:var(--text-muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+}
+.fm-tree { flex:1;overflow-y:auto;padding:4px 3px; }
+.fm-entry {
+  display:flex;align-items:center;gap:6px;padding:4px 9px;border-radius:5px;
+  cursor:pointer;font-size:12px;color:var(--text-muted);transition:background 0.1s;user-select:none;
+}
+.fm-entry:hover { background:var(--surface2);color:var(--text); }
+.fm-entry.selected { background:var(--accent-glow);color:var(--accent);font-weight:600; }
+.fm-entry-icon { font-size:13px;flex-shrink:0; }
+.fm-entry-name { flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap; }
+.fm-ext-badge {
+  font-size:9px;font-weight:700;padding:1px 5px;border-radius:8px;
+  background:var(--surface2);color:var(--text-dim);flex-shrink:0;
+  border:1px solid var(--border);
+}
+.fm-ext-badge.json  { background:rgba(137,180,250,0.1);color:var(--accent);border-color:rgba(137,180,250,0.2); }
+.fm-ext-badge.yaml  { background:rgba(166,227,161,0.1);color:var(--green);border-color:rgba(166,227,161,0.2); }
+.fm-ext-badge.env   { background:rgba(249,226,175,0.1);color:var(--yellow);border-color:rgba(249,226,175,0.2); }
+.fm-ext-badge.csv   { background:rgba(148,226,213,0.1);color:var(--teal);border-color:rgba(148,226,213,0.2); }
+.fm-ext-badge.xlsx  { background:rgba(166,227,161,0.1);color:var(--green);border-color:rgba(166,227,161,0.2); }
+
+/* ── Right panel ─────────────────────────────────────────────────────────── */
+.fm-right {
+  flex:1;display:flex;flex-direction:column;min-width:0;background:var(--log-bg);
+}
+.fm-editor-header {
+  padding:8px 14px;border-bottom:1px solid var(--border);
+  display:flex;align-items:center;gap:8px;flex-shrink:0;background:rgba(255,255,255,0.02);
+}
+.fm-file-name { font-size:13px;font-weight:700;color:var(--text);font-family:'JetBrains Mono',monospace; }
+.fm-file-path {
+  font-size:10px;color:var(--text-dim);font-family:'JetBrains Mono',monospace;
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:340px;flex:1;
+}
+.fm-header-right { display:flex;gap:6px;align-items:center;flex-shrink:0;margin-left:auto; }
+.fm-dirty-badge {
+  background:rgba(249,226,175,0.12);color:var(--yellow);border:1px solid rgba(249,226,175,0.2);
+  border-radius:20px;padding:1px 8px;font-size:10px;font-weight:700;display:none;
+}
+.fm-saved-badge {
+  background:rgba(166,227,161,0.12);color:var(--green);border:1px solid rgba(166,227,161,0.2);
+  border-radius:20px;padding:1px 8px;font-size:10px;font-weight:700;display:none;
+}
+.fm-body { flex:1;display:flex;flex-direction:column;min-height:0;overflow:hidden; }
+
+/* ── Empty / error state ─────────────────────────────────────────────────── */
+#fm-empty {
+  flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;
+  gap:8px;padding:24px;
+}
+.fm-empty-icon { font-size:42px;opacity:0.25; }
+.fm-empty-text { font-size:13px;color:var(--text-dim); }
+.fm-empty-hint { font-size:11px;color:var(--text-dim);opacity:0.55;text-align:center;line-height:1.5; }
+
+/* ── Status bar ──────────────────────────────────────────────────────────── */
+.fm-status-bar {
+  padding:4px 14px;font-size:10px;border-top:1px solid var(--border);flex-shrink:0;
+  background:var(--header-bg);display:flex;gap:10px;align-items:center;min-height:24px;
+}
+
+/* ── Mode toggle ─────────────────────────────────────────────────────────── */
+.fm-mode-tabs {
+  display:flex;gap:2px;padding:6px 14px;border-bottom:1px solid var(--border);
+  flex-shrink:0;background:rgba(255,255,255,0.015);
+}
+.fm-mode-btn {
+  padding:4px 12px;font-size:11px;font-weight:600;color:var(--text-dim);
+  background:transparent;border:1px solid transparent;border-radius:5px;
+  cursor:pointer;font-family:'Inter',inherit;transition:all 0.12s;
+}
+.fm-mode-btn:hover:not(.active) { color:var(--text);background:rgba(255,255,255,0.05); }
+.fm-mode-btn.active { color:var(--accent);background:var(--accent-glow);border-color:rgba(137,180,250,0.3); }
+
+/* ── JSON tree ───────────────────────────────────────────────────────────── */
+#fm-json-wrap { flex:1;display:flex;flex-direction:column;min-height:0; }
+#fm-json-tree {
+  flex:1;overflow:auto;padding:12px 16px;
+  font-family:'JetBrains Mono',monospace;font-size:12px;line-height:1.7;
+}
+.jt-node { display:flex;flex-direction:column; }
+.jt-line { display:flex;align-items:baseline;gap:0;padding:0; }
+.jt-toggle {
+  color:var(--accent);cursor:pointer;user-select:none;
+  font-size:9px;margin-right:5px;flex-shrink:0;opacity:0.7;
+  transition:opacity 0.1s;
+}
+.jt-toggle:hover { opacity:1; }
+.jt-key   { color:var(--accent);font-weight:600; }
+.jt-colon { color:var(--text-dim);margin:0 4px; }
+.jt-str   { color:var(--green); }
+.jt-num   { color:var(--yellow); }
+.jt-bool  { color:var(--purple); }
+.jt-null  { color:var(--text-dim);font-style:italic; }
+.jt-bracket { color:var(--text-muted); }
+.jt-count { color:var(--text-dim);font-size:10px;margin-left:4px; }
+.jt-comma { color:var(--text-dim); }
+.jt-children {
+  margin-left:14px;border-left:1px solid var(--border);
+  padding-left:10px;
+}
+.jt-str-val {
+  word-break:break-all;
+  cursor:pointer;
+  border-radius:3px;
+  padding:0 2px;
+  transition:background 0.1s;
+}
+.jt-str-val:hover { background:rgba(166,227,161,0.1); }
+
+/* JSON raw edit */
+#fm-json-edit-panel { flex:1;display:flex;flex-direction:column;min-height:0;padding:10px 14px;gap:6px; }
+.fm-validate-row { display:flex;gap:8px;align-items:center;flex-shrink:0; }
+.fm-valid-badge {
+  font-size:11px;padding:3px 10px;border-radius:var(--radius);
+  display:inline-flex;align-items:center;gap:5px;
+}
+.fm-valid-badge.ok  { background:rgba(166,227,161,0.1);color:var(--green);border:1px solid rgba(166,227,161,0.2); }
+.fm-valid-badge.err { background:rgba(243,139,168,0.1);color:var(--red);border:1px solid rgba(243,139,168,0.2); }
+.fm-raw-editor {
+  flex:1;resize:none;background:var(--input-bg);border:1px solid var(--input-border);
+  border-radius:var(--radius);color:var(--text);font-family:'JetBrains Mono',monospace;
+  font-size:12px;line-height:1.65;padding:10px 12px;outline:none;min-height:0;
+  transition:border-color 0.15s;
+}
+.fm-raw-editor:focus { border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-glow); }
+
+/* ── YAML editor ─────────────────────────────────────────────────────────── */
+#fm-yaml-wrap { flex:1;display:flex;flex-direction:column;min-height:0; }
+#fm-yaml-edit-panel { flex:1;display:flex;flex-direction:column;min-height:0;padding:10px 14px;gap:6px; }
+
+/* ── ENV editor ──────────────────────────────────────────────────────────── */
+#fm-env-wrap { flex:1;display:flex;flex-direction:column;min-height:0; }
+.fm-env-mode-bar {
+  display:flex;align-items:center;gap:8px;padding:8px 14px;
+  border-bottom:1px solid var(--border);flex-shrink:0;background:rgba(255,255,255,0.015);
+}
+#fm-env-table-panel { flex:1;overflow:auto;padding:10px 14px;display:flex;flex-direction:column;gap:0; }
+.env-row {
+  display:grid;grid-template-columns:200px 1fr 28px;gap:4px;
+  align-items:center;padding:2px 0;border-bottom:1px solid rgba(56,56,84,0.3);
+}
+.env-row:last-child { border-bottom:none; }
+.env-row:hover { background:rgba(137,180,250,0.03);border-radius:4px; }
+.env-key-input {
+  background:transparent;border:none;outline:none;
+  font-family:'JetBrains Mono',monospace;font-size:12px;
+  color:var(--accent);font-weight:600;padding:4px 6px;width:100%;
+  border-radius:4px;
+}
+.env-key-input:focus { background:var(--input-bg);box-shadow:0 0 0 2px var(--accent-glow); }
+.env-eq { color:var(--text-dim);font-family:'JetBrains Mono',monospace;font-size:12px;text-align:center;flex-shrink:0; }
+.env-val-input {
+  background:transparent;border:none;outline:none;
+  font-family:'JetBrains Mono',monospace;font-size:12px;
+  color:var(--green);padding:4px 6px;width:100%;
+  border-radius:4px;
+}
+.env-val-input:focus { background:var(--input-bg);box-shadow:0 0 0 2px rgba(166,227,161,0.2); }
+.env-del-btn {
+  background:none;border:none;color:var(--text-dim);cursor:pointer;
+  font-size:13px;padding:2px 4px;border-radius:4px;opacity:0.5;
+  transition:all 0.1s;
+}
+.env-del-btn:hover { color:var(--red);opacity:1;background:rgba(243,139,168,0.1); }
+.env-comment-row { color:var(--text-dim);font-family:'JetBrains Mono',monospace;font-size:11px;padding:3px 6px;font-style:italic; }
+.env-add-row { margin-top:8px; }
+#fm-env-raw-panel { flex:1;display:flex;flex-direction:column;min-height:0;padding:10px 14px;gap:6px; }
+
+/* ── CSV editor ──────────────────────────────────────────────────────────── */
+#fm-csv-wrap { flex:1;display:flex;flex-direction:column;min-height:0;overflow:hidden; }
+.fm-csv-toolbar {
+  padding:7px 12px;border-bottom:1px solid var(--border);
+  display:flex;gap:6px;align-items:center;flex-shrink:0;background:rgba(255,255,255,0.015);
+}
+.fm-table-wrap { flex:1;overflow:auto;padding:10px 14px; }
+.fm-table { border-collapse:collapse;font-size:12px;font-family:'JetBrains Mono',monospace;min-width:100%; }
+.fm-table th, .fm-table td { border:1px solid var(--border);padding:0;min-width:90px; }
+.fm-table th {
+  background:var(--surface2);color:var(--text-dim);font-weight:700;font-size:10px;
+  text-align:center;padding:4px 8px;position:sticky;top:0;z-index:2;
+}
+.fm-table td input {
+  width:100%;background:transparent;border:none;outline:none;
+  color:var(--text);font-family:'JetBrains Mono',monospace;font-size:12px;padding:5px 7px;
+}
+.fm-table td input:focus { background:rgba(137,180,250,0.07);box-shadow:inset 0 0 0 1px var(--accent); }
+.fm-table tr:first-child td input { font-weight:700;color:var(--accent); }
+.fm-row-num {
+  background:var(--surface2);color:var(--text-dim);font-size:10px;text-align:center;
+  padding:4px 6px;min-width:32px;position:sticky;left:0;z-index:1;
+}
+
+/* ── Excel editor ────────────────────────────────────────────────────────── */
+#fm-excel-wrap { flex:1;display:flex;flex-direction:column;min-height:0;overflow:hidden; }
+.fm-sheet-tabs {
+  display:flex;gap:2px;padding:5px 12px 0;background:var(--header-bg);
+  border-bottom:1px solid var(--border);flex-shrink:0;
+}
+.fm-sheet-tab {
+  padding:4px 13px;font-size:11px;font-weight:600;color:var(--text-dim);background:transparent;
+  border:1px solid transparent;border-bottom:none;border-radius:5px 5px 0 0;
+  cursor:pointer;font-family:'Inter',inherit;transition:all 0.12s;margin-bottom:-1px;
+}
+.fm-sheet-tab:hover:not(.active) { color:var(--text);background:rgba(255,255,255,0.04); }
+.fm-sheet-tab.active { color:var(--accent);background:var(--surface);border-color:var(--border);border-bottom-color:var(--surface); }
+.fm-excel-toolbar {
+  padding:7px 12px;border-bottom:1px solid var(--border);
+  display:flex;gap:6px;align-items:center;flex-shrink:0;background:rgba(255,255,255,0.015);
+}
+</style>
+
+<!-- Left: file browser -->
+<div class="fm-left">
+  <div class="fm-toolbar">
+    <button class="btn btn-sm" id="fm-up-btn" onclick="fmUp()" title="Parent folder">↑</button>
+    <span class="fm-path-bar" id="fm-path-bar" title="">~</span>
+    <button class="btn btn-sm" onclick="fmRefresh()" title="Refresh">⟳</button>
+  </div>
+  <div class="fm-tree" id="fm-tree"></div>
+</div>
+
+<!-- Right: editor -->
+<div class="fm-right">
+  <!-- Header -->
+  <div class="fm-editor-header" id="fm-editor-header" style="display:none;">
+    <span class="fm-file-name" id="fm-file-name"></span>
+    <span class="fm-file-path" id="fm-file-path"></span>
+    <div class="fm-header-right">
+      <span class="fm-dirty-badge" id="fm-dirty-badge">● unsaved</span>
+      <span class="fm-saved-badge" id="fm-saved-badge">✓ saved</span>
+      <button class="btn btn-accent" onclick="fmSave()" style="padding:5px 14px;font-size:11px;">💾 Save</button>
+    </div>
+  </div>
+
+  <div class="fm-body" id="fm-body">
+
+    <!-- Empty / error state -->
+    <div id="fm-empty">
+      <div class="fm-empty-icon">🗂️</div>
+      <div class="fm-empty-text">Select a file to view and edit</div>
+      <div class="fm-empty-hint">Supports .json · .yaml · .env · .csv · .xlsx</div>
+    </div>
+
+    <!-- ── JSON ───────────────────────────────────────────────────────────── -->
+    <div id="fm-json-wrap" style="display:none;">
+      <div class="fm-mode-tabs">
+        <button class="fm-mode-btn active" id="json-tab-tree" onclick="fmSetJsonMode('tree')">🌲 Tree</button>
+        <button class="fm-mode-btn" id="json-tab-edit" onclick="fmSetJsonMode('edit')">✏️ Edit Raw</button>
+        <button class="btn btn-sm" onclick="fmJsonExpandAll()" style="margin-left:auto;" id="json-expand-btn">⊞ Expand All</button>
+        <button class="btn btn-sm" onclick="fmJsonCollapseAll()" id="json-collapse-btn">⊟ Collapse All</button>
+      </div>
+      <!-- Tree view -->
+      <div id="fm-json-tree"></div>
+      <!-- Raw edit panel -->
+      <div id="fm-json-edit-panel" style="display:none;">
+        <div class="fm-validate-row">
+          <span class="fm-valid-badge ok" id="fm-json-badge">✓ Valid JSON</span>
+          <span style="color:var(--text-dim);font-size:11px;" id="fm-json-info"></span>
+        </div>
+        <textarea class="fm-raw-editor" id="fm-json-editor" spellcheck="false" oninput="fmJsonEditorInput()"></textarea>
+      </div>
+    </div>
+
+    <!-- ── YAML ───────────────────────────────────────────────────────────── -->
+    <div id="fm-yaml-wrap" style="display:none;">
+      <div class="fm-mode-tabs">
+        <span class="fm-valid-badge ok" id="fm-yaml-badge" style="margin:auto 0;">✓ Valid YAML</span>
+        <span style="color:var(--text-dim);font-size:11px;margin-left:8px;" id="fm-yaml-info"></span>
+      </div>
+      <div id="fm-yaml-edit-panel">
+        <textarea class="fm-raw-editor" id="fm-yaml-editor" spellcheck="false" oninput="fmYamlEditorInput()"></textarea>
+      </div>
+    </div>
+
+    <!-- ── ENV ────────────────────────────────────────────────────────────── -->
+    <div id="fm-env-wrap" style="display:none;">
+      <div class="fm-env-mode-bar">
+        <button class="fm-mode-btn active" id="env-tab-table" onclick="fmSetEnvMode('table')">⚙️ Variables</button>
+        <button class="fm-mode-btn" id="env-tab-raw" onclick="fmSetEnvMode('raw')">✏️ Raw</button>
+        <span style="margin-left:auto;color:var(--text-dim);font-size:11px;" id="fm-env-info"></span>
+      </div>
+      <!-- Table view -->
+      <div id="fm-env-table-panel" style="overflow:auto;">
+        <div id="fm-env-rows"></div>
+        <div class="env-add-row">
+          <button class="btn btn-sm" onclick="fmEnvAddRow()">+ Add Variable</button>
+        </div>
+      </div>
+      <!-- Raw view -->
+      <div id="fm-env-raw-panel" style="display:none;">
+        <textarea class="fm-raw-editor" id="fm-env-editor" spellcheck="false" oninput="fmMarkDirty()"></textarea>
+      </div>
+    </div>
+
+    <!-- ── CSV ────────────────────────────────────────────────────────────── -->
+    <div id="fm-csv-wrap" style="display:none;">
+      <div class="fm-csv-toolbar">
+        <button class="btn btn-sm" onclick="fmCsvAddRow()">+ Row</button>
+        <button class="btn btn-sm" onclick="fmCsvAddCol()">+ Col</button>
+        <button class="btn btn-sm" onclick="fmCsvDelRow()">− Row</button>
+        <span style="color:var(--text-dim);font-size:11px;margin-left:auto;" id="fm-csv-info"></span>
+      </div>
+      <div class="fm-table-wrap">
+        <table class="fm-table" id="fm-csv-table"></table>
+      </div>
+    </div>
+
+    <!-- ── Excel ──────────────────────────────────────────────────────────── -->
+    <div id="fm-excel-wrap" style="display:none;">
+      <div class="fm-excel-toolbar">
+        <button class="btn btn-sm" onclick="fmExcelAddRow()">+ Row</button>
+        <button class="btn btn-sm" onclick="fmExcelAddCol()">+ Col</button>
+        <span style="color:var(--text-dim);font-size:11px;margin-left:auto;" id="fm-excel-info"></span>
+      </div>
+      <div class="fm-sheet-tabs" id="fm-sheet-tabs"></div>
+      <div class="fm-table-wrap">
+        <table class="fm-table" id="fm-excel-table"></table>
+      </div>
+    </div>
+
+  </div><!-- .fm-body -->
+
+  <div class="fm-status-bar" id="fm-status-bar">
+    <span id="fm-status-text" style="color:var(--text-dim);">Browse files on the left</span>
+  </div>
+</div>
+</div><!-- #page-filemanager -->
+
+<script>
+// ── State ──────────────────────────────────────────────────────────────────────
+const _fm = {
+  currentPath: null, currentFile: null, fileType: null, dirty: false,
+  jsonParsed: null, jsonMode: 'tree',
+  envPairs: [],      envMode: 'table',
+  csvRows: [],
+  excelData: {}, sheetNames: [], activeSheet: null,
+};
+
+// ── Init ───────────────────────────────────────────────────────────────────────
+let _fmInited = false;
+function initFileManager() {
+  if (_fmInited) return;
+  _fmInited = true;
+  fmBrowse('');
+}
+
+// ── Browse ─────────────────────────────────────────────────────────────────────
+async function fmBrowse(path) {
+  const res = await fetch('/api/fm/browse?path=' + encodeURIComponent(path || '')).then(r => r.json()).catch(e => ({error: e.message}));
+  if (res.error) { fmShowError(res.error); return; }
+
+  _fm.currentPath = res.path;
+  document.getElementById('fm-path-bar').textContent = res.path;
+  document.getElementById('fm-path-bar').title = res.path;
+  document.getElementById('fm-up-btn').disabled = !res.parent;
+
+  const tree = document.getElementById('fm-tree');
+  tree.innerHTML = '';
+  if (!res.entries.length) {
+    tree.innerHTML = '<div style="padding:16px;color:var(--text-dim);font-size:11px;text-align:center;">Empty folder</div>';
+    return;
+  }
+  res.entries.forEach(entry => {
+    const el = document.createElement('div');
+    el.className = 'fm-entry';
+    const ext = (entry.ext || '').replace('.','');
+    const extBadge = entry.type === 'file' ? `<span class="fm-ext-badge ${ext}">${entry.ext}</span>` : '';
+    el.innerHTML = `<span class="fm-entry-icon">${entry.type === 'dir' ? '📁' : (entry.icon || '📄')}</span><span class="fm-entry-name" title="${entry.path}">${entry.name}</span>${extBadge}`;
+    el.onclick = () => {
+      if (entry.type === 'dir') { fmBrowse(entry.path); return; }
+      document.querySelectorAll('.fm-entry').forEach(e => e.classList.remove('selected'));
+      el.classList.add('selected');
+      fmOpenFile(entry.path);
+    };
+    tree.appendChild(el);
+  });
+}
+
+function fmUp() { fmBrowse(_fm.currentPath ? _fm.currentPath.split('/').slice(0,-1).join('/') || '/' : ''); }
+function fmRefresh() { fmBrowse(_fm.currentPath || ''); }
+
+// ── Open file ──────────────────────────────────────────────────────────────────
+async function fmOpenFile(path) {
+  const name = path.split('/').pop();
+  fmStatus('Loading ' + name + '…');
+
+  let res;
+  try {
+    const r = await fetch('/api/fm/read?path=' + encodeURIComponent(path));
+    res = await r.json();
+  } catch(e) { fmShowError('Network error: ' + e.message); return; }
+  if (res.error) { fmShowError(res.error); return; }
+
+  _fm.currentFile = path;
+  _fm.fileType    = res.type;
+  _fm.dirty       = false;
+
+  // Show header
+  document.getElementById('fm-file-name').textContent = name;
+  document.getElementById('fm-file-path').textContent = path;
+  document.getElementById('fm-editor-header').style.display = 'flex';
+  document.getElementById('fm-dirty-badge').style.display = 'none';
+  document.getElementById('fm-saved-badge').style.display = 'none';
+
+  // Hide all panels, show the right one
+  ['fm-empty','fm-json-wrap','fm-yaml-wrap','fm-env-wrap','fm-csv-wrap','fm-excel-wrap']
+    .forEach(id => document.getElementById(id).style.display = 'none');
+
+  if (res.type === 'json')  { _fmLoadJson(res, name); }
+  else if (res.type === 'yaml')  { _fmLoadYaml(res, name); }
+  else if (res.type === 'env')   { _fmLoadEnv(res, name); }
+  else if (res.type === 'csv')   { _fmLoadCsv(res, name); }
+  else if (res.type === 'excel') { _fmLoadExcel(res, name); }
+}
+
+// ── JSON ───────────────────────────────────────────────────────────────────────
+function _fmLoadJson(res, name) {
+  _fm.jsonParsed = res.parsed;
+  _fm.jsonMode   = 'tree';
+  document.getElementById('fm-json-editor').value = res.content;
+  fmUpdateJsonBadge(true);
+  const lines = res.content.split('\n').length;
+  document.getElementById('fm-json-info').textContent = `${lines} lines`;
+  document.getElementById('fm-json-wrap').style.display = 'flex';
+  document.getElementById('json-tab-tree').classList.add('active');
+  document.getElementById('json-tab-edit').classList.remove('active');
+  document.getElementById('fm-json-tree').style.display = '';
+  document.getElementById('fm-json-edit-panel').style.display = 'none';
+  document.getElementById('json-expand-btn').style.display = '';
+  document.getElementById('json-collapse-btn').style.display = '';
+  fmBuildJsonTree(_fm.jsonParsed);
+  fmStatus('Loaded ' + name + ' · ' + lines + ' lines');
+}
+
+function fmSetJsonMode(mode) {
+  _fm.jsonMode = mode;
+  const isTree = mode === 'tree';
+  document.getElementById('json-tab-tree').classList.toggle('active', isTree);
+  document.getElementById('json-tab-edit').classList.toggle('active', !isTree);
+  document.getElementById('fm-json-tree').style.display = isTree ? '' : 'none';
+  document.getElementById('fm-json-edit-panel').style.display = isTree ? 'none' : 'flex';
+  document.getElementById('json-expand-btn').style.display = isTree ? '' : 'none';
+  document.getElementById('json-collapse-btn').style.display = isTree ? '' : 'none';
+  // When switching to tree, re-parse from textarea
+  if (isTree) {
+    const val = document.getElementById('fm-json-editor').value;
+    try {
+      _fm.jsonParsed = JSON.parse(val);
+      fmBuildJsonTree(_fm.jsonParsed);
+    } catch(e) { /* invalid JSON, keep old tree */ }
+  }
+}
+
+function fmJsonEditorInput() {
+  const val = document.getElementById('fm-json-editor').value;
+  try { JSON.parse(val); fmUpdateJsonBadge(true); } catch(e) { fmUpdateJsonBadge(false, e.message); }
+  const lines = val.split('\n').length;
+  document.getElementById('fm-json-info').textContent = `${lines} lines`;
+  fmMarkDirty();
+}
+
+function fmUpdateJsonBadge(ok, msg) {
+  const b = document.getElementById('fm-json-badge');
+  b.textContent = ok ? '✓ Valid JSON' : ('✗ ' + (msg || 'Invalid JSON'));
+  b.className   = 'fm-valid-badge ' + (ok ? 'ok' : 'err');
+}
+
+function fmJsonExpandAll()   { document.querySelectorAll('#fm-json-tree .jt-toggle[data-open="0"]').forEach(t => t.click()); }
+function fmJsonCollapseAll() { document.querySelectorAll('#fm-json-tree .jt-toggle[data-open="1"]').forEach(t => t.click()); }
+
+function fmBuildJsonTree(data) {
+  const container = document.getElementById('fm-json-tree');
+  container.innerHTML = '';
+  container.appendChild(_jtNode(data, null, true));
+}
+
+function _jtNode(val, key, isLast) {
+  const wrap = document.createElement('div');
+  wrap.className = 'jt-node';
+  const line = document.createElement('div');
+  line.className = 'jt-line';
+
+  if (key !== null) {
+    const k = document.createElement('span');
+    k.className = 'jt-key';
+    k.textContent = `"${key}"`;
+    line.appendChild(k);
+    const c = document.createElement('span');
+    c.className = 'jt-colon';
+    c.textContent = ': ';
+    line.appendChild(c);
+  }
+
+  const comma = isLast ? '' : ',';
+
+  if (val === null) {
+    _jtLeaf(line, 'null', 'jt-null', comma);
+    wrap.appendChild(line);
+  } else if (typeof val === 'boolean') {
+    _jtLeaf(line, String(val), 'jt-bool', comma);
+    wrap.appendChild(line);
+  } else if (typeof val === 'number') {
+    _jtLeaf(line, String(val), 'jt-num', comma);
+    wrap.appendChild(line);
+  } else if (typeof val === 'string') {
+    const v = document.createElement('span');
+    v.className = 'jt-str jt-str-val';
+    v.textContent = JSON.stringify(val);
+    if (comma) { v.textContent += comma; }
+    v.title = 'Click to copy';
+    v.onclick = () => { navigator.clipboard.writeText(val).catch(()=>{}); v.style.opacity='0.5'; setTimeout(()=>v.style.opacity='',300); };
+    line.appendChild(v);
+    wrap.appendChild(line);
+  } else if (Array.isArray(val)) {
+    wrap.appendChild(_jtCollapsible(line, val, '[', ']', null, comma,
+      (ch, i) => ch.appendChild(_jtNode(val[i], null, i === val.length - 1)),
+      `${val.length} item${val.length !== 1 ? 's' : ''}`
+    ));
+  } else if (typeof val === 'object') {
+    const keys = Object.keys(val);
+    wrap.appendChild(_jtCollapsible(line, val, '{', '}', null, comma,
+      (ch, i) => ch.appendChild(_jtNode(val[keys[i]], keys[i], i === keys.length - 1)),
+      `${keys.length} key${keys.length !== 1 ? 's' : ''}`
+    ));
+  }
+  return wrap;
+}
+
+function _jtLeaf(line, text, cls, comma) {
+  const v = document.createElement('span');
+  v.className = cls;
+  v.textContent = text + comma;
+  line.appendChild(v);
+}
+
+function _jtCollapsible(line, val, open, close, key, comma, populate, summary) {
+  const wrap = document.createElement('div');
+  wrap.className = 'jt-node';
+  const toggle = document.createElement('span');
+  toggle.className = 'jt-toggle';
+  toggle.textContent = '▾';
+  toggle.dataset.open = '1';
+  line.prepend(toggle);
+
+  const ob = document.createElement('span');
+  ob.className = 'jt-bracket';
+  ob.textContent = open;
+  line.appendChild(ob);
+
+  const collapsed = document.createElement('span');
+  collapsed.className = 'jt-count';
+  collapsed.textContent = ' ' + summary + ' ' + close + comma;
+  collapsed.style.display = 'none';
+  line.appendChild(collapsed);
+
+  wrap.appendChild(line);
+
+  const children = document.createElement('div');
+  children.className = 'jt-children';
+  const count = Array.isArray(val) ? val.length : Object.keys(val).length;
+  for (let i = 0; i < count; i++) populate(children, i);
+  wrap.appendChild(children);
+
+  const closeLine = document.createElement('div');
+  const cb = document.createElement('span');
+  cb.className = 'jt-bracket';
+  cb.textContent = close + comma;
+  closeLine.appendChild(cb);
+  wrap.appendChild(closeLine);
+
+  toggle.onclick = () => {
+    const isOpen = toggle.dataset.open === '1';
+    toggle.dataset.open   = isOpen ? '0' : '1';
+    toggle.textContent    = isOpen ? '▸' : '▾';
+    children.style.display  = isOpen ? 'none' : '';
+    closeLine.style.display  = isOpen ? 'none' : '';
+    collapsed.style.display  = isOpen ? 'inline' : 'none';
+  };
+
+  return wrap;
+}
+
+// ── YAML ───────────────────────────────────────────────────────────────────────
+function _fmLoadYaml(res, name) {
+  document.getElementById('fm-yaml-editor').value = res.content;
+  _fmYamlSetBadge(res.valid, res.error);
+  document.getElementById('fm-yaml-info').textContent = `${res.content.split('\n').length} lines`;
+  document.getElementById('fm-yaml-wrap').style.display = 'flex';
+  fmStatus('Loaded ' + name + (res.valid ? '' : ' · ⚠ YAML parse error'));
+}
+
+function fmYamlEditorInput() {
+  fmMarkDirty();
+  // Client-side we can't parse YAML without a lib; just update line count
+  const val = document.getElementById('fm-yaml-editor').value;
+  document.getElementById('fm-yaml-info').textContent = `${val.split('\n').length} lines`;
+}
+
+function _fmYamlSetBadge(valid, err) {
+  const b = document.getElementById('fm-yaml-badge');
+  b.textContent = valid ? '✓ Valid YAML' : ('⚠ ' + (err || 'YAML error'));
+  b.className   = 'fm-valid-badge ' + (valid ? 'ok' : 'err');
+}
+
+// ── ENV ────────────────────────────────────────────────────────────────────────
+function _fmLoadEnv(res, name) {
+  _fm.envPairs = res.pairs || [];
+  _fm.envMode  = 'table';
+  document.getElementById('fm-env-editor').value = res.content;
+  const count = _fm.envPairs.filter(p => !p.comment).length;
+  document.getElementById('fm-env-info').textContent = `${count} variable${count !== 1 ? 's' : ''}`;
+  document.getElementById('fm-env-wrap').style.display = 'flex';
+  document.getElementById('env-tab-table').classList.add('active');
+  document.getElementById('env-tab-raw').classList.remove('active');
+  document.getElementById('fm-env-table-panel').style.display = '';
+  document.getElementById('fm-env-raw-panel').style.display = 'none';
+  fmRenderEnvTable();
+  fmStatus('Loaded ' + name + ' · ' + count + ' variables');
+}
+
+function fmSetEnvMode(mode) {
+  _fm.envMode = mode;
+  const isTable = mode === 'table';
+  document.getElementById('env-tab-table').classList.toggle('active', isTable);
+  document.getElementById('env-tab-raw').classList.toggle('active', !isTable);
+  document.getElementById('fm-env-table-panel').style.display = isTable ? '' : 'none';
+  document.getElementById('fm-env-raw-panel').style.display   = isTable ? 'none' : '';
+  if (!isTable) {
+    // Sync raw from pairs
+    document.getElementById('fm-env-editor').value = _fmEnvPairsToText();
+  } else {
+    // Sync pairs from raw
+    const text = document.getElementById('fm-env-editor').value;
+    _fm.envPairs = _fmEnvParse(text);
+    fmRenderEnvTable();
+  }
+}
+
+function fmRenderEnvTable() {
+  const container = document.getElementById('fm-env-rows');
+  container.innerHTML = '';
+  _fm.envPairs.forEach((pair, idx) => {
+    if (pair.comment) {
+      const row = document.createElement('div');
+      row.className = 'env-comment-row';
+      row.textContent = pair.raw || '';
+      container.appendChild(row);
+      return;
+    }
+    const row = document.createElement('div');
+    row.className = 'env-row';
+
+    const ki = document.createElement('input');
+    ki.className = 'env-key-input';
+    ki.type = 'text';
+    ki.value = pair.key || '';
+    ki.placeholder = 'KEY';
+    ki.oninput = () => { _fm.envPairs[idx].key = ki.value; fmMarkDirty(); };
+
+    const eq = document.createElement('span');
+    eq.className = 'env-eq';
+    eq.textContent = '=';
+
+    const vi = document.createElement('input');
+    vi.className = 'env-val-input';
+    vi.type = 'text';
+    vi.value = pair.value || '';
+    vi.placeholder = 'value';
+    vi.oninput = () => { _fm.envPairs[idx].value = vi.value; fmMarkDirty(); };
+
+    const del = document.createElement('button');
+    del.className = 'env-del-btn';
+    del.textContent = '✕';
+    del.onclick = () => { _fm.envPairs.splice(idx, 1); fmRenderEnvTable(); fmMarkDirty(); };
+
+    row.appendChild(ki); row.appendChild(eq); row.appendChild(vi); row.appendChild(del);
+    container.appendChild(row);
+  });
+}
+
+function fmEnvAddRow() {
+  _fm.envPairs.push({comment: false, key: '', value: ''});
+  fmRenderEnvTable();
+  fmMarkDirty();
+  // Focus last key input
+  const inputs = document.querySelectorAll('.env-key-input');
+  if (inputs.length) inputs[inputs.length - 1].focus();
+}
+
+function _fmEnvPairsToText() {
+  return _fm.envPairs.map(p => {
+    if (p.comment) return p.raw || '';
+    const v = (p.value || '').includes(' ') ? `"${p.value}"` : (p.value || '');
+    return `${p.key || ''}=${v}`;
+  }).join('\n');
+}
+
+function _fmEnvParse(text) {
+  return text.split('\n').map(line => {
+    const s = line.trim();
+    if (!s || s.startsWith('#')) return {comment: true, raw: line};
+    if (s.includes('=')) {
+      const [k, ...rest] = s.split('=');
+      let v = rest.join('=').trim();
+      if (v.length >= 2 && v[0] === v[-1] && v[0] in {'"':1,"'":1}) v = v.slice(1,-1);
+      return {comment: false, key: k.trim(), value: v};
+    }
+    return {comment: true, raw: line};
+  });
+}
+
+// ── CSV ────────────────────────────────────────────────────────────────────────
+function _fmLoadCsv(res, name) {
+  _fm.csvRows = (res.rows || []).map(r => r.slice());
+  if (!_fm.csvRows.length) { _fm.csvRows = [['','',''],['','','']]; }
+  document.getElementById('fm-csv-wrap').style.display = 'flex';
+  fmRenderCsvTable();
+  fmStatus('Loaded ' + name + ' · ' + _fm.csvRows.length + ' rows');
+}
+
+function fmRenderCsvTable() {
+  const table = document.getElementById('fm-csv-table');
+  table.innerHTML = '';
+  if (!_fm.csvRows.length) return;
+  const maxCols = Math.max(..._fm.csvRows.map(r => r.length));
+
+  const thead = document.createElement('thead');
+  const hr = document.createElement('tr');
+  hr.innerHTML = '<th class="fm-row-num"></th>';
+  for (let c = 0; c < maxCols; c++) hr.innerHTML += `<th>${_fmColLetter(c)}</th>`;
+  thead.appendChild(hr); table.appendChild(thead);
+
+  const tbody = document.createElement('tbody');
+  _fm.csvRows.forEach((row, ri) => {
+    const tr = document.createElement('tr');
+    tr.innerHTML = `<td class="fm-row-num">${ri + 1}</td>`;
+    for (let ci = 0; ci < maxCols; ci++) {
+      const td = document.createElement('td');
+      const inp = document.createElement('input');
+      inp.type = 'text'; inp.value = row[ci] || '';
+      inp.oninput = () => { _fm.csvRows[ri][ci] = inp.value; fmMarkDirty(); };
+      td.appendChild(inp); tr.appendChild(td);
+    }
+    tbody.appendChild(tr);
+  });
+  table.appendChild(tbody);
+  document.getElementById('fm-csv-info').textContent =
+    `${_fm.csvRows.length} rows × ${maxCols} cols`;
+}
+
+function fmCsvAddRow() {
+  const cols = _fm.csvRows.length ? _fm.csvRows[0].length : 1;
+  _fm.csvRows.push(Array(cols).fill(''));
+  fmRenderCsvTable(); fmMarkDirty();
+}
+function fmCsvAddCol() {
+  _fm.csvRows.forEach(r => r.push(''));
+  fmRenderCsvTable(); fmMarkDirty();
+}
+function fmCsvDelRow() {
+  if (_fm.csvRows.length > 1) { _fm.csvRows.pop(); fmRenderCsvTable(); fmMarkDirty(); }
+}
+
+// ── Excel ──────────────────────────────────────────────────────────────────────
+function _fmLoadExcel(res, name) {
+  _fm.excelData  = {};
+  _fm.sheetNames = res.sheet_names || [];
+  (_fm.sheetNames).forEach(sn => { _fm.excelData[sn] = (res.sheets[sn] || []).map(r => r.slice()); });
+  _fm.activeSheet = _fm.sheetNames[0] || '';
+  document.getElementById('fm-excel-wrap').style.display = 'flex';
+  fmRenderSheetTabs(); fmRenderExcelSheet(_fm.activeSheet);
+  fmStatus('Loaded ' + name + ' · ' + _fm.sheetNames.length + ' sheet(s)');
+}
+
+function fmRenderSheetTabs() {
+  const tabs = document.getElementById('fm-sheet-tabs');
+  tabs.innerHTML = '';
+  _fm.sheetNames.forEach(sn => {
+    const btn = document.createElement('button');
+    btn.className = 'fm-sheet-tab' + (sn === _fm.activeSheet ? ' active' : '');
+    btn.textContent = sn;
+    btn.onclick = () => { _fm.activeSheet = sn; fmRenderSheetTabs(); fmRenderExcelSheet(sn); };
+    tabs.appendChild(btn);
+  });
+}
+
+function fmRenderExcelSheet(sn) {
+  const rows = _fm.excelData[sn] || [];
+  if (!rows.length) { for (let i = 0; i < 5; i++) rows.push(['','','','','']); _fm.excelData[sn] = rows; }
+  const maxCols = Math.max(...rows.map(r => r.length));
+  const table = document.getElementById('fm-excel-table');
+  table.innerHTML = '';
+
+  const thead = document.createElement('thead');
+  const hr = document.createElement('tr');
+  hr.innerHTML = '<th class="fm-row-num"></th>';
+  for (let c = 0; c < maxCols; c++) hr.innerHTML += `<th>${_fmColLetter(c)}</th>`;
+  thead.appendChild(hr); table.appendChild(thead);
+
+  const tbody = document.createElement('tbody');
+  rows.forEach((row, ri) => {
+    const tr = document.createElement('tr');
+    tr.innerHTML = `<td class="fm-row-num">${ri + 1}</td>`;
+    for (let ci = 0; ci < maxCols; ci++) {
+      const td = document.createElement('td');
+      const inp = document.createElement('input');
+      inp.type = 'text'; inp.value = row[ci] || '';
+      inp.oninput = () => { _fm.excelData[sn][ri][ci] = inp.value; fmMarkDirty(); };
+      td.appendChild(inp); tr.appendChild(td);
+    }
+    tbody.appendChild(tr);
+  });
+  table.appendChild(tbody);
+
+  const nonEmpty = rows.reduce((s, r) => s + r.filter(v => v !== '').length, 0);
+  document.getElementById('fm-excel-info').textContent =
+    `${sn}: ${rows.length} rows × ${maxCols} cols · ${nonEmpty} filled`;
+}
+
+function fmExcelAddRow() {
+  if (!_fm.activeSheet) return;
+  const rows = _fm.excelData[_fm.activeSheet];
+  rows.push(Array(rows[0]?.length || 1).fill(''));
+  fmRenderExcelSheet(_fm.activeSheet); fmMarkDirty();
+}
+function fmExcelAddCol() {
+  if (!_fm.activeSheet) return;
+  _fm.excelData[_fm.activeSheet].forEach(r => r.push(''));
+  fmRenderExcelSheet(_fm.activeSheet); fmMarkDirty();
+}
+
+// ── Save ───────────────────────────────────────────────────────────────────────
+async function fmSave() {
+  if (!_fm.currentFile) return;
+  fmStatus('Saving…');
+
+  let body;
+  const t = _fm.fileType;
+
+  if (t === 'json') {
+    const content = document.getElementById('fm-json-editor').value;
+    try { JSON.parse(content); } catch(e) {
+      fmStatus('Fix JSON errors before saving · ' + e.message);
+      return;
+    }
+    body = {path: _fm.currentFile, content};
+  } else if (t === 'yaml') {
+    body = {path: _fm.currentFile, content: document.getElementById('fm-yaml-editor').value};
+  } else if (t === 'env') {
+    const content = _fm.envMode === 'table'
+      ? _fmEnvPairsToText()
+      : document.getElementById('fm-env-editor').value;
+    body = {path: _fm.currentFile, content};
+  } else if (t === 'csv') {
+    body = {path: _fm.currentFile, rows: _fm.csvRows};
+  } else if (t === 'excel') {
+    body = {path: _fm.currentFile, sheets: _fm.excelData};
+  }
+
+  let res;
+  try {
+    const r = await fetch('/api/fm/save', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify(body),
+    });
+    res = await r.json();
+  } catch(e) { fmStatus('Network error: ' + e.message); return; }
+
+  if (res.error) {
+    fmStatus('✗ ' + res.error, true);
+  } else {
+    _fm.dirty = false;
+    document.getElementById('fm-dirty-badge').style.display = 'none';
+    const badge = document.getElementById('fm-saved-badge');
+    badge.style.display = 'inline-flex';
+    setTimeout(() => badge.style.display = 'none', 2500);
+    fmStatus('Saved ✓  ' + _fm.currentFile.split('/').pop());
+  }
+}
+
+// ── Shared helpers ─────────────────────────────────────────────────────────────
+function _fmColLetter(i) {
+  let s = ''; i++;
+  while (i > 0) { s = String.fromCharCode(64 + (i % 26 || 26)) + s; i = Math.floor((i - 1) / 26); }
+  return s;
+}
+
+function fmMarkDirty() {
+  _fm.dirty = true;
+  document.getElementById('fm-dirty-badge').style.display = 'inline-flex';
+  document.getElementById('fm-saved-badge').style.display = 'none';
+}
+
+function fmStatus(msg, isErr) {
+  const bar = document.getElementById('fm-status-bar');
+  bar.style.display = 'flex';
+  const span = document.getElementById('fm-status-text');
+  span.textContent = msg;
+  span.style.color = isErr ? 'var(--red)' : 'var(--text-dim)';
+}
+
+function fmShowError(msg) {
+  fmStatus('✗ ' + msg, true);
+  document.getElementById('fm-empty').style.display = 'flex';
+  document.getElementById('fm-empty').innerHTML =
+    `<div class="fm-empty-icon">⚠️</div>
+     <div style="color:var(--red);font-size:13px;font-weight:600;max-width:400px;text-align:center;">${msg}</div>`;
+  ['fm-json-wrap','fm-yaml-wrap','fm-env-wrap','fm-csv-wrap','fm-excel-wrap']
+    .forEach(id => document.getElementById(id).style.display = 'none');
+  document.getElementById('fm-editor-header').style.display = 'none';
+}
+
+// Cmd/Ctrl+S
+document.addEventListener('keydown', e => {
+  if ((e.metaKey || e.ctrlKey) && e.key === 's' && _fm.currentFile) {
+    e.preventDefault(); fmSave();
+  }
+});
+</script>

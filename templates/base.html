@@ -244,11 +244,13 @@
   <button type="button" class="tab-btn" id="navbtn-tools" onclick="switchTab('tools')"><span class="tab-icon">⚙️</span>Config</button>
   <button type="button" class="tab-btn" id="navbtn-dashboard" onclick="switchTab('dashboard')"><span class="tab-icon">📊</span>Reports Dashboard</button>
   <button type="button" class="tab-btn" id="navbtn-zephyr" onclick="switchTab('zephyr')"><span class="tab-icon">🔷</span>Test Management</button>
+  <button type="button" class="tab-btn" id="navbtn-filemanager" onclick="switchTab('filemanager')"><span class="tab-icon">🗂️</span>File Manager</button>
 </nav>
 
 {% include 'partials/executor.html' %}
 {% include 'partials/dashboard.html' %}
 {% include 'partials/testmanagement.html' %}
+{% include 'partials/filemanager.html' %}
 
 <!-- Status bar -->
 <div class="statusbar">
@@ -325,20 +327,23 @@ function setRunning(running) {
 }
 
 function switchTab(tab) {
-  const pages = ['executor','tools','dashboard','zephyr'];
+  const pages = ['executor','tools','dashboard','zephyr','filemanager'];
   pages.forEach(p => {
     const el = document.getElementById('page-' + p);
     if (el) {
-      if (p === 'executor') el.classList.toggle('hidden', p !== tab);
-      else el.classList.toggle('active', p === tab);
+      if (p === 'executor') { el.classList.toggle('hidden', p !== tab); }
+      else if (p === 'filemanager') { el.style.display = (p === tab) ? 'flex' : 'none'; }
+      else { el.classList.toggle('active', p === tab); }
     }
   });
-  document.querySelectorAll('.tab-btn').forEach((btn, i) => {
-    btn.classList.toggle('active', pages[i] === tab);
+  document.querySelectorAll('.tab-btn').forEach(btn => {
+    const key = btn.id.replace('navbtn-', '');
+    btn.classList.toggle('active', key === tab);
   });
-  if (tab === 'tools')     { switchCfgTab('features'); loadTools(); loadFeatures(); loadZephyrConfig(); loadMappingConfig(); }
-  if (tab === 'dashboard') loadDashboard();
-  if (tab === 'zephyr')    { loadZephyrConfig(); _updateZephyrContextBanners(); }
+  if (tab === 'tools')       { switchCfgTab('features'); loadTools(); loadFeatures(); loadZephyrConfig(); loadMappingConfig(); }
+  if (tab === 'dashboard')   loadDashboard();
+  if (tab === 'zephyr')      { loadZephyrConfig(); _updateZephyrContextBanners(); }
+  if (tab === 'filemanager') initFileManager();
 }
 
 function connectStream() {

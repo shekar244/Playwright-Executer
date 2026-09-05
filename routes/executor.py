@@ -8,6 +8,8 @@ from __future__ import annotations
 
 import os
 import queue
+import shutil
+import subprocess
 import sys
 from pathlib import Path
 
@@ -23,6 +25,46 @@ from ui_launcher.test_discovery import TestDiscovery
 bp = Blueprint("executor", __name__)
 
 _ROOT = Path(__file__).parent.parent   # Playwright-Executer root
+
+
+def _generate_allure3_report(repo: str, cfg: dict) -> str:
+    """
+    Generate an Allure 3 single-file HTML report after a test run.
+    Returns the absolute path of the generated index.html, or '' on failure.
+    """
+    allure_bin = shutil.which("allure")
+    if not allure_bin:
+        return ""
+
+    results_rel = cfg.get("allure_results_dir", "allure/results")
+    report_rel  = cfg.get("report_individual_dir", "allure/reports")
+    results_dir = Path(repo) / results_rel
+    report_dir  = Path(repo) / report_rel
+
+    if not results_dir.is_dir():
+        return ""
+
+    report_dir.mkdir(parents=True, exist_ok=True)
+    report_name = f"{Path(repo).name} — Test Report"
+
+    try:
+        subprocess.run(
+            [
+                allure_bin, "awesome",
+                str(results_dir),
+                "--output", str(report_dir),
+                "--single-file",
+                "--report-name", report_name,
+            ],
+            cwd=repo,
+            timeout=120,
+            capture_output=True,
+        )
+        # Allure 3 --single-file writes index.html
+        idx = report_dir / "index.html"
+        return str(idx) if idx.exists() else ""
+    except Exception:
+        return ""
 
 
 def _display_cmd(cmd: list[str], repo: str) -> str:
@@ -269,6 +311,10 @@ def run_tests():
             else:
                 run_status = f"failed:{exit_code}"
             state.broadcast("status", run_status)
+            # Generate Allure 3 single-file HTML report
+            report_path = _generate_allure3_report(repo, cfg)
+            if report_path:
+                state.broadcast("line", f"[Report] Allure 3 report → {report_path}")
             record_run_history(repo, run_status, cfg)
             state.broadcast("done", "")
 

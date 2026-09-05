@@ -5,6 +5,8 @@
 #
 # Runtime
 flask>=3.0.0          # Web server + SSE streaming
+openpyxl>=3.1.0       # Excel read/write for File Manager
+pyyaml>=6.0           # YAML read/write for File Manager
 
 # Standard-library modules used (no install needed):
 #   base64, csv, datetime, hashlib, hmac, io, json, os, pathlib,

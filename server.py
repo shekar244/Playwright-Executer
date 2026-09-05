@@ -16,11 +16,12 @@ _ROOT = Path(__file__).parent
 if str(_ROOT) not in sys.path:
     sys.path.insert(0, str(_ROOT))
 
-from routes.executor  import bp as executor_bp
-from routes.config    import bp as config_bp
-from routes.git       import bp as git_bp
-from routes.dashboard import bp as dashboard_bp
-from routes.zephyr    import bp as zephyr_bp
+from routes.executor    import bp as executor_bp
+from routes.config      import bp as config_bp
+from routes.git         import bp as git_bp
+from routes.dashboard   import bp as dashboard_bp
+from routes.zephyr      import bp as zephyr_bp
+from routes.filemanager import bp as filemanager_bp
 
 app = Flask(__name__, static_folder="static", template_folder="templates")
 
@@ -29,6 +30,7 @@ app.register_blueprint(config_bp)
 app.register_blueprint(git_bp)
 app.register_blueprint(dashboard_bp)
 app.register_blueprint(zephyr_bp)
+app.register_blueprint(filemanager_bp)
 
 
 @app.route("/")

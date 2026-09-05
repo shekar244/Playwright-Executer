@@ -13,13 +13,16 @@ let _createFile   = null;
 let _importKeys   = [];
 let _filterIssues = [];
 let _executions   = [];
+let _execFiltered = [];   // currently filtered list
+let _execPage     = 1;    // current page (1-based)
+const _EXEC_PAGE_SIZE = 15;
 let _resultsCsvRows    = [];
 let _resultsCsvHeaders = [];
 const _zFiles = {};
 
 // ── Zephyr sub-tabs ────────────────────────────────────────────────────────────
 function switchZTab(tab) {
-  const tabs = ['import', 'results', 'executions'];
+  const tabs = ['import', 'results', 'executions', 'metrics'];
   tabs.forEach(t => {
     const btn   = document.getElementById('ztab-' + t);
     const panel = document.getElementById('zpanel-' + t);
@@ -522,31 +525,87 @@ async function zLoadExecutions() {
   _executions = data.searchObjectList || data.executions || [];
   const countEl = document.getElementById('zExecCount'); if (countEl) countEl.textContent = `${_executions.length} execution(s)`;
   zLog(`✓  Loaded ${_executions.length} execution(s).`, 'passed');
-  _renderExecRows(_executions);
-  const activeFilter = document.getElementById('z_exec_status_filter')?.value; if (activeFilter) zFilterExecTable();
+  _execPage = 1;
+  zFilterExecTable(); // applies any active filter then renders with pagination
 }
 
 function zFilterExecTable() {
   const filter = document.getElementById('z_exec_status_filter')?.value || '';
-  _renderExecRows(filter ? _executions.filter(e => { const execObj = e.execution || {}; const statusObj = execObj.status || e.status || {}; return String(statusObj.id ?? e.executionStatus ?? -1) === filter; }) : _executions);
+  _execFiltered = filter
+    ? _executions.filter(e => {
+        const execObj = e.execution || {}; const statusObj = execObj.status || e.status || {};
+        return String(statusObj.id ?? e.executionStatus ?? -1) === filter;
+      })
+    : _executions;
+  _execPage = 1;
+  _renderExecRows();
 }
 
-function _renderExecRows(list) {
+function zExecGoPage(page) {
+  const totalPages = Math.ceil(_execFiltered.length / _EXEC_PAGE_SIZE);
+  _execPage = Math.max(1, Math.min(page, totalPages));
+  _renderExecRows();
+}
+
+function _renderExecRows() {
   const STAT_CLS  = { '1':'passed','2':'failed','3':'broken','4':'cancelled','-1':'' };
   const STAT_ICON = { '1':'✓','2':'✗','3':'⋯','4':'⊘','-1':'—' };
-  document.getElementById('zExecTbody').innerHTML = list.length
-    ? list.map((e, i) => {
+
+  const list       = _execFiltered;
+  const totalPages = Math.max(1, Math.ceil(list.length / _EXEC_PAGE_SIZE));
+  _execPage        = Math.max(1, Math.min(_execPage, totalPages));
+  const start      = (_execPage - 1) * _EXEC_PAGE_SIZE;
+  const pageItems  = list.slice(start, start + _EXEC_PAGE_SIZE);
+
+  // Table rows
+  document.getElementById('zExecTbody').innerHTML = pageItems.length
+    ? pageItems.map(e => {
         const execObj = e.execution || {}; const statusObj = execObj.status || e.status || {};
-        const sName = statusObj.name || e.executionStatus || '—'; const sid = String(statusObj.id ?? e.executionStatus ?? -1);
+        const sName   = statusObj.name || e.executionStatus || '—';
+        const sid     = String(statusObj.id ?? e.executionStatus ?? -1);
         const summary = e.issueSummary || e.label || e.summary || '';
         const execId  = execObj.id || e.id || e.executionId || '';
         const issueId = e.issueId || execObj.issueId || 0;
         const origIdx = _executions.indexOf(e);
-        return `<tr><td style="width:32px;"><input type="checkbox" class="z-exec-cb" data-idx="${origIdx}" /></td><td style="font-family:'JetBrains Mono',monospace;font-size:11px;font-weight:600;color:var(--accent);">${escHtml(e.issueKey||'')}</td><td style="font-size:11px;max-width:320px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${escHtml(summary)}">${escHtml(summary||'—')}</td><td><span class="tbl-status-badge ${STAT_CLS[sid]||''}" style="font-size:10px;">${STAT_ICON[sid]||''} ${sName}</span></td><td style="white-space:nowrap;"><button class="btn btn-sm" style="font-size:10px;padding:3px 8px;" onclick="zQuickMark('${execId}',${issueId})">Mark</button></td></tr>`;
+        return `<tr>
+          <td style="width:32px;"><input type="checkbox" class="z-exec-cb" data-idx="${origIdx}" /></td>
+          <td style="font-family:'JetBrains Mono',monospace;font-size:11px;font-weight:600;color:var(--accent);">${escHtml(e.issueKey||'')}</td>
+          <td style="font-size:11px;max-width:320px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${escHtml(summary)}">${escHtml(summary||'—')}</td>
+          <td><span class="tbl-status-badge ${STAT_CLS[sid]||''}" style="font-size:10px;">${STAT_ICON[sid]||''} ${sName}</span></td>
+          <td style="white-space:nowrap;"><button class="btn btn-sm" style="font-size:10px;padding:3px 8px;" onclick="zQuickMark('${execId}',${issueId})">Mark</button></td>
+        </tr>`;
       }).join('')
     : '<tr><td colspan="5" style="text-align:center;color:var(--text-dim);padding:16px;">No executions match the filter</td></tr>';
-  document.getElementById('zBulkMarkBtn').disabled = !list.length;
+
+  document.getElementById('zBulkMarkBtn').disabled = !pageItems.length;
   document.getElementById('zSelectAll').checked    = false;
+
+  // Pagination controls
+  const pager    = document.getElementById('zExecPager');
+  const prevBtn  = document.getElementById('zExecPrevBtn');
+  const nextBtn  = document.getElementById('zExecNextBtn');
+  const pageInfo = document.getElementById('zExecPageInfo');
+  const pageBtns = document.getElementById('zExecPageBtns');
+
+  if (!pager) return;
+  pager.style.display = list.length > _EXEC_PAGE_SIZE ? 'flex' : 'none';
+
+  if (prevBtn)  prevBtn.disabled  = _execPage <= 1;
+  if (nextBtn)  nextBtn.disabled  = _execPage >= totalPages;
+  if (pageInfo) pageInfo.textContent =
+    `${start + 1}–${Math.min(start + _EXEC_PAGE_SIZE, list.length)} of ${list.length}`;
+
+  // Page number buttons — show up to 7 around current page
+  if (pageBtns) {
+    const range = [], delta = 3;
+    for (let p = Math.max(1, _execPage - delta); p <= Math.min(totalPages, _execPage + delta); p++) range.push(p);
+    pageBtns.innerHTML = range.map(p =>
+      `<button class="btn btn-sm" onclick="zExecGoPage(${p})"
+         style="padding:4px 9px;min-width:28px;${p === _execPage
+           ? 'background:var(--accent);color:#0d1117;border-color:var(--accent);font-weight:700;'
+           : ''}">${p}</button>`
+    ).join('');
+  }
 }
 
 function zToggleAll(cb) { document.querySelectorAll('.z-exec-cb').forEach(c => c.checked = cb.checked); }
@@ -629,4 +688,208 @@ async function zAddTests() {
 async function _zApiCall(method, path, params = {}, body = null) {
   const qs = Object.keys(params).length ? '?' + new URLSearchParams(params) : '';
   return fetch('/api/zephyr/proxy-raw', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ method, path, params, body }) });
+}
+
+// ── Zephyr Metrics ────────────────────────────────────────────────────────────
+
+const _ZS = {
+  1:  { label: 'Pass',       color: '#a6e3a1' },
+  2:  { label: 'Fail',       color: '#f38ba8' },
+  3:  { label: 'WIP',        color: '#f9e2af' },
+  4:  { label: 'Blocked',    color: '#fab387' },
+  '-1': { label: 'Unexecuted', color: '#6c7086' },
+};
+
+let _metricsChart = null;
+
+// Fetch execution counts for one folder (or cycle root when folderId is null)
+async function _fetchFolderCounts(folderId) {
+  const versionId = _zVersionId || '-1';
+  const params = new URLSearchParams({ cycleId: _zCycleId, versionId });
+  if (_zProjectId) params.set('projectId', _zProjectId);
+  if (folderId)    params.set('folderId', folderId);
+  const res  = await fetch(`/api/zephyr/executions?${params}`);
+  if (!res.ok) return null;
+  const data  = await res.json();
+  const execs = data.searchObjectList || data.executions || (Array.isArray(data) ? data : []);
+  const counts = { 1: 0, 2: 0, 3: 0, 4: 0, '-1': 0 };
+  execs.forEach(e => {
+    const s = String(e.executionStatus ?? e.status ?? -1);
+    if (s in counts) counts[s]++; else counts['-1']++;
+  });
+  return counts;
+}
+
+// Add two count objects together
+function _addCounts(a, b) {
+  const r = { ...a };
+  Object.keys(b).forEach(k => { r[k] = (r[k] || 0) + (b[k] || 0); });
+  return r;
+}
+
+// Depth-first walk of the folder tree: fetch counts, build flat ordered list with depth
+async function _walkFolderTree(node, depth, flatList) {
+  const counts = await _fetchFolderCounts(node.id);
+  node._counts = counts || { 1: 0, 2: 0, 3: 0, 4: 0, '-1': 0 };
+  node._depth  = depth;
+
+  for (const child of (node.children || [])) {
+    await _walkFolderTree(child, depth + 1, flatList);
+    // Roll sub-folder counts up into parent
+    node._counts = _addCounts(node._counts, child._counts);
+  }
+
+  node._total = Object.values(node._counts).reduce((a, b) => a + b, 0);
+  flatList.push(node);
+}
+
+async function loadZephyrMetrics() {
+  if (!_zCycleId) { zLog('✗  Select a test cycle first.', 'failed'); return; }
+
+  const statusEl  = document.getElementById('zMetricsStatus');
+  const tbody     = document.getElementById('zMetricsTbody');
+  const cycleEl   = document.getElementById('zMetricsCycleLabel');
+  const refreshEl = document.getElementById('zMetricsLastRefresh');
+  const refreshBtn= document.getElementById('zMetricsRefreshBtn');
+
+  // Show cycle name from the dropdown
+  const cycleSel  = document.getElementById('z_cycle');
+  const cycleName = cycleSel?.options[cycleSel.selectedIndex]?.text || _zCycleId;
+  if (cycleEl) cycleEl.textContent = cycleName;
+  if (refreshBtn) { refreshBtn.disabled = true; refreshBtn.textContent = '⟳ Loading…'; }
+  if (statusEl) statusEl.textContent = '⟳ Loading…';
+  if (refreshEl) refreshEl.textContent = '';
+  if (tbody)    tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;color:var(--text-dim);padding:20px;">⟳ Fetching folder tree…</td></tr>';
+
+  // 1. Fetch ALL folders for this cycle
+  const versionId = _zVersionId || '-1';
+  const fParams   = new URLSearchParams({ cycleId: _zCycleId, versionId });
+  if (_zProjectId) fParams.set('projectId', _zProjectId);
+  const fRes    = await fetch(`/api/zephyr/folders?${fParams}`);
+  const fData   = fRes.ok ? await fRes.json() : [];
+  const folders = Array.isArray(fData) ? fData : (fData.values || []);
+
+  // 2. Build folder tree (all levels) using parentId
+  const byId = {};
+  folders.forEach(f => { byId[f.id] = { ...f, children: [] }; });
+  const roots = [];
+  folders.forEach(f => {
+    if (f.parentId && byId[f.parentId]) byId[f.parentId].children.push(byId[f.id]);
+    else roots.push(byId[f.id]);
+  });
+
+  // Always prepend a synthetic Cycle Root node
+  const cycleRoot = { id: null, name: 'Cycle Root', children: roots };
+
+  // 3. Walk tree depth-first, fetching execution counts per node
+  // flatList will be ordered: parent first, then its children (pre-order)
+  const flatList = [];
+  await _walkFolderTree(cycleRoot, 0, flatList);
+  // flatList is currently post-order (children before parent) — reverse for pre-order display
+  // Actually _walkFolderTree pushes AFTER children → post-order; we need pre-order
+  // Rebuild as pre-order separately
+  const orderedList = [];
+  function _preOrder(node) {
+    orderedList.push(node);
+    (node.children || []).forEach(_preOrder);
+  }
+  _preOrder(cycleRoot);
+  // Attach counts from the walk (already on nodes)
+
+  const chartRows = orderedList.filter(n => n._total > 0 || n.id === null);
+
+  if (!chartRows.length) {
+    if (tbody)      tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;color:var(--text-dim);padding:20px;">No execution data found for this cycle.</td></tr>';
+    if (statusEl)   statusEl.textContent = '';
+    if (refreshBtn) { refreshBtn.disabled = false; refreshBtn.textContent = '⟳ Refresh'; }
+    return;
+  }
+
+  // 4. Render hierarchical table
+  const _miniBar = (counts, total) => Object.entries(_ZS).map(([k, s]) => {
+    const pct = total ? Math.round(counts[k] / total * 100) : 0;
+    return pct > 0
+      ? `<span title="${s.label}: ${counts[k]}" style="display:inline-block;height:10px;width:${pct}%;background:${s.color};border-radius:2px;"></span>`
+      : '';
+  }).join('');
+
+  if (tbody) {
+    tbody.innerHTML = chartRows.map(n => {
+      const depth     = n._depth || 0;
+      const counts    = n._counts || { 1:0, 2:0, 3:0, 4:0, '-1':0 };
+      const total     = n._total  || 0;
+      const isRoot    = n.id === null;
+      const hasKids   = (n.children || []).length > 0;
+      const indent    = depth * 16;
+      const icon      = isRoot ? '🔁' : hasKids ? '📂' : '📁';
+      const rowStyle  = isRoot
+        ? 'background:rgba(137,180,250,0.06);font-weight:700;'
+        : depth === 0
+          ? 'background:rgba(255,255,255,0.02);font-weight:600;'
+          : 'font-weight:400;';
+      const nameStyle = `padding-left:${8 + indent}px;font-size:11px;white-space:nowrap;`;
+
+      return `<tr style="${rowStyle}">
+        <td style="${nameStyle}" title="${escHtml(n.name)}">
+          ${icon} ${escHtml(n.name)}
+          ${hasKids ? `<span style="font-size:9px;color:var(--text-dim);margin-left:4px;">incl. sub-folders</span>` : ''}
+        </td>
+        <td style="text-align:center;color:#a6e3a1;">${counts[1]  || 0}</td>
+        <td style="text-align:center;color:#f38ba8;">${counts[2]  || 0}</td>
+        <td style="text-align:center;color:#f9e2af;">${counts[3]  || 0}</td>
+        <td style="text-align:center;color:#fab387;">${counts[4]  || 0}</td>
+        <td style="text-align:center;color:#6c7086;">${counts['-1'] || 0}</td>
+        <td style="text-align:center;font-weight:700;">${total}</td>
+        <td style="min-width:120px;"><div style="display:flex;gap:1px;align-items:center;height:10px;">${_miniBar(counts, total)}</div></td>
+      </tr>`;
+    }).join('');
+  }
+
+  // 5. Chart — show only top-level folders (depth 0 non-root) for readability
+  const chartData = chartRows.filter(n => n.id !== null && n._depth === 1 || (n._depth === 0 && n.id !== null));
+  const chartCtx  = document.getElementById('chartZephyrMetrics');
+  if (chartCtx) {
+    if (_metricsChart) { _metricsChart.destroy(); _metricsChart = null; }
+    const labels   = chartRows.map(n => {
+      const prefix = '  '.repeat(n._depth || 0);
+      const name   = n.name.length > 22 ? n.name.slice(0, 20) + '…' : n.name;
+      return prefix + name;
+    });
+    const statKeys = ['1', '2', '3', '4', '-1'];
+    const datasets = statKeys.map(k => ({
+      label:           _ZS[k].label,
+      data:            chartRows.map(n => (n._counts || {})[k] || 0),
+      backgroundColor: _ZS[k].color + 'cc',
+      borderColor:     _ZS[k].color,
+      borderWidth:     1,
+      borderSkipped:   false,
+    }));
+    // Dynamic height: 36px per row, min 160
+    const chartHeight = Math.max(160, chartRows.length * 36);
+    chartCtx.parentElement.style.height = chartHeight + 'px';
+    _metricsChart = new Chart(chartCtx.getContext('2d'), {
+      type: 'bar',
+      data: { labels, datasets },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        indexAxis: 'y',
+        scales: {
+          x: { stacked: true, ticks: { color: '#a6adc8', font: { size: 10 } }, grid: { color: 'rgba(255,255,255,0.05)' }, beginAtZero: true },
+          y: { stacked: true, ticks: { color: '#cdd6f4', font: { size: 10 } }, grid: { display: false } },
+        },
+        plugins: {
+          legend: { labels: { color: '#a6adc8', font: { size: 11 }, boxWidth: 11, padding: 10 }, position: 'bottom' },
+          tooltip: { mode: 'index', intersect: false },
+        },
+        animation: { duration: 400 },
+      },
+    });
+  }
+
+  const totalFolders = orderedList.filter(n => n.id !== null).length;
+  if (statusEl)   statusEl.textContent = `${totalFolders} folder(s) across all levels`;
+  if (refreshEl)  refreshEl.textContent = 'Last refreshed: ' + new Date().toLocaleTimeString();
+  if (refreshBtn) { refreshBtn.disabled = false; refreshBtn.textContent = '⟳ Refresh'; }
+  zLog(`✓  Metrics loaded — ${totalFolders} folder(s).`, 'passed');
 }

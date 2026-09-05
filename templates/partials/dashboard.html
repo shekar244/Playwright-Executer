@@ -20,14 +20,15 @@
       </div>
     </div>
 
-    <!-- ── Section 1: Current Run — 3 equal columns ───────────────────────── -->
-    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:16px;">
+    <!-- ── Section 1: Current Run — 4 columns ──────────────────────────────── -->
+    <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:14px;">
 
-      <!-- Col 1: Distribution donut -->
+      <!-- Col 1: Donut — number in centre, % on hover -->
       <div class="dash-card">
-        <div class="dash-card-title">Current Run Distribution</div>
-        <div class="dash-chart-wrap" style="height:140px;"><canvas id="chartStatusDonut"></canvas></div>
-        <div class="dash-legend" id="legendStatus"></div>
+        <div class="dash-card-title">Distribution</div>
+        <div class="dash-chart-wrap" style="height:148px;">
+          <canvas id="chartStatusDonut"></canvas>
+        </div>
       </div>
 
       <!-- Col 2: Pass / Fail counts -->
@@ -72,13 +73,34 @@
         </div>
       </div>
 
+      <!-- Col 4: Horizontal bar chart -->
+      <div class="dash-card">
+        <div class="dash-card-title">Count by Status</div>
+        <div class="dash-chart-wrap" style="height:148px;">
+          <canvas id="chartStatusBar"></canvas>
+        </div>
+      </div>
+
     </div>
 
     <!-- ── Section 2: Test Cases — Current Run ────────────────────────────── -->
     <div class="dash-table-wrap">
+      <!-- History-run banner — visible only when a historical row is selected -->
+      <div id="dash-history-banner" style="display:none;align-items:center;gap:10px;padding:7px 16px;background:rgba(137,180,250,0.07);border-bottom:1px solid rgba(137,180,250,0.2);">
+        <span style="font-size:11px;color:var(--accent);">📅 Viewing historical run:</span>
+        <span id="dash-history-banner-label" style="font-size:11px;font-weight:600;color:var(--text);font-family:'JetBrains Mono',monospace;"></span>
+        <a id="dash-history-banner-report" href="#" onclick="dashOpenDetailReport(event)" style="display:none;font-size:11px;font-weight:600;color:var(--green);text-decoration:none;border:1px solid rgba(166,227,161,0.3);border-radius:5px;padding:2px 9px;background:rgba(166,227,161,0.07);">📊 View Report</a>
+        <button class="btn btn-sm" onclick="backToLiveRun()" style="margin-left:auto;color:var(--accent);border-color:rgba(137,180,250,0.4);">← Back to Live Run</button>
+      </div>
       <div class="dash-table-header">
-        <h3>Test Cases — Current Run</h3>
-        <span style="font-size:11px;color:var(--text-dim);margin-left:auto;" id="dashTestCount">0 tests</span>
+        <h3 id="dashTestTableTitle">Test Cases — Current Run</h3>
+        <span style="font-size:11px;color:var(--text-dim);margin-left:8px;" id="dashTestCount">0 tests</span>
+        <div style="margin-left:auto;display:flex;align-items:center;gap:8px;">
+          <a id="dashCurrentReportLink" href="#" onclick="dashOpenReport(event)" style="display:none;font-size:11px;font-weight:600;color:var(--accent);text-decoration:none;border:1px solid rgba(137,180,250,0.3);border-radius:5px;padding:3px 10px;background:var(--accent-glow);transition:all 0.15s;">
+            📊 View Report
+          </a>
+          <span id="dashCurrentReportNA" style="display:none;font-size:11px;color:var(--text-dim);">No report available</span>
+        </div>
       </div>
       <div style="overflow-x:auto;max-height:380px;overflow-y:auto;">
         <table class="history-tbl" id="dashTestTable">
@@ -89,10 +111,11 @@
               <th>Status</th>
               <th style="cursor:pointer;" onclick="sortTests('duration')">Duration ↕</th>
               <th>Run At</th>
+              <th>Report</th>
             </tr>
           </thead>
           <tbody id="dashTestTbody">
-            <tr><td colspan="5" style="text-align:center;color:var(--text-dim);padding:32px;">
+            <tr><td colspan="6" style="text-align:center;color:var(--text-dim);padding:32px;">
               No Allure results found — run tests with <code>--alluredir</code> enabled
             </td></tr>
           </tbody>
@@ -100,7 +123,7 @@
       </div>
     </div>
 
-    <!-- ── Section 3: Tests Run by Day + Run History Trend in one row ────── -->
+    <!-- ── Section 3: Tests Run by Day + Run History Trend ───────────────── -->
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;">
       <div class="dash-card">
         <div class="dash-card-title" id="dailyChartTitle">Tests Run by Day — Last 7 Days</div>
@@ -112,7 +135,7 @@
       </div>
     </div>
 
-    <!-- ── Section 4: Run History table ──────────────────────────────────── -->
+    <!-- ── Section 4: Run History table ─────────────────────────────────── -->
     <div class="dash-table-wrap">
       <div class="dash-table-header">
         <h3>Run History</h3>
@@ -124,14 +147,31 @@
             <tr>
               <th>Date</th><th>Repo</th><th>Status</th>
               <th>Passed</th><th>Failed</th><th>Broken</th><th>Skipped</th><th>Total</th><th>Pass %</th>
+              <th>Report</th>
             </tr>
           </thead>
           <tbody id="historyTbody">
-            <tr><td colspan="9" style="text-align:center;color:var(--text-dim);padding:24px;">No runs recorded yet</td></tr>
+            <tr><td colspan="10" style="text-align:center;color:var(--text-dim);padding:24px;">No runs recorded yet</td></tr>
           </tbody>
         </table>
       </div>
+      <!-- Pagination -->
+      <div id="historyPagination" style="display:flex;align-items:center;gap:4px;padding:10px 14px;border-top:1px solid var(--border);flex-wrap:wrap;"></div>
     </div>
 
   </div>
 </div>
+
+<style>
+.hist-row-selected td { background:rgba(137,180,250,0.07) !important; }
+.hist-row-selected:hover td { background:rgba(137,180,250,0.11) !important; }
+.pg-btn {
+  padding:4px 10px;font-size:11px;font-weight:600;color:var(--text-dim);
+  background:var(--surface2);border:1px solid var(--border);border-radius:5px;
+  cursor:pointer;font-family:'Inter',inherit;transition:all 0.12s;
+}
+.pg-btn:hover:not(:disabled):not(.pg-active) { color:var(--text);border-color:var(--accent); }
+.pg-btn:disabled { opacity:0.35;cursor:not-allowed; }
+.pg-btn.pg-active { background:var(--accent);color:#0d1117;border-color:var(--accent);font-weight:700; }
+.pg-ellipsis { color:var(--text-dim);font-size:12px;padding:0 4px;line-height:28px; }
+</style>

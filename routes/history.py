@@ -177,6 +177,19 @@ def parse_allure_history_trend(repo: str, cfg: dict) -> list:
     return []
 
 
+def _find_report_path(repo: str, cfg: dict) -> str:
+    """Return the absolute path of the most recent HTML report, or empty string."""
+    if not repo:
+        return ""
+    try:
+        from ui_launcher.report_resolver import ReportResolver
+        resolver = ReportResolver(repo, cfg.get("report_paths", []))
+        path = resolver.find_latest_in_dir(cfg.get("report_individual_dir", "allure/reports"))
+        return path or ""
+    except Exception:
+        return ""
+
+
 def record_run_history(repo: str, status: str, cfg: dict) -> None:
     results_rel = cfg.get("allure_results_dir", "allure/results")
     results_dir = str(Path(repo) / results_rel) if repo else ""
@@ -205,12 +218,13 @@ def record_run_history(repo: str, status: str, cfg: dict) -> None:
             })
 
     record = {
-        "ts":     int(time.time() * 1000),
-        "date":   datetime.datetime.now().strftime("%Y-%m-%d %H:%M"),
-        "repo":   Path(repo).name if repo else "unknown",
-        "status": status,
-        "stats":  stats,
-        "tests":  tests_detail,
+        "ts":          int(time.time() * 1000),
+        "date":        datetime.datetime.now().strftime("%Y-%m-%d %H:%M"),
+        "repo":        Path(repo).name if repo else "unknown",
+        "status":      status,
+        "stats":       stats,
+        "tests":       tests_detail,
+        "report_path": _find_report_path(repo, cfg),
     }
     records = load_history()
     records.insert(0, record)

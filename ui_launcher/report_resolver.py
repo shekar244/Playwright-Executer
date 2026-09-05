@@ -54,10 +54,8 @@ class ReportResolver:
 
     def find_latest_in_dir(self, rel_dir: str) -> Optional[str]:
         """
-        Find the most recently modified HTML file anywhere under rel_dir.
-        Prioritises index.html files at the root of the most recently
-        modified subdirectory (typical allure layout), then falls back to
-        any *.html file by mtime.
+        Find the Allure 3 single-file report (index.html) in rel_dir,
+        falling back to any *.html file by mtime.
         """
         if not rel_dir:
             return None
@@ -66,7 +64,12 @@ class ReportResolver:
         if not scan_dir.exists():
             return None
 
-        # Collect all HTML files with their mtime
+        # Allure 3 --single-file always writes index.html at the root
+        allure3 = scan_dir / "index.html"
+        if allure3.exists():
+            return str(allure3)
+
+        # Fallback: newest HTML file anywhere under the directory
         candidates: list[tuple[float, str]] = []
         for item in scan_dir.rglob("*.html"):
             try:
