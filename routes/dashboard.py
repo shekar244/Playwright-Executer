@@ -26,6 +26,7 @@ def get_dashboard():
     repo = request.args.get("repo", "").strip()
     cfg  = ConfigReader().load()
     tests, summaries, allure_trend = [], [], []
+    report_path = ""
 
     if repo:
         results_dir = str(Path(repo) / cfg.get("allure_results_dir", "allure/results"))
@@ -40,11 +41,25 @@ def get_dashboard():
         summaries = smart["summaries"]
         allure_trend = parse_allure_history_trend(repo, cfg)
 
+        # Suite-level report path
+        try:
+            resolver = ReportResolver(repo, cfg.get("report_paths", []))
+            report_path = resolver.find_latest_in_dir(cfg.get("report_individual_dir", "allure/reports")) or ""
+        except Exception:
+            report_path = ""
+
+        # Annotate each test with its individual deep-link (Allure uid-based)
+        if report_path:
+            for t in tests:
+                if not t.get("report_path") and t.get("uid"):
+                    t["report_path"] = report_path + "#testresult/" + t["uid"]
+
     return jsonify({
-        "tests":      tests,
-        "summaries":  summaries,
-        "trend":      allure_trend,
-        "run_history": load_history(),
+        "tests":       tests,
+        "summaries":   summaries,
+        "trend":       allure_trend,
+        "run_history": load_history(repo),
+        "report_path": report_path,
     })
 
 
@@ -73,10 +88,12 @@ def open_report():
 
 @bp.route("/api/report/history")
 def get_report_history():
-    return jsonify({"records": load_history()})
+    repo = request.args.get("repo", "").strip()
+    return jsonify({"records": load_history(repo)})
 
 
 @bp.route("/api/report/history/clear", methods=["POST"])
 def clear_report_history():
-    save_history([])
+    repo = (request.json or {}).get("repo", "").strip()
+    save_history([], repo)
     return jsonify({"ok": True})

@@ -215,6 +215,120 @@ async function runTests() {
 
 async function stopTests() { await fetch('/api/stop', { method: 'POST' }); }
 
+// ── Config file info ──────────────────────────────────────────────────────────
+
+async function loadConfigInfo() {
+  const data = await fetch('/api/config/info').then(r => r.json()).catch(() => ({}));
+  const pathEl   = document.getElementById('cfgActivePath');
+  const badgeEl  = document.getElementById('cfgSourceBadge');
+  const overInfo = document.getElementById('cfgOverrideInfo');
+  const clearBtn = document.getElementById('clearCfgOverrideBtn');
+
+  const source = data.active_config_source || 'tool';
+  const path   = data.active_config_path   || '—';
+  const short  = path.split(/[/\\]/).slice(-2).join('/');   // last two path segments
+
+  if (pathEl)  { pathEl.textContent = short; pathEl.title = path; }
+  if (badgeEl) {
+    const colors = { tool: 'rgba(137,180,250,0.15)', repo: 'rgba(166,227,161,0.15)', override: 'rgba(249,226,175,0.15)' };
+    const text   = { tool: 'tool', repo: 'repo', override: 'override' };
+    const txtCls = { tool: 'var(--accent)', repo: 'var(--green)', override: 'var(--yellow)' };
+    badgeEl.textContent    = text[source]   || source;
+    badgeEl.style.background = colors[source] || 'rgba(128,128,153,0.15)';
+    badgeEl.style.color      = txtCls[source] || 'var(--text-dim)';
+    badgeEl.style.borderColor = txtCls[source] || 'var(--border)';
+  }
+  const hasOverride = !!data.config_override_path;
+  if (overInfo) overInfo.style.display = hasOverride ? '' : 'none';
+  if (clearBtn) clearBtn.style.display = hasOverride ? ''  : 'none';
+}
+
+async function browseCfgOverride() {
+  const current = document.getElementById('cfgActivePath')?.title || '';
+  const res  = await fetch('/api/browse-folder', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ start: current, file: true, filter: '*.json' }) }).catch(() => null);
+  if (!res) return;
+  const data = await res.json().catch(() => ({}));
+  if (data.cancelled || !data.path) return;
+  const res2 = await fetch('/api/config/override', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ path: data.path }) });
+  const d2   = await res2.json().catch(() => ({}));
+  if (d2.ok) { await loadConfigInfo(); location.reload(); }
+  else        alert('Could not set override: ' + (d2.error || 'unknown error'));
+}
+
+async function clearCfgOverride() {
+  const res = await fetch('/api/config/override', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ path: '' }) });
+  const d   = await res.json().catch(() => ({}));
+  if (d.ok) { await loadConfigInfo(); location.reload(); }
+  else        alert('Could not clear override: ' + (d.error || 'unknown error'));
+}
+
+async function saveCfgToRepo() {
+  const res = await fetch('/api/config/save-to-repo', { method: 'POST' });
+  const d   = await res.json().catch(() => ({}));
+  if (d.ok) { alert('Config saved to: ' + d.saved_to); await loadConfigInfo(); }
+  else        alert('Save failed: ' + (d.error || 'unknown error'));
+}
+
+// ── Venv management ───────────────────────────────────────────────────────────
+
+async function checkVenvStatus() {
+  const repo    = document.getElementById('repo').value.trim();
+  const badgeEl = document.getElementById('venvStatusBadge');
+  const pathEl  = document.getElementById('venvPythonPath');
+  const reqSec  = document.getElementById('venvReqSection');
+  const reqFile = document.getElementById('venvReqFile');
+
+  if (badgeEl) badgeEl.textContent = '⟳ checking…';
+  const data = await fetch(`/api/venv/status${repo ? '?repo=' + encodeURIComponent(repo) : ''}`).then(r => r.json()).catch(() => ({}));
+
+  const found = data.venv_found;
+  if (badgeEl) {
+    badgeEl.textContent       = found ? '✓ venv active' : '⚠ system python';
+    badgeEl.style.background  = found ? 'rgba(166,227,161,0.15)' : 'rgba(249,226,175,0.15)';
+    badgeEl.style.color       = found ? 'var(--green)'  : 'var(--yellow)';
+    badgeEl.style.borderColor = found ? 'rgba(166,227,161,0.3)' : 'rgba(249,226,175,0.3)';
+  }
+  if (pathEl) {
+    const short = (data.python || '—').split(/[/\\]/).slice(-4).join('/');
+    pathEl.textContent = short; pathEl.title = data.python || '';
+  }
+  const reqs = data.requirements || [];
+  if (reqSec) reqSec.style.display = reqs.length ? 'flex' : 'none';
+  if (reqFile && reqs.length) {
+    const short = reqs[0].split(/[/\\]/).slice(-2).join('/');
+    reqFile.textContent  = short; reqFile.title = reqs[0];
+    reqFile.dataset.full = reqs[0];
+  }
+}
+
+async function saveVenvPath() {
+  const venv = document.getElementById('venvPathInput').value.trim();
+  const res  = await fetch('/api/config/venv-path', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ venv_path: venv }) });
+  const d    = await res.json().catch(() => ({}));
+  if (d.ok) checkVenvStatus();
+  else       alert('Save failed: ' + (d.error || 'unknown error'));
+}
+
+async function venvInstallReqs() {
+  const repo    = document.getElementById('repo').value.trim();
+  const reqFile = document.getElementById('venvReqFile')?.dataset.full || '';
+  const btn     = document.getElementById('venvInstallBtn');
+  if (btn) { btn.disabled = true; btn.textContent = '⟳ Installing…'; }
+  _runContext = 'executor'; _activeLogEl = document.getElementById('log');
+  clearLog(); setRunning(true);
+  const res = await fetch('/api/venv/install', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ repo, requirements_file: reqFile }),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    appendLine('✗  ' + (err.error || 'Install failed'), 'failed');
+    setRunning(false);
+  }
+  if (btn) { btn.disabled = false; btn.textContent = '▶ pip install -r requirements.txt'; }
+}
+
 // ── Reports ───────────────────────────────────────────────────────────────────
 let _reports = { individual: null, consolidated: null };
 

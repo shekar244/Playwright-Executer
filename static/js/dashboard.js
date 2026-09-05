@@ -59,8 +59,8 @@ async function loadDashboard() {
     : (runHistory[0]?.date || 'no runs yet');
   document.getElementById('dashSubtitle').textContent = `— ${total} tests  ·  last run: ${lastDate}`;
 
-  // Report link for current-run section — use most recent history record that has a path
-  _currentReportPath = (runHistory.find(r => r.report_path) || {}).report_path || '';
+  // Suite-level report: prefer the live report_path from API, fall back to most recent history record
+  _currentReportPath = data.report_path || (runHistory.find(r => r.report_path) || {}).report_path || '';
   _updateCurrentReportLink(_currentReportPath);
 
   _renderStatusDonut(counts);
@@ -432,16 +432,19 @@ function _renderTestTable(tests) {
     return;
   }
   const SI = { passed: '✓', failed: '✗', broken: '!', skipped: '⊘', unknown: '?' };
-  // All tests in the current run share the same report; show link once per row if available
-  const reportCell = _currentReportPath
-    ? `<a href="#" onclick="event.preventDefault();_openReportPath('${escHtml(_currentReportPath)}')" style="font-size:10px;font-weight:600;color:var(--accent);text-decoration:none;border:1px solid rgba(137,180,250,0.25);border-radius:4px;padding:2px 7px;background:var(--accent-glow);">📊 View</a>`
-    : `<span style="font-size:10px;color:var(--text-dim);">N/A</span>`;
 
   tbody.innerHTML = tests.map(t => {
-    const s     = t.status || 'unknown';
-    const runAt = t.start ? new Date(t.start).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : '—';
-    const suite = escHtml(t.file  || t.fullName?.split('#')[0]?.replace(/^\./, '') || t.suite || '—');
-    const name  = escHtml(t.method || t.fullName?.split('#').pop() || t.name || '—');
+    const s        = t.status || 'unknown';
+    const runAt    = t.start ? new Date(t.start).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : '—';
+    const suite    = escHtml(t.file  || t.fullName?.split('#')[0]?.replace(/^\./, '') || t.suite || '—');
+    const name     = escHtml(t.method || t.fullName?.split('#').pop() || t.name || '—');
+    // Per-test deep link: use t.report_path / t.report_relpath first, then construct from uid, fall back to suite report
+    const testPath = t.report_path || t.report_relpath
+      || (t.uid && _currentReportPath ? _currentReportPath + '#testresult/' + t.uid : '')
+      || _currentReportPath;
+    const reportCell = testPath
+      ? `<a href="#" onclick="event.preventDefault();_openReportPath('${escHtml(testPath)}')" style="font-size:10px;font-weight:600;color:var(--accent);text-decoration:none;border:1px solid rgba(137,180,250,0.25);border-radius:4px;padding:2px 7px;background:var(--accent-glow);">📊 View</a>`
+      : `<span style="font-size:10px;color:var(--text-dim);">N/A</span>`;
     return `<tr>
       <td style="color:var(--text-dim);font-size:11px;max-width:130px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${suite}">${suite}</td>
       <td style="max-width:340px;" title="${name}"><span style="font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--text);">${name}</span></td>
@@ -570,12 +573,14 @@ function showRunDetail(absIdx) {
       try { start = new Date(`${t.date}T${t.time}`).getTime(); } catch(e) {}
     }
     return {
-      name:     t.name     || t.method || '',
-      method:   t.method   || t.name   || '',
-      file:     t.suite    || '',
-      suite:    t.suite    || '',
-      status:   t.status   || 'unknown',
-      fullName: t.fullName || '',
+      name:        t.name        || t.method || '',
+      method:      t.method      || t.name   || '',
+      file:        t.suite       || '',
+      suite:       t.suite       || '',
+      status:      t.status      || 'unknown',
+      fullName:    t.fullName    || '',
+      uid:         t.uid         || '',
+      report_path: t.report_path || '',
       start,
       duration: t.duration_ms || Math.round((t.duration_s || 0) * 1000),
     };
@@ -674,6 +679,11 @@ function dashOpenDetailReport(event) {
 
 async function clearHistory() {
   if (!confirm('Clear all run history? This cannot be undone.')) return;
-  await fetch('/api/report/history/clear', { method: 'POST' });
+  const repo = document.getElementById('repo')?.value.trim() || '';
+  await fetch('/api/report/history/clear', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ repo }),
+  });
   loadDashboard();
 }

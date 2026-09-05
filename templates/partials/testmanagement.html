@@ -229,10 +229,6 @@
             <div style="margin-left:auto;display:flex;gap:6px;">
               <select id="z_bulk_status" style="font-size:11px;width:140px;">
                 <option value="">Use CSV status values</option>
-                <option value="1">Override → Pass All</option>
-                <option value="2">Override → Fail All</option>
-                <option value="3">Override → WIP All</option>
-                <option value="4">Override → Block All</option>
               </select>
               <select id="z_step_flag" style="font-size:11px;width:130px;">
                 <option value="true">Update steps ✓</option>
@@ -270,9 +266,7 @@
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
           <div class="field"><label>Status *</label>
             <select id="z_single_status">
-              <option value="1">✓ Pass</option><option value="2">✗ Fail</option>
-              <option value="3">⋯ WIP</option><option value="4">⊘ Blocked</option>
-              <option value="-1">— Unexecuted</option>
+              <option value="1">✓ Pass</option>
             </select>
           </div>
           <div class="field"><label>Update Test Steps</label>
@@ -312,9 +306,6 @@
         <div style="display:flex;gap:6px;margin-left:auto;">
           <select id="z_exec_status_filter" style="font-size:11px;width:130px;" onchange="zFilterExecTable()">
             <option value="">All Status</option>
-            <option value="1">Pass</option><option value="2">Fail</option>
-            <option value="3">WIP</option><option value="4">Blocked</option>
-            <option value="-1">Unexecuted</option>
           </select>
         </div>
       </div>
@@ -344,9 +335,7 @@
         <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;">
           <div class="field"><label>Mark as</label>
             <select id="z_mark_status">
-              <option value="1">✓ Pass</option><option value="2">✗ Fail</option>
-              <option value="3">⋯ WIP</option><option value="4">⊘ Blocked</option>
-              <option value="-1">— Unexecuted</option>
+              <option value="1">✓ Pass</option>
             </select>
           </div>
           <div class="field"><label>Comment</label><input type="text" id="z_mark_comment" placeholder="Optional comment" /></div>
@@ -388,19 +377,14 @@
       <div style="overflow-x:auto;border:1px solid var(--border);border-radius:var(--radius);">
         <table class="history-tbl" id="zMetricsTable">
           <thead style="position:sticky;top:0;z-index:2;">
-            <tr>
+            <tr id="zMetricsTheadRow">
               <th>Folder</th>
-              <th style="color:var(--green);">Pass</th>
-              <th style="color:var(--red);">Fail</th>
-              <th style="color:var(--yellow);">WIP</th>
-              <th style="color:var(--peach);">Blocked</th>
-              <th style="color:var(--text-dim);">Unexecuted</th>
               <th>Total</th>
               <th style="min-width:120px;">Distribution</th>
             </tr>
           </thead>
           <tbody id="zMetricsTbody">
-            <tr><td colspan="8" style="text-align:center;color:var(--text-dim);padding:24px;">Click ⟳ Load Metrics above</td></tr>
+            <tr><td colspan="10" style="text-align:center;color:var(--text-dim);padding:24px;">Click ⟳ Load Metrics above</td></tr>
           </tbody>
         </table>
       </div>

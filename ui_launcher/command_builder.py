@@ -10,11 +10,17 @@ from pathlib import Path
 from typing import Dict, List, Optional
 
 
+def resolve_python(repo_root: str, venv_path: str = "") -> str:
+    """Resolve the Python executable for a given repo and optional venv path."""
+    return CommandBuilder(repo_root, venv_path)._resolve_python()
+
+
 class CommandBuilder:
     """Build the pytest invocation from user selections."""
 
-    def __init__(self, repo_root: str):
+    def __init__(self, repo_root: str, venv_path: str = ""):
         self.repo_root = Path(repo_root)
+        self.venv_path = venv_path  # configured venv (relative to repo or absolute)
 
     # ── Public API ────────────────────────────────────────────────────────────
 
@@ -129,16 +135,27 @@ class CommandBuilder:
 
     def _resolve_python(self) -> str:
         """
-        Prefer the venv inside the framework repo, then fall back to the
-        system Python that is running this UI.
+        Resolution order:
+          1. Configured venv_path (relative to repo root or absolute)
+          2. Auto-detect common venv names inside the repo (.venv, venv, env)
+          3. System Python running this tool
         """
-        for candidate in [
-            self.repo_root / "venv" / "bin" / "python",
-            self.repo_root / "venv" / "Scripts" / "python.exe",
-            self.repo_root / ".venv" / "bin" / "python",
-            self.repo_root / ".venv" / "Scripts" / "python.exe",
-        ]:
-            if candidate.exists():
-                return str(candidate)
+        # 1. Configured venv path
+        if self.venv_path:
+            base = (Path(self.venv_path) if Path(self.venv_path).is_absolute()
+                    else self.repo_root / self.venv_path)
+            for suffix in ["bin/python", "bin/python3", "Scripts/python.exe"]:
+                p = base / suffix
+                if p.exists():
+                    return str(p)
 
+        # 2. Auto-detect common venv names
+        for name in [".venv", "venv", "env", ".env"]:
+            base = self.repo_root / name
+            for suffix in ["bin/python", "bin/python3", "Scripts/python.exe"]:
+                p = base / suffix
+                if p.exists():
+                    return str(p)
+
+        # 3. Fall back to the system Python running this tool
         return sys.executable

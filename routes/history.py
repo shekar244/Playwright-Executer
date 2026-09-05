@@ -10,21 +10,35 @@ from pathlib import Path
 
 from ui_launcher.config_reader import ConfigReader
 
-# report_history.json lives in the project root (parent of routes/)
-HISTORY_FILE = Path(__file__).parent.parent / "report_history.json"
+# Fallback history file when no repo is known (tool root).
+_TOOL_HISTORY_FILE = Path(__file__).parent.parent / "report_history.json"
 
 
-def load_history() -> list:
-    if HISTORY_FILE.exists():
+def _history_file(repo: str = "") -> Path:
+    """Return the history file path: {repo}/report_history.json or tool fallback."""
+    if repo:
+        return Path(repo) / "report_history.json"
+    return _TOOL_HISTORY_FILE
+
+
+def load_history(repo: str = "") -> list:
+    hf = _history_file(repo)
+    if hf.exists():
         try:
-            return json.loads(HISTORY_FILE.read_text(encoding="utf-8"))
+            return json.loads(hf.read_text(encoding="utf-8"))
+        except Exception:
+            pass
+    # Migrate: if no repo-level file exists yet, try the old tool-level file
+    if repo and _TOOL_HISTORY_FILE.exists():
+        try:
+            return json.loads(_TOOL_HISTORY_FILE.read_text(encoding="utf-8"))
         except Exception:
             pass
     return []
 
 
-def save_history(records: list) -> None:
-    HISTORY_FILE.write_text(json.dumps(records, indent=2), encoding="utf-8")
+def save_history(records: list, repo: str = "") -> None:
+    _history_file(repo).write_text(json.dumps(records, indent=2), encoding="utf-8")
 
 
 def parse_allure_results(results_dir: str) -> dict:
@@ -68,6 +82,8 @@ def parse_allure_results_full(results_dir: str) -> list:
                 method = data.get("name", f.stem)
             file_id = (labels.get("subSuite") or labels.get("suite") or
                        labels.get("parentSuite") or "")
+            stem = f.stem  # e.g. "abc123-result"
+            uid  = stem[:-7] if stem.endswith("-result") else stem
             tests.append({
                 "name":      data.get("name", f.stem),
                 "fullName":  full_name,
@@ -79,6 +95,7 @@ def parse_allure_results_full(results_dir: str) -> list:
                 "duration":  max(0, stop - start),
                 "suite":     labels.get("feature") or labels.get("suite") or labels.get("parentSuite") or "",
                 "historyId": data.get("historyId", ""),
+                "uid":       uid,
                 "source":    "allure",
             })
         except Exception:
@@ -197,6 +214,7 @@ def record_run_history(repo: str, status: str, cfg: dict) -> None:
         "passed": 0, "failed": 0, "broken": 0, "skipped": 0, "total": 0
     }
 
+    run_report  = _find_report_path(repo, cfg)
     tests_detail: list[dict] = []
     if results_dir:
         for t in parse_allure_results_full(results_dir):
@@ -205,6 +223,8 @@ def record_run_history(repo: str, status: str, cfg: dict) -> None:
             dur_ms   = max(0, stop_ms - start_ms)
             full_name = t.get("fullName", "")
             method_name = full_name.split("::")[-1] if "::" in full_name else t["name"]
+            uid = t.get("uid", "")
+            test_report = (run_report + "#testresult/" + uid) if (run_report and uid) else ""
             tests_detail.append({
                 "suite":       t.get("suite", ""),
                 "name":        t["name"],
@@ -215,6 +235,8 @@ def record_run_history(repo: str, status: str, cfg: dict) -> None:
                 "time":        datetime.datetime.fromtimestamp(start_ms / 1000).strftime("%H:%M:%S") if start_ms else "",
                 "duration_ms": dur_ms,
                 "duration_s":  round(dur_ms / 1000, 2),
+                "uid":         uid,
+                "report_path": test_report,
             })
 
     record = {
@@ -226,6 +248,6 @@ def record_run_history(repo: str, status: str, cfg: dict) -> None:
         "tests":       tests_detail,
         "report_path": _find_report_path(repo, cfg),
     }
-    records = load_history()
+    records = load_history(repo)
     records.insert(0, record)
-    save_history(records[:200])
+    save_history(records[:200], repo)

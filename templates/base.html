@@ -342,7 +342,7 @@ function switchTab(tab) {
   });
   if (tab === 'tools')       { switchCfgTab('features'); loadTools(); loadFeatures(); loadZephyrConfig(); loadMappingConfig(); }
   if (tab === 'dashboard')   loadDashboard();
-  if (tab === 'zephyr')      { loadZephyrConfig(); _updateZephyrContextBanners(); }
+  if (tab === 'zephyr')      { loadZephyrConfig(); _updateZephyrContextBanners(); loadZephyrStatuses(); }
   if (tab === 'filemanager') initFileManager();
 }
 
@@ -430,6 +430,9 @@ async function init() {
   applyUiTabs(cfg.ui_tabs || {});
   await scanRepos(cfg.repo_root || '');
   connectStream();
+  loadConfigInfo();  // show active config file in the Config File panel
+  if (typeof checkVenvStatus === 'function') checkVenvStatus();
+  if (cfg.venv_path) { const el = document.getElementById('venvPathInput'); if (el) el.value = cfg.venv_path; }
 }
 
 init();

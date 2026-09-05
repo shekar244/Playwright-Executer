@@ -223,6 +223,15 @@
   padding:7px 12px;border-bottom:1px solid var(--border);
   display:flex;gap:6px;align-items:center;flex-shrink:0;background:rgba(255,255,255,0.015);
 }
+/* Excel row/col selection */
+.fm-row-num { cursor:pointer; }
+.fm-row-num:hover { background:rgba(137,180,250,0.12);color:var(--accent); }
+.fm-row-num.xl-sel { background:rgba(137,180,250,0.22);color:var(--accent);font-weight:700; }
+.fm-table th.xl-sel-col { background:rgba(137,180,250,0.18);color:var(--accent);cursor:pointer; }
+.fm-table th.xl-col-hdr { cursor:pointer; }
+.fm-table th.xl-col-hdr:hover { background:rgba(137,180,250,0.08);color:var(--accent); }
+.fm-table tr.xl-sel-row td { background:rgba(137,180,250,0.07); }
+.fm-table td.xl-sel-col { background:rgba(137,180,250,0.05); }
 </style>
 
 <!-- Left: file browser -->
@@ -326,6 +335,11 @@
       <div class="fm-excel-toolbar">
         <button class="btn btn-sm" onclick="fmExcelAddRow()">+ Row</button>
         <button class="btn btn-sm" onclick="fmExcelAddCol()">+ Col</button>
+        <button class="btn btn-sm" id="fmDelRowBtn" onclick="fmExcelDelRow()" disabled
+                style="color:var(--red);border-color:var(--red);">− Row</button>
+        <button class="btn btn-sm" id="fmDelColBtn" onclick="fmExcelDelCol()" disabled
+                style="color:var(--red);border-color:var(--red);">− Col</button>
+        <span id="fm-excel-sel-info" style="font-size:10px;color:var(--accent);margin-left:2px;"></span>
         <span style="color:var(--text-dim);font-size:11px;margin-left:auto;" id="fm-excel-info"></span>
       </div>
       <div class="fm-sheet-tabs" id="fm-sheet-tabs"></div>
@@ -350,6 +364,7 @@ const _fm = {
   envPairs: [],      envMode: 'table',
   csvRows: [],
   excelData: {}, sheetNames: [], activeSheet: null,
+  excelSelRow: null, excelSelCol: null,  // 0-based selection
 };
 
 // ── Init ───────────────────────────────────────────────────────────────────────
@@ -782,7 +797,9 @@ function _fmLoadExcel(res, name) {
   _fm.excelData  = {};
   _fm.sheetNames = res.sheet_names || [];
   (_fm.sheetNames).forEach(sn => { _fm.excelData[sn] = (res.sheets[sn] || []).map(r => r.slice()); });
-  _fm.activeSheet = _fm.sheetNames[0] || '';
+  _fm.activeSheet  = _fm.sheetNames[0] || '';
+  _fm.excelSelRow  = null;
+  _fm.excelSelCol  = null;
   document.getElementById('fm-excel-wrap').style.display = 'flex';
   fmRenderSheetTabs(); fmRenderExcelSheet(_fm.activeSheet);
   fmStatus('Loaded ' + name + ' · ' + _fm.sheetNames.length + ' sheet(s)');
@@ -807,26 +824,79 @@ function fmRenderExcelSheet(sn) {
   const table = document.getElementById('fm-excel-table');
   table.innerHTML = '';
 
+  // ── Header row ───────────────────────────────────────────────────────────
   const thead = document.createElement('thead');
   const hr = document.createElement('tr');
-  hr.innerHTML = '<th class="fm-row-num"></th>';
-  for (let c = 0; c < maxCols; c++) hr.innerHTML += `<th>${_fmColLetter(c)}</th>`;
+  // Corner cell — click to clear selection
+  const corner = document.createElement('th');
+  corner.className = 'fm-row-num';
+  corner.title = 'Click a row number to select a row · Click a column letter to select a column';
+  corner.onclick = () => { _fm.excelSelRow = null; _fm.excelSelCol = null; fmRenderExcelSheet(sn); };
+  hr.appendChild(corner);
+
+  for (let c = 0; c < maxCols; c++) {
+    const th = document.createElement('th');
+    th.textContent = _fmColLetter(c);
+    th.className = 'xl-col-hdr' + (_fm.excelSelCol === c ? ' xl-sel-col' : '');
+    th.title = `Click to select column ${_fmColLetter(c)}`;
+    const ci = c;
+    th.onclick = () => {
+      _fm.excelSelCol = (_fm.excelSelCol === ci) ? null : ci;
+      _fm.excelSelRow = null;
+      fmRenderExcelSheet(sn);
+    };
+    hr.appendChild(th);
+  }
   thead.appendChild(hr); table.appendChild(thead);
 
+  // ── Body rows ─────────────────────────────────────────────────────────────
   const tbody = document.createElement('tbody');
   rows.forEach((row, ri) => {
     const tr = document.createElement('tr');
-    tr.innerHTML = `<td class="fm-row-num">${ri + 1}</td>`;
+    if (_fm.excelSelRow === ri) tr.classList.add('xl-sel-row');
+
+    // Row number cell — click to select the row
+    const rn = document.createElement('td');
+    rn.className = 'fm-row-num' + (_fm.excelSelRow === ri ? ' xl-sel' : '');
+    rn.textContent = ri + 1;
+    rn.title = `Click to select row ${ri + 1}`;
+    rn.onclick = () => {
+      _fm.excelSelRow = (_fm.excelSelRow === ri) ? null : ri;
+      _fm.excelSelCol = null;
+      fmRenderExcelSheet(sn);
+    };
+    tr.appendChild(rn);
+
     for (let ci = 0; ci < maxCols; ci++) {
       const td = document.createElement('td');
+      if (_fm.excelSelCol === ci) td.classList.add('xl-sel-col');
       const inp = document.createElement('input');
-      inp.type = 'text'; inp.value = row[ci] || '';
+      inp.type = 'text'; inp.value = row[ci] ?? '';
       inp.oninput = () => { _fm.excelData[sn][ri][ci] = inp.value; fmMarkDirty(); };
+      inp.onfocus = () => {
+        // Clicking inside a cell clears row/col selection so editing isn't blocked
+        _fm.excelSelRow = null; _fm.excelSelCol = null;
+        document.getElementById('fmDelRowBtn').disabled = true;
+        document.getElementById('fmDelColBtn').disabled = true;
+        document.getElementById('fm-excel-sel-info').textContent = '';
+      };
       td.appendChild(inp); tr.appendChild(td);
     }
     tbody.appendChild(tr);
   });
   table.appendChild(tbody);
+
+  // ── Update toolbar buttons based on selection ─────────────────────────────
+  const delRowBtn = document.getElementById('fmDelRowBtn');
+  const delColBtn = document.getElementById('fmDelColBtn');
+  const selInfo   = document.getElementById('fm-excel-sel-info');
+  if (delRowBtn) delRowBtn.disabled = _fm.excelSelRow === null;
+  if (delColBtn) delColBtn.disabled = _fm.excelSelCol === null;
+  if (selInfo) {
+    if (_fm.excelSelRow !== null) selInfo.textContent = `Row ${_fm.excelSelRow + 1} selected`;
+    else if (_fm.excelSelCol !== null) selInfo.textContent = `Col ${_fmColLetter(_fm.excelSelCol)} selected`;
+    else selInfo.textContent = '';
+  }
 
   const nonEmpty = rows.reduce((s, r) => s + r.filter(v => v !== '').length, 0);
   document.getElementById('fm-excel-info').textContent =
@@ -837,11 +907,30 @@ function fmExcelAddRow() {
   if (!_fm.activeSheet) return;
   const rows = _fm.excelData[_fm.activeSheet];
   rows.push(Array(rows[0]?.length || 1).fill(''));
+  _fm.excelSelRow = null; _fm.excelSelCol = null;
   fmRenderExcelSheet(_fm.activeSheet); fmMarkDirty();
 }
 function fmExcelAddCol() {
   if (!_fm.activeSheet) return;
   _fm.excelData[_fm.activeSheet].forEach(r => r.push(''));
+  _fm.excelSelRow = null; _fm.excelSelCol = null;
+  fmRenderExcelSheet(_fm.activeSheet); fmMarkDirty();
+}
+function fmExcelDelRow() {
+  if (_fm.excelSelRow === null || !_fm.activeSheet) return;
+  const rows = _fm.excelData[_fm.activeSheet];
+  if (rows.length <= 1) { fmStatus('Cannot delete the last row.', true); return; }
+  rows.splice(_fm.excelSelRow, 1);
+  _fm.excelSelRow = null;
+  fmRenderExcelSheet(_fm.activeSheet); fmMarkDirty();
+}
+function fmExcelDelCol() {
+  if (_fm.excelSelCol === null || !_fm.activeSheet) return;
+  const rows = _fm.excelData[_fm.activeSheet];
+  const maxCols = Math.max(...rows.map(r => r.length));
+  if (maxCols <= 1) { fmStatus('Cannot delete the last column.', true); return; }
+  rows.forEach(r => r.splice(_fm.excelSelCol, 1));
+  _fm.excelSelCol = null;
   fmRenderExcelSheet(_fm.activeSheet); fmMarkDirty();
 }
 

@@ -34,7 +34,19 @@ STATUS_MAP = {
     "fail": 2, "failed": 2, "f": 2,
     "wip": 3, "in progress": 3,
     "blocked": 4,
+    "descoped": 5, "deferred": 5,
+    "todo": 6, "to-do": 6, "to do": 6, "not run": 6,
     "unexecuted": -1, "skip": -1, "skipped": -1,
+}
+
+_ZEPHYR_STATUS_DEFAULTS = {
+    "1":  {"id": 1,  "name": "Pass",       "color": "#a6e3a1"},
+    "2":  {"id": 2,  "name": "Fail",       "color": "#f38ba8"},
+    "3":  {"id": 3,  "name": "WIP",        "color": "#f9e2af"},
+    "4":  {"id": 4,  "name": "Blocked",    "color": "#fab387"},
+    "5":  {"id": 5,  "name": "Descoped",   "color": "#94e2d5"},
+    "6":  {"id": 6,  "name": "To-Do",      "color": "#cba6f7"},
+    "-1": {"id": -1, "name": "Unexecuted", "color": "#6c7086"},
 }
 
 
@@ -364,6 +376,29 @@ def zephyr_debug():
         "zapi_base": ZAPI_BASE, "zapi_test_status": code, "zapi_test_response": data,
         "jira_url": jira_url or "(not set)",
     })
+
+
+@bp.route("/api/zephyr/statuses")
+def zephyr_statuses():
+    data, code = _z_call("GET", "/public/rest/api/1.0/util/statuses")
+    if code == 200 and isinstance(data, dict) and not data.get("error"):
+        normalized = {}
+        for sid, s in data.items():
+            if not isinstance(s, dict):
+                continue
+            raw = s.get("name", str(sid))
+            label = " ".join(w.capitalize() for w in raw.replace("_", " ").split())
+            fallback_color = _ZEPHYR_STATUS_DEFAULTS.get(str(sid), {}).get("color", "#808099")
+            normalized[str(sid)] = {
+                "id":    int(sid) if str(sid).lstrip("-").isdigit() else sid,
+                "name":  label,
+                "color": s.get("color") or fallback_color,
+            }
+        if normalized:
+            if "-1" not in normalized:
+                normalized["-1"] = _ZEPHYR_STATUS_DEFAULTS["-1"]
+            return jsonify(normalized)
+    return jsonify(_ZEPHYR_STATUS_DEFAULTS)
 
 
 @bp.route("/api/zephyr/test-jira")
@@ -946,7 +981,7 @@ def bulk_results_upload():
 
         if bulk_status_override:
             status_id  = int(bulk_status_override)
-            status_str = {1:"pass",2:"fail",3:"wip",4:"blocked","-1":"unexecuted"}.get(int(bulk_status_override),"pass")
+            status_str = {1:"pass",2:"fail",3:"wip",4:"blocked",5:"descoped",6:"todo",-1:"unexecuted"}.get(int(bulk_status_override),"pass")
         else:
             status_str = (row.get(col_status) or row.get("Status") or row.get("Result") or "pass").strip().lower()
             status_id  = STATUS_MAP.get(status_str, 1)

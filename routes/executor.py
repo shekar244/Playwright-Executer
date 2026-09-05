@@ -17,7 +17,7 @@ from flask import Blueprint, Response, jsonify, request
 
 from routes import state
 from routes.history import record_run_history
-from ui_launcher.command_builder import CommandBuilder
+from ui_launcher.command_builder import CommandBuilder, resolve_python
 from ui_launcher.config_reader import ConfigReader
 from ui_launcher.runner import TestRunner
 from ui_launcher.test_discovery import TestDiscovery
@@ -278,7 +278,7 @@ def run_tests():
                     if v and v.lower() not in ("none", "(none)"):
                         extra_flags.extend([flag, f'"{v}"' if " " in v else v])
 
-            builder = CommandBuilder(repo)
+            builder = CommandBuilder(repo, venv_path=cfg.get("venv_path", ""))
             cmd = builder.build(
                 suite=body.get("suite", "All Tests"),
                 file_sel=body.get("file_sel", "All in Suite"),
@@ -387,8 +387,11 @@ def run_feature():
         if not os.path.isdir(cwd):
             cwd = str(_ROOT)
 
+        cfg      = ConfigReader().load()
+        repo_root = cfg.get("repo_root", "").strip() or str(_ROOT)
+        py       = resolve_python(repo_root, cfg.get("venv_path", ""))
         if runtime == "python":
-            cmd = [sys.executable, script]
+            cmd = [py, script]
         elif runtime == "node":
             cmd = ["node", script]
         else:
@@ -422,6 +425,105 @@ def run_feature():
         state._runner.start()
 
     return jsonify({"ok": True, "cmd": display})
+
+
+# ── Venv status / install ─────────────────────────────────────────────────────
+
+@bp.route("/api/venv/status")
+def venv_status():
+    repo = request.args.get("repo", "").strip()
+    cfg  = ConfigReader().load()
+    if not repo:
+        repo = cfg.get("repo_root", "").strip()
+    venv_path_cfg = cfg.get("venv_path", "").strip()
+
+    python = resolve_python(repo, venv_path_cfg) if repo else sys.executable
+    is_venv = python != sys.executable
+
+    venv_root = ""
+    if is_venv:
+        venv_root = str(Path(python).parent.parent)
+
+    req_files: list[str] = []
+    if repo:
+        for name in ["requirements.txt", "requirements/base.txt",
+                     "requirements/dev.txt", "requirements-dev.txt"]:
+            rp = Path(repo) / name
+            if rp.exists():
+                req_files.append(str(rp))
+
+    return jsonify({
+        "venv_found":       is_venv,
+        "python":           python,
+        "venv_root":        venv_root,
+        "venv_path_config": venv_path_cfg,
+        "requirements":     req_files,
+        "repo":             repo,
+    })
+
+
+@bp.route("/api/venv/install", methods=["POST"])
+def venv_install():
+    if state._is_running:
+        return jsonify({"error": "A run is already in progress"}), 409
+
+    body = request.json or {}
+    repo = body.get("repo", "").strip()
+    req  = body.get("requirements_file", "").strip()
+    cfg  = ConfigReader().load()
+    if not repo:
+        repo = cfg.get("repo_root", "").strip()
+
+    python = resolve_python(repo, cfg.get("venv_path", "")) if repo else sys.executable
+
+    if not req:
+        for name in ["requirements.txt", "requirements/base.txt", "requirements/dev.txt"]:
+            rp = Path(repo) / name if repo else Path(name)
+            if rp.exists():
+                req = str(rp)
+                break
+
+    if not req:
+        return jsonify({"error": "No requirements.txt found"}), 400
+
+    cmd = [python, "-m", "pip", "install", "-r", req]
+    display = " ".join(cmd)
+    state.broadcast("cmd", display)
+    state._is_running = True
+
+    def on_output(line):
+        state.broadcast("line", line)
+
+    def on_finish(exit_code, cancelled):
+        state._is_running = False
+        if cancelled:
+            state.broadcast("status", "cancelled")
+        elif exit_code == 0:
+            state.broadcast("status", "passed")
+        else:
+            state.broadcast("status", f"failed:{exit_code}")
+        state.broadcast("done", "")
+
+    state._runner = TestRunner(
+        cmd=cmd, cwd=repo or str(_ROOT), env_overrides={},
+        on_output=on_output, on_finish=on_finish,
+    )
+    state._runner.start()
+    return jsonify({"ok": True, "cmd": display})
+
+
+@bp.route("/api/config/venv-path", methods=["POST"])
+def save_venv_path():
+    body = request.json or {}
+    venv = body.get("venv_path", "").strip()
+    reader = ConfigReader()
+    cfg = reader.load()
+    cfg["venv_path"] = venv
+    try:
+        reader.save(cfg)
+    except OSError as exc:
+        return jsonify({"error": str(exc)}), 500
+    return jsonify({"ok": True, "venv_path": venv})
 
 
 # ── Browse folder ──────────────────────────────────────────────────────────────

@@ -113,6 +113,53 @@
       </div>
     </div>
 
+    <!-- Config file status (collapsed by default) -->
+    <div class="section-block">
+      <div class="section-title" onclick="toggleConfigSection('cfgFileBody','cfgFileArrow')" style="cursor:pointer;user-select:none;">
+        <span class="stitle-icon">⚙️</span>Config File
+        <span id="cfgFileArrow" style="margin-left:auto;font-size:10px;color:var(--text-dim);">▶ Expand</span>
+      </div>
+      <div id="cfgFileBody" class="section-content" style="gap:8px;display:none;">
+        <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">
+          <span id="cfgSourceBadge" style="font-size:10px;font-weight:700;padding:2px 8px;border-radius:20px;background:rgba(137,180,250,0.15);color:var(--accent);border:1px solid rgba(137,180,250,0.3);">tool</span>
+          <span id="cfgActivePath" style="font-size:10px;color:var(--text-dim);font-family:'JetBrains Mono',monospace;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1;" title="">—</span>
+        </div>
+        <div class="action-row">
+          <button class="btn btn-sm" onclick="browseCfgOverride()">📂 Load Different Config</button>
+          <button class="btn btn-sm" id="clearCfgOverrideBtn" onclick="clearCfgOverride()" style="display:none;color:var(--red);border-color:var(--red);">✕ Clear Override</button>
+          <button class="btn btn-sm" onclick="saveCfgToRepo()" title="Copy active config into repo root">💾 Save to Repo</button>
+        </div>
+        <div id="cfgOverrideInfo" style="display:none;font-size:10px;color:var(--yellow);">⚠ Config override active</div>
+      </div>
+    </div>
+
+    <!-- Python Venv (collapsed by default) -->
+    <div class="section-block">
+      <div class="section-title" onclick="toggleConfigSection('venvBody','venvArrow')" style="cursor:pointer;user-select:none;">
+        <span class="stitle-icon">🐍</span>Python Venv
+        <span id="venvArrow" style="margin-left:auto;font-size:10px;color:var(--text-dim);">▶ Expand</span>
+      </div>
+      <div id="venvBody" class="section-content" style="gap:8px;display:none;">
+        <div class="field">
+          <label>Venv Path <span style="font-weight:400;color:var(--text-dim);">(relative to repo or absolute)</span></label>
+          <div class="field-row">
+            <input type="text" id="venvPathInput" placeholder=".venv  or  venv  or  /abs/path/.venv" />
+            <button class="btn btn-sm" onclick="saveVenvPath()">Save</button>
+          </div>
+          <div class="hint">Leave blank to auto-detect .venv / venv / env inside the repo.</div>
+        </div>
+        <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+          <span id="venvStatusBadge" style="font-size:10px;font-weight:700;padding:2px 8px;border-radius:20px;background:rgba(128,128,153,0.15);color:var(--text-dim);border:1px solid var(--border);">unknown</span>
+          <span id="venvPythonPath" style="font-size:10px;color:var(--text-dim);font-family:'JetBrains Mono',monospace;overflow:hidden;text-overflow:ellipsis;flex:1;" title="">—</span>
+          <button class="btn btn-sm" onclick="checkVenvStatus()">⟳ Check</button>
+        </div>
+        <div id="venvReqSection" style="display:none;flex-direction:column;gap:6px;">
+          <div style="font-size:10px;color:var(--text-dim);">Requirements file: <span id="venvReqFile" style="color:var(--text-muted);font-family:'JetBrains Mono',monospace;"></span></div>
+          <button class="btn btn-sm" id="venvInstallBtn" onclick="venvInstallReqs()" style="color:var(--green);border-color:var(--green);">▶ pip install -r requirements.txt</button>
+        </div>
+      </div>
+    </div>
+
   </div>
 
   <div class="panel-right">

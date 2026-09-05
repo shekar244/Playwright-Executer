@@ -487,11 +487,11 @@ async function zUploadSingle() {
   const issueKey = document.getElementById('z_single_key').value.trim();
   const statusId = parseInt(document.getElementById('z_single_status').value);
   const comment  = document.getElementById('z_single_comment').value.trim();
-  const statusNames = {1:'Pass',2:'Fail',3:'WIP',4:'Blocked','-1':'Unexecuted'};
+  const statusNames = Object.fromEntries(Object.entries(_ZS).map(([k,s]) => [parseInt(k), s.label]));
   if (!issueKey)  { zLog('✗  Enter a Test ID / Issue Key.', 'failed'); return; }
   if (!_zCycleId) { zLog('✗  Select a test cycle first.', 'failed'); return; }
   zLog(`⟳  Updating ${issueKey}…`, 'info');
-  const statusStr = {1:'pass',2:'fail',3:'wip',4:'blocked','-1':'unexecuted'}[statusId] || 'pass';
+  const statusStr = (_ZS[String(statusId)]?.label || 'pass').toLowerCase().replace(/[^a-z]/g, '');
   const csvContent = `Issue Key,Status,Comment\n${issueKey},${statusStr},"${comment.replace(/"/g,'""')}"`;
   const form = new FormData();
   form.append('file', new Blob([csvContent], {type:'text/csv'}), 'single.csv');
@@ -548,8 +548,6 @@ function zExecGoPage(page) {
 }
 
 function _renderExecRows() {
-  const STAT_CLS  = { '1':'passed','2':'failed','3':'broken','4':'cancelled','-1':'' };
-  const STAT_ICON = { '1':'✓','2':'✗','3':'⋯','4':'⊘','-1':'—' };
 
   const list       = _execFiltered;
   const totalPages = Math.max(1, Math.ceil(list.length / _EXEC_PAGE_SIZE));
@@ -571,7 +569,7 @@ function _renderExecRows() {
           <td style="width:32px;"><input type="checkbox" class="z-exec-cb" data-idx="${origIdx}" /></td>
           <td style="font-family:'JetBrains Mono',monospace;font-size:11px;font-weight:600;color:var(--accent);">${escHtml(e.issueKey||'')}</td>
           <td style="font-size:11px;max-width:320px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${escHtml(summary)}">${escHtml(summary||'—')}</td>
-          <td><span class="tbl-status-badge ${STAT_CLS[sid]||''}" style="font-size:10px;">${STAT_ICON[sid]||''} ${sName}</span></td>
+          <td><span class="tbl-status-badge" style="font-size:10px;color:${(_ZS[sid]||{}).color||'var(--text-dim)'};background:${(_ZS[sid]||{}).color||'#808099'}18;border:1px solid ${(_ZS[sid]||{}).color||'#808099'}33;">${(_ZS[sid]||{}).icon||'?'} ${sName}</span></td>
           <td style="white-space:nowrap;"><button class="btn btn-sm" style="font-size:10px;padding:3px 8px;" onclick="zQuickMark('${execId}',${issueId})">Mark</button></td>
         </tr>`;
       }).join('')
@@ -614,7 +612,7 @@ async function _markExecsByKey(issueKeys) {
   if (!issueKeys.length || !_zCycleId) return;
   const statusId  = parseInt(document.getElementById('z_mark_status').value) || 1;
   const comment   = document.getElementById('z_mark_comment')?.value.trim() || '';
-  const statusStr = {1:'pass',2:'fail',3:'wip',4:'blocked','-1':'unexecuted'}[statusId] || 'pass';
+  const statusStr = (_ZS[String(statusId)]?.label || 'pass').toLowerCase().replace(/[^a-z]/g, '');
   const csv = ['Issue Key,Status,Comment', ...issueKeys.map(k => `${k},${statusStr},"${comment.replace(/"/g,'""')}"`)].join('\n');
   const form = new FormData();
   form.append('file', new Blob([csv], { type: 'text/csv' }), 'mark.csv');
@@ -692,15 +690,94 @@ async function _zApiCall(method, path, params = {}, body = null) {
 
 // ── Zephyr Metrics ────────────────────────────────────────────────────────────
 
-const _ZS = {
-  1:  { label: 'Pass',       color: '#a6e3a1' },
-  2:  { label: 'Fail',       color: '#f38ba8' },
-  3:  { label: 'WIP',        color: '#f9e2af' },
-  4:  { label: 'Blocked',    color: '#fab387' },
-  '-1': { label: 'Unexecuted', color: '#6c7086' },
+let _ZS = {
+  '1':  { label: 'Pass',       color: '#a6e3a1', icon: '✓' },
+  '2':  { label: 'Fail',       color: '#f38ba8', icon: '✗' },
+  '3':  { label: 'WIP',        color: '#f9e2af', icon: '⋯' },
+  '4':  { label: 'Blocked',    color: '#fab387', icon: '⊘' },
+  '5':  { label: 'Descoped',   color: '#94e2d5', icon: '⊖' },
+  '6':  { label: 'To-Do',      color: '#cba6f7', icon: '○' },
+  '-1': { label: 'Unexecuted', color: '#6c7086', icon: '—' },
 };
 
 let _metricsChart = null;
+
+function _zsSortedKeys() {
+  return Object.keys(_ZS).sort((a, b) => {
+    const na = parseInt(a), nb = parseInt(b);
+    if (na < 0 && nb >= 0) return 1;
+    if (nb < 0 && na >= 0) return -1;
+    return na - nb;
+  });
+}
+
+function _zsIcon(name) {
+  const n = (name || '').toLowerCase().replace(/[-_\s]+/g, '');
+  if (n === 'pass' || n === 'passed')            return '✓';
+  if (n === 'fail' || n === 'failed')            return '✗';
+  if (n === 'wip'  || n === 'inprogress')        return '⋯';
+  if (n === 'blocked')                            return '⊘';
+  if (n === 'descoped')                           return '⊖';
+  if (n === 'todo')                               return '○';
+  if (n === 'unexecuted' || n === 'notexecuted') return '—';
+  return '?';
+}
+
+async function loadZephyrStatuses() {
+  const res  = await fetch('/api/zephyr/statuses').catch(() => null);
+  if (!res || !res.ok) { _rebuildStatusDropdowns(); return; }
+  const data = await res.json().catch(() => null);
+  if (!data || typeof data !== 'object') { _rebuildStatusDropdowns(); return; }
+  const newZS = {};
+  Object.entries(data).forEach(([sid, s]) => {
+    const label = s.name || s.label || sid;
+    newZS[String(sid)] = { label, color: s.color || '#808099', icon: _zsIcon(label) };
+  });
+  if (Object.keys(newZS).length) _ZS = newZS;
+  _rebuildStatusDropdowns();
+}
+
+function _rebuildStatusDropdowns() {
+  const keys = _zsSortedKeys();
+  const makeOption = (sid) => `<option value="${sid}">${_ZS[sid].icon} ${_ZS[sid].label}</option>`;
+
+  const filterEl = document.getElementById('z_exec_status_filter');
+  if (filterEl) {
+    const prev = filterEl.value;
+    filterEl.innerHTML = '<option value="">All Status</option>' + keys.map(makeOption).join('');
+    if (prev) filterEl.value = prev;
+  }
+  const markEl = document.getElementById('z_mark_status');
+  if (markEl) {
+    const prev = markEl.value || '1';
+    markEl.innerHTML = keys.map(makeOption).join('');
+    markEl.value = prev;
+  }
+  const singleEl = document.getElementById('z_single_status');
+  if (singleEl) {
+    const prev = singleEl.value || '1';
+    singleEl.innerHTML = keys.map(makeOption).join('');
+    singleEl.value = prev;
+  }
+  const bulkEl = document.getElementById('z_bulk_status');
+  if (bulkEl) {
+    bulkEl.innerHTML = '<option value="">Use CSV status values</option>' +
+      keys.filter(k => parseInt(k) > 0)
+          .map(k => `<option value="${k}">Override → ${_ZS[k].label} All</option>`).join('');
+  }
+  _rebuildMetricsTableHeader();
+}
+
+function _rebuildMetricsTableHeader() {
+  const tr = document.getElementById('zMetricsTheadRow');
+  if (!tr) return;
+  const keys = _zsSortedKeys();
+  tr.innerHTML = '<th>Folder</th>' +
+    keys.map(k => `<th style="color:${_ZS[k].color};">${_ZS[k].label}</th>`).join('') +
+    '<th>Total</th><th style="min-width:120px;">Distribution</th>';
+  const emptyTd = document.querySelector('#zMetricsTbody tr td[colspan]');
+  if (emptyTd) emptyTd.setAttribute('colspan', keys.length + 3);
+}
 
 // Fetch execution counts for one folder (or cycle root when folderId is null)
 async function _fetchFolderCounts(folderId) {
@@ -712,10 +789,13 @@ async function _fetchFolderCounts(folderId) {
   if (!res.ok) return null;
   const data  = await res.json();
   const execs = data.searchObjectList || data.executions || (Array.isArray(data) ? data : []);
-  const counts = { 1: 0, 2: 0, 3: 0, 4: 0, '-1': 0 };
+  const counts = {};
+  Object.keys(_ZS).forEach(k => { counts[k] = 0; });
   execs.forEach(e => {
-    const s = String(e.executionStatus ?? e.status ?? -1);
-    if (s in counts) counts[s]++; else counts['-1']++;
+    const execObj   = e.execution || {};
+    const statusObj = execObj.status || e.status || {};
+    const s = String(statusObj.id ?? e.executionStatus ?? -1);
+    if (s in counts) counts[s]++; else counts['-1'] = (counts['-1'] || 0) + 1;
   });
   return counts;
 }
@@ -730,7 +810,8 @@ function _addCounts(a, b) {
 // Depth-first walk of the folder tree: fetch counts, build flat ordered list with depth
 async function _walkFolderTree(node, depth, flatList) {
   const counts = await _fetchFolderCounts(node.id);
-  node._counts = counts || { 1: 0, 2: 0, 3: 0, 4: 0, '-1': 0 };
+  const _emptyC = () => Object.fromEntries(Object.keys(_ZS).map(k => [k, 0]));
+  node._counts = counts || _emptyC();
   node._depth  = depth;
 
   for (const child of (node.children || [])) {
@@ -829,16 +910,15 @@ async function loadZephyrMetrics() {
           : 'font-weight:400;';
       const nameStyle = `padding-left:${8 + indent}px;font-size:11px;white-space:nowrap;`;
 
+      const statusCells = _zsSortedKeys().map(k =>
+        `<td style="text-align:center;color:${_ZS[k].color};">${counts[k] || 0}</td>`
+      ).join('');
       return `<tr style="${rowStyle}">
         <td style="${nameStyle}" title="${escHtml(n.name)}">
           ${icon} ${escHtml(n.name)}
           ${hasKids ? `<span style="font-size:9px;color:var(--text-dim);margin-left:4px;">incl. sub-folders</span>` : ''}
         </td>
-        <td style="text-align:center;color:#a6e3a1;">${counts[1]  || 0}</td>
-        <td style="text-align:center;color:#f38ba8;">${counts[2]  || 0}</td>
-        <td style="text-align:center;color:#f9e2af;">${counts[3]  || 0}</td>
-        <td style="text-align:center;color:#fab387;">${counts[4]  || 0}</td>
-        <td style="text-align:center;color:#6c7086;">${counts['-1'] || 0}</td>
+        ${statusCells}
         <td style="text-align:center;font-weight:700;">${total}</td>
         <td style="min-width:120px;"><div style="display:flex;gap:1px;align-items:center;height:10px;">${_miniBar(counts, total)}</div></td>
       </tr>`;
@@ -855,7 +935,7 @@ async function loadZephyrMetrics() {
       const name   = n.name.length > 22 ? n.name.slice(0, 20) + '…' : n.name;
       return prefix + name;
     });
-    const statKeys = ['1', '2', '3', '4', '-1'];
+    const statKeys = _zsSortedKeys();
     const datasets = statKeys.map(k => ({
       label:           _ZS[k].label,
       data:            chartRows.map(n => (n._counts || {})[k] || 0),
@@ -893,3 +973,6 @@ async function loadZephyrMetrics() {
   if (refreshBtn) { refreshBtn.disabled = false; refreshBtn.textContent = '⟳ Refresh'; }
   zLog(`✓  Metrics loaded — ${totalFolders} folder(s).`, 'passed');
 }
+
+// Populate status dropdowns immediately with defaults; loadZephyrStatuses() refreshes from API
+_rebuildStatusDropdowns();
