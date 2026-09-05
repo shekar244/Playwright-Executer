@@ -24,7 +24,7 @@ from ui_launcher.test_discovery import TestDiscovery
 
 bp = Blueprint("executor", __name__)
 
-_ROOT = Path(__file__).parent.parent   # Playwright-Executer root
+_ROOT = Path(__file__).parent.parent   # Amplyf-QEA root
 
 
 def _generate_allure3_report(repo: str, cfg: dict) -> str:
@@ -107,7 +107,7 @@ def readme():
         md = readme_path.read_text(encoding="utf-8")
     except OSError:
         return "<p>README.md not found.</p>", 404
-    source_label = "Playwright-Executer"
+    source_label = "Amplyf-QEA"
     import re, html as html_lib
     lines = md.split("\n")
     out, in_code, in_table = [], False, False

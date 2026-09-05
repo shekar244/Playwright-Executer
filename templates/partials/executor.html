@@ -5,24 +5,33 @@
 
     <div class="section-block">
       <div class="section-title"><span class="stitle-icon">📁</span>Repository</div>
-      <div class="section-content">
-        <div class="field">
-          <label>Select Local Repo</label>
-          <div class="field-row">
-            <select id="repoSelect" onchange="onRepoSelect()">
-              <option value="">— scanning… —</option>
-            </select>
-            <button class="browse-btn" onclick="scanRepos()" title="Re-scan for repos">⟳</button>
+      <div class="section-content" style="gap:10px;">
+
+        <!-- Active repo banner — shown when a repo is selected -->
+        <div id="activeRepoBanner" style="display:none;background:var(--input-bg);border:1px solid rgba(137,180,250,0.35);border-radius:var(--radius);padding:10px 12px;">
+          <div style="display:flex;align-items:flex-start;gap:8px;">
+            <span style="font-size:16px;flex-shrink:0;margin-top:1px;">📁</span>
+            <div style="flex:1;min-width:0;">
+              <div id="activeRepoName" style="font-weight:700;color:var(--accent);font-size:13px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;"></div>
+              <div id="activeRepoPath" style="font-size:10px;color:var(--text-dim);font-family:'JetBrains Mono',monospace;word-break:break-all;line-height:1.45;margin-top:3px;"></div>
+            </div>
+            <button class="btn btn-sm" onclick="pinCurrentRepo()" id="pinRepoBtn" title="Pin to quick-access list" style="flex-shrink:0;padding:4px 8px;">📌</button>
           </div>
         </div>
-        <div class="field">
-          <label>Or enter path manually</label>
-          <div class="field-row">
-            <input type="text" id="repo" placeholder="/path/to/your-playwright-repo" />
-            <button class="browse-btn" onclick="browseRepo()">Browse…</button>
-          </div>
-          <div class="hint">Must contain a <code>tests/</code> folder and pytest config</div>
+
+        <!-- Pinned repos quick-select -->
+        <div id="pinnedReposSection" style="display:none;flex-direction:column;gap:5px;">
+          <div style="font-size:10px;text-transform:uppercase;letter-spacing:.07em;font-weight:600;color:var(--text-dim);">Pinned Repos</div>
+          <div id="pinnedReposList" style="display:flex;flex-direction:column;gap:4px;"></div>
         </div>
+
+        <!-- Browse button -->
+        <button class="btn btn-sm" onclick="browseRepo()" style="justify-content:center;width:100%;">📂 Browse for Repo…</button>
+
+        <!-- Hidden inputs for backward compatibility — JS still reads/writes these -->
+        <input type="hidden" id="repo" />
+        <select id="repoSelect" style="display:none;"></select>
+
         <button class="btn btn-sm" onclick="discoverTests()">↻ Discover Tests</button>
       </div>
     </div>
@@ -97,8 +106,11 @@
     </div>
 
     <div class="section-block">
-      <div class="section-title"><span class="stitle-icon">📋</span>Reports</div>
-      <div class="section-content">
+      <div class="section-title" onclick="toggleConfigSection('reportsBody','reportsArrow')" style="cursor:pointer;user-select:none;">
+        <span class="stitle-icon">📋</span>Reports
+        <span id="reportsArrow" style="margin-left:auto;font-size:10px;color:var(--text-dim);">▶ Expand</span>
+      </div>
+      <div id="reportsBody" class="section-content" style="display:none;">
         <div class="report-box">
           <div class="report-label">📄 Individual Run</div>
           <div class="report-path" id="reportIndividualPath">No report found</div>
@@ -120,14 +132,16 @@
         <span id="cfgFileArrow" style="margin-left:auto;font-size:10px;color:var(--text-dim);">▶ Expand</span>
       </div>
       <div id="cfgFileBody" class="section-content" style="gap:8px;display:none;">
-        <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">
-          <span id="cfgSourceBadge" style="font-size:10px;font-weight:700;padding:2px 8px;border-radius:20px;background:rgba(137,180,250,0.15);color:var(--accent);border:1px solid rgba(137,180,250,0.3);">tool</span>
-          <span id="cfgActivePath" style="font-size:10px;color:var(--text-dim);font-family:'JetBrains Mono',monospace;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1;" title="">—</span>
+        <!-- Source badge + full wrapping path -->
+        <div style="display:flex;align-items:flex-start;gap:6px;flex-wrap:wrap;">
+          <span id="cfgSourceBadge" style="font-size:10px;font-weight:700;padding:2px 8px;border-radius:20px;background:rgba(137,180,250,0.15);color:var(--accent);border:1px solid rgba(137,180,250,0.3);flex-shrink:0;">tool</span>
+          <span id="cfgActivePath" style="font-size:10px;color:var(--text-dim);font-family:'JetBrains Mono',monospace;word-break:break-all;line-height:1.5;">—</span>
         </div>
+        <!-- Actions -->
         <div class="action-row">
           <button class="btn btn-sm" onclick="browseCfgOverride()">📂 Load Different Config</button>
           <button class="btn btn-sm" id="clearCfgOverrideBtn" onclick="clearCfgOverride()" style="display:none;color:var(--red);border-color:var(--red);">✕ Clear Override</button>
-          <button class="btn btn-sm" onclick="saveCfgToRepo()" title="Copy active config into repo root">💾 Save to Repo</button>
+          <button class="btn btn-sm" onclick="refreshConfigAndInit()" title="Reload config and re-initialise tool options">⟳ Refresh</button>
         </div>
         <div id="cfgOverrideInfo" style="display:none;font-size:10px;color:var(--yellow);">⚠ Config override active</div>
       </div>

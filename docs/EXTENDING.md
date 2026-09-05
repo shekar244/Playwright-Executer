@@ -1,33 +1,43 @@
-# Extending Playwright Executor
+# Extending Amplyf QEA
 
-## Project structure after modularisation
+This guide explains the project structure and the steps required to add new features, tabs, and backend routes to Amplyf QEA.
+
+---
+
+## Project structure
 
 ```
-Playwright-Executer/
-  server.py                        ← app factory — registers blueprints, serves templates
-  routes/
-    __init__.py
-    state.py                       ← shared run state (runner, is_running, SSE queues)
-    history.py                     ← allure result parsing + run-history persistence
-    executor.py                    ← Blueprint: run / stop / stream / repos / tests / features / git
-    config.py                      ← Blueprint: /api/config endpoints
-    git.py                         ← Blueprint: /api/git/commands + /api/git/run
-    dashboard.py                   ← Blueprint: /api/dashboard + /api/report
-    zephyr.py                      ← Blueprint: all /api/zephyr/* and /api/jira/*
-  templates/
-    base.html                      ← HTML shell: <head>, CSS, nav, shared JS, {% include %} calls
-    partials/
-      executor.html                ← Executor page + Config page HTML
-      dashboard.html               ← Reports Dashboard page HTML
-      testmanagement.html          ← Test Management (Zephyr) page HTML
-  static/
-    js/
-      executor.js                  ← Executor + Config JS
-      dashboard.js                 ← Dashboard charts + table JS
-      testmanagement.js            ← Zephyr / Test Management JS
-    index.html                     ← legacy single-file build (kept for reference)
-  docs/
-    EXTENDING.md                   ← this file
+Amplyf-QEA/
+├── server.py                        ← app factory: registers blueprints, serves templates
+├── routes/
+│   ├── __init__.py
+│   ├── state.py                     ← shared run state (runner, is_running, SSE queues)
+│   ├── history.py                   ← allure result parsing + per-repo run-history persistence
+│   ├── executor.py                  ← Blueprint: run/stop/stream/repos/tests/features/git/venv
+│   ├── config.py                    ← Blueprint: /api/config/* endpoints
+│   ├── dashboard.py                 ← Blueprint: /api/dashboard + /api/report
+│   ├── zephyr.py                    ← Blueprint: all /api/zephyr/* and /api/jira/*
+│   └── filemanager.py               ← Blueprint: /api/fm/browse, read, save
+├── templates/
+│   ├── base.html                    ← HTML shell: <head>, CSS, nav, shared JS, {% include %} calls
+│   └── partials/
+│       ├── executor.html            ← Executor page + Config page HTML
+│       ├── dashboard.html           ← Reports Dashboard page HTML
+│       ├── testmanagement.html      ← Test Management (Zephyr) page HTML
+│       └── filemanager.html         ← File Manager page HTML + inline JS
+├── static/
+│   └── js/
+│       ├── executor.js              ← Executor + Config JS
+│       ├── dashboard.js             ← Dashboard charts + history table JS
+│       └── testmanagement.js        ← Zephyr / Test Management JS
+├── ui_launcher/
+│   ├── command_builder.py           ← builds pytest command; venv Python resolution
+│   ├── config_reader.py             ← three-level config resolution chain
+│   ├── report_resolver.py           ← finds the latest Allure HTML report
+│   ├── runner.py                    ← subprocess + SSE stream
+│   └── test_discovery.py            ← discovers suites and test files
+└── docs/
+    └── EXTENDING.md                 ← this file
 ```
 
 ---
@@ -90,17 +100,16 @@ async function loadTestDesign() {
 
 **a) Add a nav button** (in the `<nav class="tab-nav">` block):
 ```html
-<button type="button" class="tab-btn" onclick="switchTab('testdesign')">
+<button type="button" class="tab-btn" id="navbtn-testdesign"
+        onclick="switchTab('testdesign')">
   <span class="tab-icon">🎨</span>Test Design
 </button>
 ```
 
 **b) Add the page to `switchTab`** (in the inline `<script>` in base.html):
 ```js
-// Change:
-const pages = ['executor','tools','dashboard','zephyr'];
-// To:
-const pages = ['executor','tools','dashboard','zephyr','testdesign'];
+// In the pages array:
+const pages = ['executor','tools','dashboard','zephyr','filemanager','testdesign'];
 // Also add the load trigger:
 if (tab === 'testdesign') loadTestDesign();
 ```
@@ -117,62 +126,41 @@ if (tab === 'testdesign') loadTestDesign();
 
 ### 6 — Add CSS (if needed)
 
-Add any page-specific styles inside the `<style>` block in `templates/base.html`. All existing CSS variables (`--bg`, `--accent`, `--surface`, etc.) are already available.
-
----
-
-## Merging features from another project (index.html-2)
-
-Given a second project with its own `index.html` and backend routes:
-
-1. **Backend**: copy the route functions into a new blueprint file in `routes/` and register it in `server.py`.
-2. **HTML**: extract the page `<div>` from index.html-2 into a new file in `templates/partials/`.
-3. **JS**: extract the JavaScript into a new file in `static/js/`.
-4. Wire up the nav button, `switchTab`, `{% include %}`, and `<script src>` in `base.html`.
-
-No manual search-and-splice into a 4000-line file — each concern lives in its own file.
-
----
+Add page-specific styles inside the `<style>` block in `templates/base.html`. All CSS variables (`--bg`, `--accent`, `--surface`, `--green`, `--red`, etc.) are already available.
 
 ---
 
 ## Making a new tab controllable from the 🎛️ Tabs kill-switch
 
-The kill-switch in **Config → 🎛️ Tabs** lets users show/hide any tab without reloading.
-When you add a new feature tab (e.g. Test Design), follow these 4 steps to plug it in.
+The kill-switch in **Config → 🎛️ Tabs** lets users show/hide any tab without reloading. Follow these four steps to plug a new tab in.
 
-### A — Add a nav button ID to `templates/base.html`
-
-Give the nav button a predictable `id` so `applyUiTabs` can target it:
+### A — Give the nav button a predictable `id`
 
 ```html
-<!-- In the <nav class="tab-nav"> block -->
+<!-- In the <nav class="tab-nav"> block in base.html -->
 <button type="button" class="tab-btn" id="navbtn-testdesign"
         onclick="switchTab('testdesign')">
   <span class="tab-icon">🎨</span>Test Design
 </button>
 ```
 
-### B — Register the key in `UI_TAB_MAP` (also in `base.html`)
-
-The inline `<script>` in `base.html` contains `UI_TAB_MAP`. Add one entry:
+### B — Register the key in `UI_TAB_MAP` (in base.html inline script)
 
 ```js
 const UI_TAB_MAP = {
   dashboard:   { nav: 'navbtn-dashboard' },
   zephyr:      { nav: 'navbtn-zephyr' },
-  // ↓ add this line:
-  testdesign:  { nav: 'navbtn-testdesign' },
+  testdesign:  { nav: 'navbtn-testdesign' },   // ← add this
   cfg_git:     { cfg: 'ctab-git' },
   // ... rest unchanged
 };
 ```
 
-`applyUiTabs()` will now automatically show/hide `navbtn-testdesign` based on the saved config.
+`applyUiTabs()` will automatically show/hide `navbtn-testdesign` based on the saved config.
 
 ### C — Add a checkbox to the 🎛️ Tabs panel (`templates/partials/executor.html`)
 
-Find the `cfgUiTabs` div and add a checkbox inside the **Main Navigation** section:
+Find the `cfgUiTabs` div and add a checkbox in the **Main Navigation** section:
 
 ```html
 <label class="checkbox-label" style="gap:10px;cursor:pointer;">
@@ -186,14 +174,14 @@ Find the `cfgUiTabs` div and add a checkbox inside the **Main Navigation** secti
 ```js
 const _UI_TAB_KEYS = [
   'dashboard', 'zephyr',
-  'testdesign',          // ← add this
+  'testdesign',   // ← add this
   'cfg_git', 'cfg_tools', 'cfg_mapping', 'cfg_zephyr'
 ];
 ```
 
 `loadUiTabs()` reads this array to populate checkboxes; `saveUiTabs()` reads it to persist state.
 
-### That's all — summary of touch-points
+### Summary of touch-points
 
 | File | Change |
 |---|---|
@@ -202,9 +190,34 @@ const _UI_TAB_KEYS = [
 | `templates/partials/executor.html` | Add `<input id="uitab_testdesign">` checkbox in the Tabs panel |
 | `static/js/executor.js` | Add `'testdesign'` to `_UI_TAB_KEYS` |
 
-> **Config sub-tabs** (tabs inside Config, not main nav) use `{ cfg: 'ctab-mykey' }` in `UI_TAB_MAP`
-> instead of `{ nav: '...' }`. The checkbox id is `uitab_cfg_mykey` and the key in `_UI_TAB_KEYS`
-> is `cfg_mykey`. See the existing Git / CLI Tools entries as a reference.
+> **Config sub-tabs** (tabs inside the Config page, not main nav) use `{ cfg: 'ctab-mykey' }` in
+> `UI_TAB_MAP`. The checkbox id is `uitab_cfg_mykey` and the key in `_UI_TAB_KEYS` is `cfg_mykey`.
+> See the existing Git / CLI Tools entries as reference.
+
+---
+
+## Config resolution chain
+
+`ui_launcher/config_reader.py` implements a three-level merge:
+
+```
+1. {tool_dir}/config.json          ← always read first; provides repo_root + config_override_path
+2. config_override_path (if set)   ← overrides everything; return immediately after merging
+3. {repo_root}/config.json         ← repo-level config; merges on top of tool config
+```
+
+`ConfigReader.load()` returns the merged dict with two internal keys:
+
+| Key | Value |
+|---|---|
+| `_active_config_path` | Absolute path of the file that was ultimately used |
+| `_active_config_source` | `"tool"` / `"repo"` / `"override"` |
+
+`ConfigReader.save(cfg)` writes to `cfg["_active_config_path"]` (strips `_` keys before writing).
+
+`ConfigReader.save_tool_config(updates)` always writes specific keys directly to the tool bootstrap file — used to persist `repo_root` and `config_override_path` regardless of which config is active.
+
+When adding a new config key, add its default to `_DEFAULTS` in `config_reader.py` so it is always present in `load()` output.
 
 ---
 
@@ -214,9 +227,26 @@ const _UI_TAB_KEYS = [
 |---|---|
 | Import shared state via `from routes import state` | `global` only works within the same module |
 | Modify state as `state._is_running = True` | Attribute assignment crosses module boundaries |
-| `HISTORY_FILE` path uses `Path(__file__).parent.parent` | history.py is one level inside `routes/` |
-| Keep `escHtml` in `base.html` | It's called from HTML `onclick` attributes in all partials |
-| Keep `_fmtDur`, `appendLine`, `setRunning`, `switchTab` in `base.html` | Called across all JS files |
-| JS files load after `base.html` inline script | Execution order matters — shared globals are defined first |
-| Give every nav button an `id="navbtn-<key>"` | Required for `applyUiTabs()` to target it |
+| Use `_history_file(repo)` — not a module-level constant | History is per-repo; the file lives at `{repo}/report_history.json` |
+| `ConfigReader().save(cfg)` writes to `_active_config_path` | Respects the resolution chain; never hard-codes a path |
+| `ConfigReader().save_tool_config({...})` for `repo_root` / `config_override_path` | These must always be in the bootstrap so the chain can bootstrap itself |
+| Keep `escHtml` in `base.html` inline script | Called from HTML `onclick` attributes in all partials |
+| Keep `_fmtDur`, `appendLine`, `setRunning`, `switchTab` in `base.html` | Shared globals — must be defined before the external JS files load |
+| JS files load after `base.html` inline script | Execution order matters; never use a shared function before it is declared |
+| Give every nav button `id="navbtn-<key>"` | Required for `applyUiTabs()` to show/hide it |
 | Add key to both `UI_TAB_MAP` and `_UI_TAB_KEYS` | Map controls visibility; array controls checkbox load/save |
+| Dynamic Zephyr statuses live in `_ZS` (`testmanagement.js`) | Call `_rebuildStatusDropdowns()` after any mutation to keep all UI in sync |
+| Venv Python resolved via `resolve_python(repo, venv_path)` from `command_builder.py` | Use this helper in any new route that needs to run Python in the repo's environment |
+
+---
+
+## Merging features from another project
+
+Given a second project with its own `index.html` and backend routes:
+
+1. **Backend** — copy the route functions into a new blueprint file in `routes/` and register it in `server.py`.
+2. **HTML** — extract the page `<div>` from `index.html` into a new file in `templates/partials/`.
+3. **JS** — extract the JavaScript into a new file in `static/js/`.
+4. Wire up the nav button, `switchTab`, `{% include %}`, and `<script src>` in `base.html`.
+
+No manual search-and-splice into a large monolithic file — each concern lives in its own file.

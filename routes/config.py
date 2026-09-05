@@ -148,3 +148,19 @@ def save_config_to_repo():
     except OSError as exc:
         return jsonify({"error": str(exc)}), 500
     return jsonify({"ok": True, "saved_to": str(dest)})
+
+
+@bp.route("/api/config/pinned-repos", methods=["POST"])
+def save_pinned_repos():
+    body = request.json or {}
+    repos = body.get("pinned_repos")
+    if not isinstance(repos, list):
+        return jsonify({"error": "pinned_repos must be an array"}), 400
+    reader = ConfigReader()
+    cfg = reader.load()
+    cfg["pinned_repos"] = [str(r) for r in repos if r]
+    try:
+        reader.save(cfg)
+    except OSError as exc:
+        return jsonify({"error": str(exc)}), 500
+    return jsonify({"ok": True})

@@ -48,11 +48,11 @@ def get_dashboard():
         except Exception:
             report_path = ""
 
-        # Annotate each test with its individual deep-link (Allure uid-based)
+        # Every test in this run shares the same consolidated report path
         if report_path:
             for t in tests:
-                if not t.get("report_path") and t.get("uid"):
-                    t["report_path"] = report_path + "#testresult/" + t["uid"]
+                if not t.get("report_path"):
+                    t["report_path"] = report_path
 
     return jsonify({
         "tests":       tests,

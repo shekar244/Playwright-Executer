@@ -223,8 +223,6 @@ def record_run_history(repo: str, status: str, cfg: dict) -> None:
             dur_ms   = max(0, stop_ms - start_ms)
             full_name = t.get("fullName", "")
             method_name = full_name.split("::")[-1] if "::" in full_name else t["name"]
-            uid = t.get("uid", "")
-            test_report = (run_report + "#testresult/" + uid) if (run_report and uid) else ""
             tests_detail.append({
                 "suite":       t.get("suite", ""),
                 "name":        t["name"],
@@ -235,8 +233,7 @@ def record_run_history(repo: str, status: str, cfg: dict) -> None:
                 "time":        datetime.datetime.fromtimestamp(start_ms / 1000).strftime("%H:%M:%S") if start_ms else "",
                 "duration_ms": dur_ms,
                 "duration_s":  round(dur_ms / 1000, 2),
-                "uid":         uid,
-                "report_path": test_report,
+                "report_path": run_report,  # same consolidated report for every test in this run
             })
 
     record = {

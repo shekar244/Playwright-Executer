@@ -52,26 +52,16 @@ function collectExtraOptionValues() {
 async function scanRepos(preferredPath) {
   const data  = await fetch('/api/repos').then(r => r.json()).catch(() => ({ repos: [] }));
   const repos = data.repos || [];
-  const sel   = document.getElementById('repoSelect');
-  sel.innerHTML = '<option value="">— choose a repo —</option>' +
-    repos.map(r => `<option value="${r.path}" title="${r.path}">${r.name}</option>`).join('');
-  if (!repos.length) sel.innerHTML = '<option value="">No Playwright repos found — enter path manually</option>';
+  // Keep repoSelect populated for backward compat (hidden element)
+  const sel = document.getElementById('repoSelect');
+  if (sel) sel.innerHTML = repos.map(r => `<option value="${r.path}">${r.name}</option>`).join('');
   if (preferredPath) {
-    // Normalise separators + case for Windows compatibility (\ vs /, C: vs c:)
-    const norm = p => p.replace(/\\/g, '/').toLowerCase();
-    const match = repos.find(r => norm(r.path) === norm(preferredPath));
-    if (match) { sel.value = match.path; applyRepo(match.path); return; }
-    // Not in scan results but saved in config — inject it so it's always available
-    const name = preferredPath.split(/[/\\]/).filter(Boolean).pop() || preferredPath;
-    const opt  = new Option('📁 ' + name, preferredPath, true, true);
-    sel.add(opt);
-    document.getElementById('repo').value = preferredPath;
-    document.getElementById('repoSubtitle').textContent = '📁 ' + name;
-    document.title = 'Playwright Executor — ' + name;
+    applyRepo(preferredPath, false);
     discoverTests();
     return;
   }
-  if (repos.length === 1) { sel.value = repos[0].path; applyRepo(repos[0].path); }
+  if (repos.length === 1) { applyRepo(repos[0].path, false); discoverTests(); }
+  await loadPinnedRepos();
 }
 
 function onRepoSelect() {
@@ -79,18 +69,99 @@ function onRepoSelect() {
   if (path) applyRepo(path);
 }
 
-function applyRepo(path) {
+function applyRepo(path, andDiscover = true) {
   document.getElementById('repo').value = path;
   const name = path.split(/[/\\]/).filter(Boolean).pop() || path;
   document.getElementById('repoSubtitle').textContent = '📁 ' + name;
-  document.title = 'Playwright Executor — ' + name;
-  // Persist so the repo survives page refresh
+  document.title = 'Amplyf QEA — ' + name;
+
+  // Update active banner
+  const banner = document.getElementById('activeRepoBanner');
+  const nameEl = document.getElementById('activeRepoName');
+  const pathEl = document.getElementById('activeRepoPath');
+  if (banner) banner.style.display = '';
+  if (nameEl) nameEl.textContent   = name;
+  if (pathEl) pathEl.textContent   = path;
+
+  // Highlight active repo in pinned list
+  document.querySelectorAll('.pinned-repo-card').forEach(c => {
+    c.style.borderColor = c.dataset.path === path ? 'rgba(137,180,250,0.5)' : 'var(--border)';
+    c.style.background  = c.dataset.path === path ? 'rgba(137,180,250,0.06)' : 'var(--surface2)';
+  });
+
+  // Persist repo_root
   fetch('/api/config/repo-root', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ repo_root: path }),
   }).catch(() => {});
-  discoverTests();
+
+  if (andDiscover) discoverTests();
+}
+
+// ── Pinned repos ───────────────────────────────────────────────────────────────
+let _pinnedRepos = [];
+
+async function loadPinnedRepos() {
+  const cfg = await fetch('/api/config').then(r => r.json()).catch(() => ({}));
+  _pinnedRepos = cfg.pinned_repos || [];
+  renderPinnedRepos();
+}
+
+function renderPinnedRepos() {
+  const section = document.getElementById('pinnedReposSection');
+  const list    = document.getElementById('pinnedReposList');
+  if (!section || !list) return;
+  if (!_pinnedRepos.length) { section.style.display = 'none'; return; }
+
+  const currentRepo = document.getElementById('repo').value.trim();
+  section.style.display = 'flex';
+  list.innerHTML = '';
+  _pinnedRepos.forEach(p => {
+    const name     = p.split(/[/\\]/).filter(Boolean).pop() || p;
+    const isActive = p === currentRepo;
+    const card     = document.createElement('div');
+    card.className    = 'pinned-repo-card';
+    card.dataset.path = p;
+    card.style.cssText = `display:flex;align-items:center;gap:8px;padding:7px 10px;border-radius:var(--radius);
+      border:1px solid ${isActive ? 'rgba(137,180,250,0.5)' : 'var(--border)'};
+      background:${isActive ? 'rgba(137,180,250,0.06)' : 'var(--surface2)'};
+      cursor:pointer;transition:all 0.12s;`;
+    card.title   = p;
+    card.onclick = () => applyRepo(p);
+    card.innerHTML = `
+      <span style="font-size:13px;flex-shrink:0;">📁</span>
+      <span style="flex:1;font-size:12px;font-weight:600;color:${isActive ? 'var(--accent)' : 'var(--text-muted)'};
+             overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escHtml(name)}</span>
+      <button onclick="event.stopPropagation();unpinRepo('${escHtml(p)}')"
+              title="Unpin" style="background:none;border:none;color:var(--text-dim);cursor:pointer;
+              font-size:12px;padding:2px 4px;border-radius:3px;opacity:0.5;transition:all 0.1s;"
+              onmouseover="this.style.opacity='1';this.style.color='var(--red)'"
+              onmouseout="this.style.opacity='0.5';this.style.color='var(--text-dim)'">✕</button>`;
+    list.appendChild(card);
+  });
+}
+
+async function pinCurrentRepo() {
+  const path = document.getElementById('repo').value.trim();
+  if (!path || _pinnedRepos.includes(path)) return;
+  _pinnedRepos.push(path);
+  await _savePinnedRepos();
+  renderPinnedRepos();
+}
+
+async function unpinRepo(path) {
+  _pinnedRepos = _pinnedRepos.filter(p => p !== path);
+  await _savePinnedRepos();
+  renderPinnedRepos();
+}
+
+async function _savePinnedRepos() {
+  await fetch('/api/config/pinned-repos', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ pinned_repos: _pinnedRepos }),
+  }).catch(() => {});
 }
 
 // ── Test discovery ─────────────────────────────────────────────────────────────
@@ -218,29 +289,63 @@ async function stopTests() { await fetch('/api/stop', { method: 'POST' }); }
 // ── Config file info ──────────────────────────────────────────────────────────
 
 async function loadConfigInfo() {
-  const data = await fetch('/api/config/info').then(r => r.json()).catch(() => ({}));
+  const info = await fetch('/api/config/info').then(r => r.json()).catch(() => ({}));
+
   const pathEl   = document.getElementById('cfgActivePath');
   const badgeEl  = document.getElementById('cfgSourceBadge');
   const overInfo = document.getElementById('cfgOverrideInfo');
   const clearBtn = document.getElementById('clearCfgOverrideBtn');
 
-  const source = data.active_config_source || 'tool';
-  const path   = data.active_config_path   || '—';
-  const short  = path.split(/[/\\]/).slice(-2).join('/');   // last two path segments
+  const source = info.active_config_source || 'tool';
+  const path   = info.active_config_path   || '—';
 
-  if (pathEl)  { pathEl.textContent = short; pathEl.title = path; }
+  // Show full path with word-wrap so the entire path is readable
+  if (pathEl)  { pathEl.textContent = path; }
   if (badgeEl) {
     const colors = { tool: 'rgba(137,180,250,0.15)', repo: 'rgba(166,227,161,0.15)', override: 'rgba(249,226,175,0.15)' };
     const text   = { tool: 'tool', repo: 'repo', override: 'override' };
     const txtCls = { tool: 'var(--accent)', repo: 'var(--green)', override: 'var(--yellow)' };
-    badgeEl.textContent    = text[source]   || source;
-    badgeEl.style.background = colors[source] || 'rgba(128,128,153,0.15)';
-    badgeEl.style.color      = txtCls[source] || 'var(--text-dim)';
+    badgeEl.textContent       = text[source]   || source;
+    badgeEl.style.background  = colors[source] || 'rgba(128,128,153,0.15)';
+    badgeEl.style.color       = txtCls[source] || 'var(--text-dim)';
     badgeEl.style.borderColor = txtCls[source] || 'var(--border)';
   }
-  const hasOverride = !!data.config_override_path;
+  const hasOverride = !!info.config_override_path;
   if (overInfo) overInfo.style.display = hasOverride ? '' : 'none';
-  if (clearBtn) clearBtn.style.display = hasOverride ? ''  : 'none';
+  if (clearBtn) clearBtn.style.display = hasOverride ? '' : 'none';
+}
+
+async function refreshConfigAndInit() {
+  const cfg = await fetch('/api/config').then(r => r.json()).catch(() => ({}));
+
+  // Re-apply browser list & default
+  if (cfg.browsers) {
+    const sel = document.getElementById('browser');
+    if (sel) {
+      sel.innerHTML = cfg.browsers.map(b => `<option value="${b}">${b}</option>`).join('');
+      if (cfg.default_browser) sel.value = cfg.default_browser;
+    }
+  } else if (cfg.default_browser) {
+    const sel = document.getElementById('browser');
+    if (sel) sel.value = cfg.default_browser;
+  }
+  if (cfg.default_workers) { const w = document.getElementById('workers'); if (w) w.value = cfg.default_workers; }
+  if (cfg.auto_open_report !== undefined) { const a = document.getElementById('auto_open'); if (a) a.checked = !!cfg.auto_open_report; }
+  if (cfg.markers?.length) populateMarkers(cfg.markers);
+  renderExtraOptions(cfg.extra_options || []);
+  applyUiTabs(cfg.ui_tabs || {});
+
+  // Reload venv path input
+  const venvEl = document.getElementById('venvPathInput');
+  if (venvEl && cfg.venv_path !== undefined) venvEl.value = cfg.venv_path || '';
+
+  // Refresh repo list, keeping current repo if set
+  const currentRepo = document.getElementById('repo')?.value.trim() || cfg.repo_root || '';
+  await scanRepos(currentRepo);
+
+  // Refresh config info panel (badge + content)
+  await loadConfigInfo();
+  if (typeof checkVenvStatus === 'function') checkVenvStatus();
 }
 
 async function browseCfgOverride() {
@@ -251,22 +356,15 @@ async function browseCfgOverride() {
   if (data.cancelled || !data.path) return;
   const res2 = await fetch('/api/config/override', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ path: data.path }) });
   const d2   = await res2.json().catch(() => ({}));
-  if (d2.ok) { await loadConfigInfo(); location.reload(); }
+  if (d2.ok) await refreshConfigAndInit();
   else        alert('Could not set override: ' + (d2.error || 'unknown error'));
 }
 
 async function clearCfgOverride() {
   const res = await fetch('/api/config/override', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ path: '' }) });
   const d   = await res.json().catch(() => ({}));
-  if (d.ok) { await loadConfigInfo(); location.reload(); }
-  else        alert('Could not clear override: ' + (d.error || 'unknown error'));
-}
-
-async function saveCfgToRepo() {
-  const res = await fetch('/api/config/save-to-repo', { method: 'POST' });
-  const d   = await res.json().catch(() => ({}));
-  if (d.ok) { alert('Config saved to: ' + d.saved_to); await loadConfigInfo(); }
-  else        alert('Save failed: ' + (d.error || 'unknown error'));
+  if (d.ok) await refreshConfigAndInit();
+  else       alert('Could not clear override: ' + (d.error || 'unknown error'));
 }
 
 // ── Venv management ───────────────────────────────────────────────────────────

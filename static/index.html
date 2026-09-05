@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Playwright Test Executor</title>
+  <title>Amplyf QEA</title>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" crossorigin>
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
   <style>
@@ -862,8 +862,8 @@
 
 <header>
   <div class="header-logo">
-    <div class="logo-mark">🎭</div>
-    <h1>Playwright <span>Executor</span></h1>
+    <div class="logo-mark">⚡</div>
+    <h1>Amplyf <span>QEA</span></h1>
   </div>
   <div class="repo-subtitle" id="repoSubtitle">select a repo to begin</div>
   <div class="header-right">
@@ -2037,7 +2037,7 @@ function applyRepo(path) {
   document.getElementById('repo').value = path;
   const name = path.split(/[/\\]/).filter(Boolean).pop() || path;
   document.getElementById('repoSubtitle').textContent = '📁 ' + name;
-  document.title = 'Playwright Executor — ' + name;
+  document.title = 'Amplyf QEA — ' + name;
   discoverTests();
 }
 

@@ -438,10 +438,8 @@ function _renderTestTable(tests) {
     const runAt    = t.start ? new Date(t.start).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : '—';
     const suite    = escHtml(t.file  || t.fullName?.split('#')[0]?.replace(/^\./, '') || t.suite || '—');
     const name     = escHtml(t.method || t.fullName?.split('#').pop() || t.name || '—');
-    // Per-test deep link: use t.report_path / t.report_relpath first, then construct from uid, fall back to suite report
-    const testPath = t.report_path || t.report_relpath
-      || (t.uid && _currentReportPath ? _currentReportPath + '#testresult/' + t.uid : '')
-      || _currentReportPath;
+    // Per-test report: use stored report_path / report_relpath, fall back to suite-level report
+    const testPath = t.report_path || t.report_relpath || _currentReportPath;
     const reportCell = testPath
       ? `<a href="#" onclick="event.preventDefault();_openReportPath('${escHtml(testPath)}')" style="font-size:10px;font-weight:600;color:var(--accent);text-decoration:none;border:1px solid rgba(137,180,250,0.25);border-radius:4px;padding:2px 7px;background:var(--accent-glow);">📊 View</a>`
       : `<span style="font-size:10px;color:var(--text-dim);">N/A</span>`;
@@ -579,8 +577,7 @@ function showRunDetail(absIdx) {
       suite:       t.suite       || '',
       status:      t.status      || 'unknown',
       fullName:    t.fullName    || '',
-      uid:         t.uid         || '',
-      report_path: t.report_path || '',
+      report_path: t.report_path || record.report_path || '',
       start,
       duration: t.duration_ms || Math.round((t.duration_s || 0) * 1000),
     };

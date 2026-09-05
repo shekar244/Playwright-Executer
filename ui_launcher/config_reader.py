@@ -32,6 +32,7 @@ _DEFAULTS: dict = {
     "extra_options": [],
     "config_override_path": "",
     "venv_path": "",          # relative to repo root (e.g. ".venv", "venv") or absolute
+    "pinned_repos": [],       # list of pinned repo paths for quick-access
 }
 
 # Tool-level bootstrap config — always exists in the tool directory.

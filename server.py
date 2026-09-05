@@ -45,7 +45,7 @@ def static_files(path):
 
 # ── Hostname setup ─────────────────────────────────────────────────────────────
 
-HOSTNAME = "playwright-executor"
+HOSTNAME = "amplyf-qea"
 PORT     = 7777
 APP_URL  = f"http://{HOSTNAME}:{PORT}"
 
