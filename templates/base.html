@@ -376,7 +376,8 @@ function connectStream() {
     _startStatusPoll();  // begin polling so UI recovers if SSE drops
   });
   eventSource.addEventListener('line', e => {
-    appendLine(JSON.parse(e.data), classifyLine(JSON.parse(e.data)));
+    const text = JSON.parse(e.data);
+    appendLine(text, classifyLine(text));
   });
   eventSource.addEventListener('status', e => {
     const s = JSON.parse(e.data);
@@ -407,7 +408,7 @@ function connectStream() {
     refreshReport();
     if (document.getElementById('auto_open').checked) openReport('individual');
   });
-  eventSource.onerror = () => setTimeout(connectStream, 3000);
+  eventSource.onerror = () => { eventSource.close(); setTimeout(connectStream, 1000); };
 }
 
 document.getElementById('log').addEventListener('scroll', function() {
@@ -444,7 +445,6 @@ function applyUiTabs(tabs) {
 async function init() {
   const cfg = await fetch('/api/config').then(r => r.json()).catch(() => ({}));
   if (cfg.default_browser) document.getElementById('browser').value = cfg.default_browser;
-  if (cfg.default_workers) document.getElementById('workers').value = cfg.default_workers;
   if (cfg.auto_open_report) document.getElementById('auto_open').checked = true;
   if (cfg.browsers) {
     const sel = document.getElementById('browser');

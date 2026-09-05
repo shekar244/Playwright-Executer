@@ -62,8 +62,11 @@
     </div>
 
     <div class="section-block">
-      <div class="section-title"><span class="stitle-icon">⚙️</span>Execution Options</div>
-      <div class="section-content">
+      <div class="section-title" onclick="toggleConfigSection('execOptBody','execOptArrow')" style="cursor:pointer;user-select:none;">
+        <span class="stitle-icon">⚙️</span>Execution Options
+        <span id="execOptArrow" style="margin-left:auto;font-size:10px;color:var(--text-dim);">▶ Expand</span>
+      </div>
+      <div id="execOptBody" class="section-content" style="display:none;">
         <div class="field">
           <label>Browser</label>
           <select id="browser">
@@ -72,11 +75,10 @@
             <option value="webkit">webkit</option>
           </select>
         </div>
-        <div class="field"><label>Marker (-m)</label>
-          <select id="marker"><option value="">(none)</option></select>
-        </div>
-        <div class="field"><label>Workers (-n)</label>
-          <input type="number" id="workers" value="1" min="1" max="16" />
+        <div class="field">
+          <label>Markers (-m) <span style="font-weight:400;color:var(--text-dim);font-size:10px;">Hold Ctrl/⌘ to select multiple</span></label>
+          <select id="marker" multiple size="4" style="min-height:64px;height:auto;"></select>
+          <div class="hint" id="markerHint" style="display:none;"></div>
         </div>
         <div class="checkboxes">
           <label class="checkbox-label"><input type="checkbox" id="headed" checked /> Headed</label>

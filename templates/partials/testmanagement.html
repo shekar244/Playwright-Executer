@@ -406,3 +406,21 @@
   </div>
 
 </div>
+
+<style>
+/* Metrics table — vertical column separators + centre-align number cells */
+#zMetricsTable th,
+#zMetricsTable td {
+  border-right: 1px solid var(--border);
+}
+#zMetricsTable th:last-child,
+#zMetricsTable td:last-child {
+  border-right: none;
+}
+#zMetricsTable td:not(:first-child) {
+  text-align: center;
+}
+#zMetricsTable th:not(:first-child):not(:last-child) {
+  text-align: center;
+}
+</style>

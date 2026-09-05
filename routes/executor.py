@@ -393,12 +393,19 @@ def get_status():
 
 @bp.route("/api/stream")
 def stream():
-    q: queue.Queue = queue.Queue(maxsize=500)
+    q: queue.Queue = queue.Queue(maxsize=600)
+
+    # Snapshot the ring buffer BEFORE registering the queue so we don't
+    # double-deliver events that arrive in the tiny window between the two.
+    replay = list(state._recent_events) if state._is_running else []
     state._output_queues.append(q)
 
     def generate():
         try:
             yield "event: connected\ndata: \"ok\"\n\n"
+            # Replay buffered run output to reconnecting clients.
+            for buffered in replay:
+                yield buffered
             while True:
                 try:
                     msg = q.get(timeout=25)

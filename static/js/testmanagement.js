@@ -773,8 +773,8 @@ function _rebuildMetricsTableHeader() {
   if (!tr) return;
   const keys = _zsSortedKeys();
   tr.innerHTML = '<th>Folder</th>' +
-    keys.map(k => `<th style="color:${_ZS[k].color};">${_ZS[k].label}</th>`).join('') +
-    '<th>Total</th><th style="min-width:120px;">Distribution</th>';
+    keys.map(k => `<th style="text-align:center;color:${_ZS[k].color};">${_ZS[k].label}</th>`).join('') +
+    '<th style="text-align:center;">Total</th><th style="min-width:120px;">Distribution</th>';
   const emptyTd = document.querySelector('#zMetricsTbody tr td[colspan]');
   if (emptyTd) emptyTd.setAttribute('colspan', keys.length + 3);
 }

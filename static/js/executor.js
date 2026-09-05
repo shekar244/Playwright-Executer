@@ -253,7 +253,16 @@ function getKFilter() {
 function populateMarkers(markers) {
   const sel      = document.getElementById('marker');
   const existing = Array.from(sel.options).map(o => o.value).filter(Boolean);
-  markers.forEach(m => { if (!existing.includes(m)) sel.add(new Option(m, m)); });
+  markers.forEach(m => { if (m && !existing.includes(m)) sel.add(new Option(m, m)); });
+  const hint = document.getElementById('markerHint');
+  if (hint) {
+    if (sel.options.length) {
+      hint.textContent = `${sel.options.length} marker${sel.options.length !== 1 ? 's' : ''} from pytest.ini`;
+      hint.style.display = '';
+    } else {
+      hint.style.display = 'none';
+    }
+  }
 }
 
 // ── Run / Stop ────────────────────────────────────────────────────────────────
@@ -269,8 +278,7 @@ async function runTests() {
     file_sel: document.getElementById('file').value,
     k_filter: getKFilter(),
     browser:  document.getElementById('browser').value,
-    marker:   document.getElementById('marker').value || null,
-    workers:  parseInt(document.getElementById('workers').value) || 1,
+    marker:   (() => { const sel = document.getElementById('marker'); const vals = Array.from(sel.selectedOptions).map(o => o.value).filter(Boolean); return vals.length ? vals.join(' or ') : null; })(),
     verbose:  document.getElementById('verbose').checked,
     headed:   document.getElementById('headed').checked,
     extra:    document.getElementById('extra').value,
@@ -329,7 +337,6 @@ async function refreshConfigAndInit() {
     const sel = document.getElementById('browser');
     if (sel) sel.value = cfg.default_browser;
   }
-  if (cfg.default_workers) { const w = document.getElementById('workers'); if (w) w.value = cfg.default_workers; }
   if (cfg.auto_open_report !== undefined) { const a = document.getElementById('auto_open'); if (a) a.checked = !!cfg.auto_open_report; }
   if (cfg.markers?.length) populateMarkers(cfg.markers);
   renderExtraOptions(cfg.extra_options || []);
