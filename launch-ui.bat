@@ -74,15 +74,15 @@ if %errorlevel% neq 0 (
 )
 
 :: ----------------------------------------------------------
-:: Add hosts entry for amplyf-qea (once)
+:: Add hosts entry for amplyfy-qea (once)
 :: ----------------------------------------------------------
-findstr /c:"amplyf-qea" C:\Windows\System32\drivers\etc\hosts >nul 2>&1
+findstr /c:"amplyfy-qea" C:\Windows\System32\drivers\etc\hosts >nul 2>&1
 if %errorlevel% neq 0 (
-    echo [INFO] Adding 'amplyf-qea' to hosts file...
-    echo 127.0.0.1  amplyf-qea>> C:\Windows\System32\drivers\etc\hosts 2>nul
+    echo [INFO] Adding 'amplyfy-qea' to hosts file...
+    echo 127.0.0.1  amplyfy-qea>> C:\Windows\System32\drivers\etc\hosts 2>nul
     if %errorlevel% neq 0 (
         echo [WARN] Could not update hosts file. Right-click launch-ui.bat and choose
-        echo        "Run as administrator" to enable the amplyf-qea URL.
+        echo        "Run as administrator" to enable the amplyfy-qea URL.
         echo        Falling back to http://localhost:7777
     ) else (
         echo [INFO] Hosts entry added.
@@ -110,7 +110,7 @@ if defined PID_TO_KILL (
 :: ----------------------------------------------------------
 cd /d "%EXECUTER_ROOT%"
 
-echo [INFO] Starting server at http://amplyf-qea:7777
+echo [INFO] Starting server at http://amplyfy-qea:7777
 echo [INFO] Your browser will open automatically.
 echo [INFO] Press Ctrl+C to stop.
 echo.

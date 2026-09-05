@@ -1,13 +1,13 @@
-# Extending Amplyf QEA
+# Extending Amplyfy QEA
 
-This guide explains the project structure and the steps required to add new features, tabs, and backend routes to Amplyf QEA.
+This guide explains the project structure and the steps required to add new features, tabs, and backend routes to Amplyfy QEA.
 
 ---
 
 ## Project structure
 
 ```
-Amplyf-QEA/
+Amplyfy-QEA/
 ├── server.py                        ← app factory: registers blueprints, serves templates
 ├── routes/
 │   ├── __init__.py

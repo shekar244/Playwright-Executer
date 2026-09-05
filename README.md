@@ -1,14 +1,14 @@
-# Amplyf QEA
+# Amplyfy QEA
 
 A browser-based local UI for running, reporting, and managing **Playwright + pytest** test suites — no VS Code, no terminal, no command memorisation required.
 
 ```
 GitHub/
 ├── Your-QA-Framework/    ← your existing framework (unchanged)
-└── Amplyf-QEA/  ← Amplyf QEA (UI layer only)
+└── Amplyfy-QEA/  ← Amplyfy QEA (UI layer only)
 ```
 
-Amplyf QEA **never modifies the framework**. All test logic, fixtures, page objects, and configuration remain exactly as they are.
+Amplyfy QEA **never modifies the framework**. All test logic, fixtures, page objects, and configuration remain exactly as they are.
 
 ---
 
@@ -41,8 +41,8 @@ launch-ui.bat    # run as Administrator on first launch
 The launcher:
 1. Detects or creates a virtualenv
 2. Installs Flask if missing
-3. Adds `127.0.0.1 amplyf-qea` to `/etc/hosts`
-4. Opens `http://amplyf-qea:7777` in the default browser
+3. Adds `127.0.0.1 amplyfy-qea` to `/etc/hosts`
+4. Opens `http://amplyfy-qea:7777` in the default browser
 
 ---
 
@@ -77,7 +77,7 @@ pytest-xdist
 ## Project Layout
 
 ```
-Amplyf-QEA/
+Amplyfy-QEA/
 ├── server.py                    # Flask app factory — registers blueprints
 ├── routes/
 │   ├── __init__.py
@@ -199,7 +199,7 @@ Columns: Date · Repo · Status · Passed · Failed · Broken · Skipped · Tota
 
 ### History Storage
 
-`report_history.json` is stored **per-repo** at `{repo_root}/report_history.json`. It is created and maintained entirely by Amplyf QEA — no pytest fixtures or plugins required. Each run prepends a new record; the file is capped at 200 records.
+`report_history.json` is stored **per-repo** at `{repo_root}/report_history.json`. It is created and maintained entirely by Amplyfy QEA — no pytest fixtures or plugins required. Each run prepends a new record; the file is capped at 200 records.
 
 ---
 
@@ -284,7 +284,7 @@ Browse the file system and edit files in place.
 
 ## Config File Resolution
 
-Amplyf QEA uses a three-level config resolution chain:
+Amplyfy QEA uses a three-level config resolution chain:
 
 1. **Tool bootstrap** — `{tool_dir}/config.json` — always read first; stores `repo_root` and `config_override_path`
 2. **Override** — if `config_override_path` is set and the file exists, it overrides everything
@@ -308,7 +308,7 @@ The tool resolves a Python executable for every run using this priority order:
 
 1. **Configured `venv_path`** — value from config, relative to repo root or absolute
 2. **Auto-detect** — checks `.venv`, `venv`, `env`, `.env` inside the repo root
-3. **System Python** — the Python running the Amplyf QEA server itself
+3. **System Python** — the Python running the Amplyfy QEA server itself
 
 This resolved Python is used for:
 - **pytest** test runs

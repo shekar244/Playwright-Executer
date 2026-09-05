@@ -24,7 +24,7 @@ from ui_launcher.test_discovery import TestDiscovery
 
 bp = Blueprint("executor", __name__)
 
-_ROOT = Path(__file__).parent.parent   # Amplyf-QEA root
+_ROOT = Path(__file__).parent.parent   # Amplyfy-QEA root
 
 
 def _read_pip_ini_flags(python_path: str) -> list[str]:
@@ -155,7 +155,7 @@ def readme():
         md = readme_path.read_text(encoding="utf-8")
     except OSError:
         return "<p>README.md not found.</p>", 404
-    source_label = "Amplyf-QEA"
+    source_label = "Amplyfy-QEA"
     import re, html as html_lib
     lines = md.split("\n")
     out, in_code, in_table = [], False, False

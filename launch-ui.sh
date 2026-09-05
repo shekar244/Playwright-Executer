@@ -58,11 +58,11 @@ if ! "$PYTHON" -c "import yaml" 2>/dev/null; then
 fi
 
 # ----------------------------------------------------------
-# Add hosts entry for amplyf-qea (once)
+# Add hosts entry for amplyfy-qea (once)
 # ----------------------------------------------------------
-if ! grep -q "amplyf-qea" /etc/hosts 2>/dev/null; then
-    echo "[INFO] Adding 'amplyf-qea' to /etc/hosts (requires sudo)..."
-    echo "127.0.0.1  amplyf-qea" | sudo tee -a /etc/hosts > /dev/null && \
+if ! grep -q "amplyfy-qea" /etc/hosts 2>/dev/null; then
+    echo "[INFO] Adding 'amplyfy-qea' to /etc/hosts (requires sudo)..."
+    echo "127.0.0.1  amplyfy-qea" | sudo tee -a /etc/hosts > /dev/null && \
         echo "[INFO] Hosts entry added." || \
         echo "[WARN] Could not update /etc/hosts — will fall back to localhost:7777."
 fi
@@ -100,7 +100,7 @@ fi
 # ----------------------------------------------------------
 cd "$EXECUTER_ROOT"
 
-echo "[INFO] Starting server at http://amplyf-qea:$PORT"
+echo "[INFO] Starting server at http://amplyfy-qea:$PORT"
 echo "[INFO] Press Ctrl+C to stop."
 echo ""
 exec "$PYTHON" server.py

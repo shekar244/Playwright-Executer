@@ -73,7 +73,7 @@ function applyRepo(path, andDiscover = true) {
   document.getElementById('repo').value = path;
   const name = path.split(/[/\\]/).filter(Boolean).pop() || path;
   document.getElementById('repoSubtitle').textContent = '📁 ' + name;
-  document.title = 'Amplyf QEA — ' + name;
+  document.title = 'Amplyfy QEA — ' + name;
 
   // Update active banner
   const banner = document.getElementById('activeRepoBanner');
