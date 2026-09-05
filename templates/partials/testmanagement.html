@@ -365,28 +365,39 @@
         <span id="zMetricsStatus" style="font-size:11px;color:var(--text-dim);"></span>
       </div>
 
-      <!-- Stacked bar chart — one bar per folder -->
-      <div class="dash-card" style="padding:12px 14px;">
-        <div class="dash-card-title">Execution Status by Folder</div>
-        <div style="position:relative;height:200px;">
-          <canvas id="chartZephyrMetrics"></canvas>
+      <!-- Summary table (top) -->
+      <div style="border:1px solid var(--border);border-radius:var(--radius);overflow:hidden;">
+        <div style="display:flex;align-items:center;gap:6px;padding:7px 12px;background:rgba(255,255,255,0.02);border-bottom:1px solid var(--border);flex-shrink:0;">
+          <span style="font-size:11px;font-weight:700;color:var(--text-muted);flex:1;">Folder Results</span>
+          <button class="btn btn-sm" onclick="zMetricsCopyTable()" title="Copy as plain table (no icons, no distribution)">📋 Copy</button>
+          <button class="btn btn-sm" onclick="zMetricsDownloadCsv()" title="Download as CSV">⬇ CSV</button>
+        </div>
+        <div style="overflow-x:auto;">
+          <table class="history-tbl" id="zMetricsTable">
+            <thead style="position:sticky;top:0;z-index:2;">
+              <tr id="zMetricsTheadRow">
+                <th>Folder</th>
+                <th>Total</th>
+                <th style="min-width:120px;">Distribution</th>
+              </tr>
+            </thead>
+            <tbody id="zMetricsTbody">
+              <tr><td colspan="10" style="text-align:center;color:var(--text-dim);padding:24px;">Click ⟳ Refresh above</td></tr>
+            </tbody>
+          </table>
         </div>
       </div>
 
-      <!-- Summary table -->
-      <div style="overflow-x:auto;border:1px solid var(--border);border-radius:var(--radius);">
-        <table class="history-tbl" id="zMetricsTable">
-          <thead style="position:sticky;top:0;z-index:2;">
-            <tr id="zMetricsTheadRow">
-              <th>Folder</th>
-              <th>Total</th>
-              <th style="min-width:120px;">Distribution</th>
-            </tr>
-          </thead>
-          <tbody id="zMetricsTbody">
-            <tr><td colspan="10" style="text-align:center;color:var(--text-dim);padding:24px;">Click ⟳ Load Metrics above</td></tr>
-          </tbody>
-        </table>
+      <!-- Stacked bar chart (bottom, collapsible) -->
+      <div class="dash-card" style="padding:12px 14px;">
+        <div class="dash-card-title" style="display:flex;align-items:center;cursor:pointer;user-select:none;"
+             onclick="zMetricsToggleChart(this)">
+          Execution Status by Folder
+          <span id="zChartArrow" style="margin-left:auto;font-size:10px;color:var(--text-dim);font-weight:400;">▶ Expand</span>
+        </div>
+        <div id="zChartWrap" style="position:relative;height:0;overflow:hidden;transition:height 0.3s ease;">
+          <canvas id="chartZephyrMetrics"></canvas>
+        </div>
       </div>
     </div>
 

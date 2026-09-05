@@ -925,28 +925,29 @@ async function loadZephyrMetrics() {
     }).join('');
   }
 
-  // 5. Chart — show only top-level folders (depth 0 non-root) for readability
-  const chartData = chartRows.filter(n => n.id !== null && n._depth === 1 || (n._depth === 0 && n.id !== null));
-  const chartCtx  = document.getElementById('chartZephyrMetrics');
+  // 5. Chart — folder-level only (exclude Cycle Root)
+  const chartFolders = orderedList.filter(n => n.id !== null && n._total > 0);
+  const chartCtx     = document.getElementById('chartZephyrMetrics');
   if (chartCtx) {
     if (_metricsChart) { _metricsChart.destroy(); _metricsChart = null; }
-    const labels   = chartRows.map(n => {
-      const prefix = '  '.repeat(n._depth || 0);
-      const name   = n.name.length > 22 ? n.name.slice(0, 20) + '…' : n.name;
+    const labels   = chartFolders.map(n => {
+      const prefix = '  '.repeat(Math.max(0, (n._depth || 1) - 1));
+      const name   = n.name.length > 24 ? n.name.slice(0, 22) + '…' : n.name;
       return prefix + name;
     });
     const statKeys = _zsSortedKeys();
     const datasets = statKeys.map(k => ({
       label:           _ZS[k].label,
-      data:            chartRows.map(n => (n._counts || {})[k] || 0),
+      data:            chartFolders.map(n => (n._counts || {})[k] || 0),
       backgroundColor: _ZS[k].color + 'cc',
       borderColor:     _ZS[k].color,
       borderWidth:     1,
       borderSkipped:   false,
     }));
-    // Dynamic height: 36px per row, min 160
-    const chartHeight = Math.max(160, chartRows.length * 36);
-    chartCtx.parentElement.style.height = chartHeight + 'px';
+    // Chart starts collapsed (height:0); user expands via title click
+    const chartWrap = document.getElementById('zChartWrap') || chartCtx.parentElement;
+    chartWrap._fullHeight = Math.max(240, chartFolders.length * 36) + 'px';
+    // Keep collapsed state (height stays 0 until toggled)
     _metricsChart = new Chart(chartCtx.getContext('2d'), {
       type: 'bar',
       data: { labels, datasets },
@@ -972,6 +973,74 @@ async function loadZephyrMetrics() {
   if (refreshEl)  refreshEl.textContent = 'Last refreshed: ' + new Date().toLocaleTimeString();
   if (refreshBtn) { refreshBtn.disabled = false; refreshBtn.textContent = '⟳ Refresh'; }
   zLog(`✓  Metrics loaded — ${totalFolders} folder(s).`, 'passed');
+}
+
+// ── Metrics chart toggle ──────────────────────────────────────────────────────
+
+function zMetricsToggleChart(titleEl) {
+  const wrap  = document.getElementById('zChartWrap');
+  const arrow = document.getElementById('zChartArrow');
+  if (!wrap) return;
+  const isCollapsed = wrap.style.height === '0px' || wrap.style.height === '0' || !wrap.style.height;
+  wrap.style.height = isCollapsed ? (wrap._fullHeight || '240px') : '0px';
+  if (arrow) arrow.textContent = isCollapsed ? '▼ Collapse' : '▶ Expand';
+  // Resize chart after transition so it fills the new height
+  if (isCollapsed) setTimeout(() => { if (_metricsChart) _metricsChart.resize(); }, 320);
+}
+
+// ── Metrics export helpers ────────────────────────────────────────────────────
+
+function _zMetricsTableData() {
+  // Returns { headers: [], rows: [[]] } without icons or distribution column
+  const keys    = _zsSortedKeys();
+  const headers = ['Folder', ...keys.map(k => _ZS[k].label), 'Total'];
+  const tbody   = document.getElementById('zMetricsTbody');
+  if (!tbody) return { headers, rows: [] };
+  const rows = [];
+  Array.from(tbody.querySelectorAll('tr')).forEach(tr => {
+    const cells = Array.from(tr.querySelectorAll('td'));
+    if (!cells.length) return;
+    // First cell is folder name — strip leading whitespace/icons from text
+    const folderRaw = cells[0]?.textContent?.replace(/[📂📁🔁]/g, '').trim() || '';
+    // Skip rows with no data (empty state row spans full width)
+    if (cells.length < keys.length + 2) return;
+    // Numeric cells: indices 1 … keys.length+1 (status counts + Total), skip last (Distribution)
+    const nums = cells.slice(1, keys.length + 2).map(c => c.textContent.trim());
+    rows.push([folderRaw, ...nums]);
+  });
+  return { headers, rows };
+}
+
+function zMetricsCopyTable() {
+  const { headers, rows } = _zMetricsTableData();
+  if (!rows.length) { zLog('⚠  No data to copy.', 'warning'); return; }
+  const colWidths = headers.map((h, i) =>
+    Math.max(h.length, ...rows.map(r => (r[i] || '').length))
+  );
+  const pad = (s, w) => String(s).padEnd(w);
+  const line  = colWidths.map(w => '-'.repeat(w)).join('  ');
+  const hdr   = headers.map((h, i) => pad(h, colWidths[i])).join('  ');
+  const body  = rows.map(r => r.map((c, i) => pad(c, colWidths[i])).join('  ')).join('\n');
+  const text  = `${hdr}\n${line}\n${body}`;
+  navigator.clipboard.writeText(text).then(
+    () => zLog('✓  Table copied to clipboard.', 'passed'),
+    () => zLog('✗  Clipboard access denied.', 'failed')
+  );
+}
+
+function zMetricsDownloadCsv() {
+  const { headers, rows } = _zMetricsTableData();
+  if (!rows.length) { zLog('⚠  No data to download.', 'warning'); return; }
+  const escape = v => `"${String(v).replace(/"/g, '""')}"`;
+  const csvLines = [headers.map(escape).join(','), ...rows.map(r => r.map(escape).join(','))];
+  const blob = new Blob([csvLines.join('\r\n')], { type: 'text/csv;charset=utf-8;' });
+  const url  = URL.createObjectURL(blob);
+  const a    = document.createElement('a');
+  const cycleName = document.getElementById('zMetricsCycleLabel')?.textContent?.replace(/[^a-zA-Z0-9_-]/g, '_') || 'metrics';
+  a.href = url; a.download = `zephyr-metrics-${cycleName}.csv`;
+  document.body.appendChild(a); a.click();
+  setTimeout(() => { document.body.removeChild(a); URL.revokeObjectURL(url); }, 1000);
+  zLog(`✓  Downloaded zephyr-metrics-${cycleName}.csv`, 'passed');
 }
 
 // Populate status dropdowns immediately with defaults; loadZephyrStatuses() refreshes from API
