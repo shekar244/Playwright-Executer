@@ -411,18 +411,24 @@ async function venvInstallReqs() {
   const repo    = document.getElementById('repo').value.trim();
   const reqFile = document.getElementById('venvReqFile')?.dataset.full || '';
   const btn     = document.getElementById('venvInstallBtn');
-  if (btn) { btn.disabled = true; btn.textContent = '⟳ Installing…'; }
+
+  // Switch to Executor tab and clear log so pip output is visible
+  switchTab('executor');
   _runContext = 'executor'; _activeLogEl = document.getElementById('log');
   clearLog(); setRunning(true);
+  if (btn) { btn.disabled = true; btn.textContent = '⟳ Installing…'; }
+
   const res = await fetch('/api/venv/install', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ repo, requirements_file: reqFile }),
   });
+  const d = await res.json().catch(() => ({}));
   if (!res.ok) {
-    const err = await res.json().catch(() => ({}));
-    appendLine('✗  ' + (err.error || 'Install failed'), 'failed');
+    appendLine('✗  ' + (d.error || 'pip install failed'), 'failed');
     setRunning(false);
+  } else {
+    appendLine('⟳  ' + (d.cmd || 'pip install -r requirements.txt') + '  …streaming output…', 'info');
   }
   if (btn) { btn.disabled = false; btn.textContent = '▶ pip install -r requirements.txt'; }
 }

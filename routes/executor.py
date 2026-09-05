@@ -464,51 +464,59 @@ def venv_status():
 
 @bp.route("/api/venv/install", methods=["POST"])
 def venv_install():
-    if state._is_running:
-        return jsonify({"error": "A run is already in progress"}), 409
+    with state._run_lock:
+        if state._is_running:
+            return jsonify({"error": "A run is already in progress"}), 409
 
-    body = request.json or {}
-    repo = body.get("repo", "").strip()
-    req  = body.get("requirements_file", "").strip()
-    cfg  = ConfigReader().load()
-    if not repo:
-        repo = cfg.get("repo_root", "").strip()
+        body = request.json or {}
+        repo = body.get("repo", "").strip()
+        req  = body.get("requirements_file", "").strip()
+        cfg  = ConfigReader().load()
+        if not repo:
+            repo = cfg.get("repo_root", "").strip()
 
-    python = resolve_python(repo, cfg.get("venv_path", "")) if repo else sys.executable
+        python = resolve_python(repo, cfg.get("venv_path", "")) if repo else sys.executable
 
-    if not req:
-        for name in ["requirements.txt", "requirements/base.txt", "requirements/dev.txt"]:
-            rp = Path(repo) / name if repo else Path(name)
-            if rp.exists():
-                req = str(rp)
-                break
+        if not req:
+            for name in ["requirements.txt", "requirements/base.txt", "requirements/dev.txt"]:
+                rp = Path(repo) / name if repo else Path(name)
+                if rp.exists():
+                    req = str(rp)
+                    break
 
-    if not req:
-        return jsonify({"error": "No requirements.txt found"}), 400
+        if not req:
+            return jsonify({"error": "No requirements.txt found in repo root"}), 400
 
-    cmd = [python, "-m", "pip", "install", "-r", req]
-    display = " ".join(cmd)
-    state.broadcast("cmd", display)
-    state._is_running = True
+        # Use list form — never join paths into a shell string (Windows path spaces)
+        cmd = [python, "-m", "pip", "install", "-r", req]
+        display = f"{python} -m pip install -r {req}"
 
-    def on_output(line):
-        state.broadcast("line", line)
+        state.broadcast("cmd", display)
+        state._is_running = True
 
-    def on_finish(exit_code, cancelled):
-        state._is_running = False
-        if cancelled:
-            state.broadcast("status", "cancelled")
-        elif exit_code == 0:
-            state.broadcast("status", "passed")
-        else:
-            state.broadcast("status", f"failed:{exit_code}")
-        state.broadcast("done", "")
+        def on_output(line):
+            state.broadcast("line", line)
 
-    state._runner = TestRunner(
-        cmd=cmd, cwd=repo or str(_ROOT), env_overrides={},
-        on_output=on_output, on_finish=on_finish,
-    )
-    state._runner.start()
+        def on_finish(exit_code, cancelled):
+            state._is_running = False
+            if cancelled:
+                state.broadcast("status", "cancelled")
+            elif exit_code == 0:
+                state.broadcast("status", "passed")
+            else:
+                state.broadcast("status", f"failed:{exit_code}")
+            state.broadcast("done", "")
+
+        try:
+            state._runner = TestRunner(
+                cmd=cmd, cwd=repo or str(_ROOT), env_overrides={"PYTHONUNBUFFERED": "1"},
+                on_output=on_output, on_finish=on_finish,
+            )
+            state._runner.start()
+        except Exception as ex:
+            state._is_running = False
+            return jsonify({"error": str(ex)}), 500
+
     return jsonify({"ok": True, "cmd": display})
 
 
