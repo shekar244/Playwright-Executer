@@ -27,6 +27,54 @@ bp = Blueprint("executor", __name__)
 _ROOT = Path(__file__).parent.parent   # Amplyf-QEA root
 
 
+def _read_pip_ini_flags(python_path: str) -> list[str]:
+    """
+    Read pip.ini from the venv and return explicit CLI flags for settings like
+    index-url, extra-index-url, trusted-host, and proxy.
+
+    pip's configparser rejects ini files whose first section header is not bare
+    (e.g. "npx [global]" fails because of the "npx " prefix).  We strip any
+    leading non-bracket text from section-header lines before parsing so the
+    JFrog / corporate proxy settings are still honoured.
+    """
+    import configparser
+    venv_root = Path(python_path).parent.parent
+    candidates = [
+        venv_root / "pip.ini",           # Windows venv location
+        venv_root / "pip.conf",          # Linux/macOS venv location
+    ]
+    for ini_path in candidates:
+        if not ini_path.exists():
+            continue
+        try:
+            raw = ini_path.read_text(encoding="utf-8", errors="replace")
+            # Strip anything before the first '[' on section-header lines
+            fixed_lines = []
+            for line in raw.splitlines():
+                stripped = line.lstrip()
+                bracket_pos = line.find("[")
+                if bracket_pos > 0 and stripped and not stripped.startswith("#"):
+                    line = line[bracket_pos:]   # remove prefix like "npx "
+                fixed_lines.append(line)
+            fixed = "\n".join(fixed_lines)
+            parser = configparser.ConfigParser()
+            parser.read_string(fixed)
+            section = "global" if parser.has_section("global") else (
+                parser.sections()[0] if parser.sections() else None
+            )
+            if not section:
+                continue
+            flags: list[str] = []
+            for key in ("index-url", "extra-index-url", "trusted-host", "proxy"):
+                val = parser.get(section, key, fallback=None)
+                if val:
+                    flags.extend([f"--{key}", val.strip()])
+            return flags
+        except Exception:
+            pass
+    return []
+
+
 def _generate_allure3_report(repo: str, cfg: dict) -> str:
     """
     Generate an Allure 3 single-file HTML report after a test run.
@@ -488,9 +536,20 @@ def venv_install():
         if not req:
             return jsonify({"error": "No requirements.txt found in repo root"}), 400
 
-        # Use list form — never join paths into a shell string (Windows path spaces)
-        cmd = [python, "-m", "pip", "install", "-r", req]
-        display = f"{python} -m pip install -r {req}"
+        # Build pip command; extract settings from pip.ini manually so we can
+        # pass them as explicit flags — this works even when the ini has a bad
+        # section header like "npx [global]" instead of "[global]".
+        import platform as _plat
+        pip_flags = _read_pip_ini_flags(python)
+
+        if _plat.system() == "Windows":
+            pip_exe = str(Path(python).parent / "pip.exe")
+            base = [pip_exe] if Path(pip_exe).exists() else [python, "-m", "pip"]
+        else:
+            base = [python, "-m", "pip"]
+
+        cmd = base + ["install", "--isolated"] + pip_flags + ["-r", req]
+        display = " ".join(cmd)
 
         state.broadcast("cmd", display)
         state._is_running = True

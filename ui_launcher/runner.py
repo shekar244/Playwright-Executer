@@ -49,7 +49,11 @@ class TestRunner:
 
         try:
             if sys.platform == "win32":
-                proc.terminate()
+                # CTRL_BREAK_EVENT works with CREATE_NEW_PROCESS_GROUP
+                try:
+                    proc.send_signal(signal.CTRL_BREAK_EVENT)
+                except Exception:
+                    proc.terminate()
             else:
                 try:
                     os.killpg(os.getpgid(proc.pid), signal.SIGTERM)
@@ -65,32 +69,33 @@ class TestRunner:
         try:
             env = os.environ.copy()
             env.update(self.env_overrides)
+            env["PYTHONUNBUFFERED"] = "1"   # unbuffer Python subprocess output
 
-            # Ensure pytest output is not buffered
-            env["PYTHONUNBUFFERED"] = "1"
-
-            popen_kwargs = {
-                "args": self.cmd,
-                "cwd": self.cwd,
+            popen_kwargs: dict = {
+                "args":   self.cmd,
+                "cwd":    self.cwd,
                 "stdout": subprocess.PIPE,
                 "stderr": subprocess.STDOUT,
-                "text": True,
-                "bufsize": 1,
-                "encoding": "utf-8",
-                "errors": "replace",
-                "env": env,
+                # Binary mode + bufsize=0 is the most reliable approach on Windows.
+                # Text mode with bufsize=1 can block waiting for a full buffer on Windows.
+                "bufsize": 0,
+                "env":    env,
             }
 
-            # Create a new process group on POSIX so we can kill the whole tree.
+            # New process group on POSIX only — Windows has no setsid.
             if sys.platform != "win32":
                 popen_kwargs["preexec_fn"] = os.setsid
+            else:
+                popen_kwargs["creationflags"] = subprocess.CREATE_NEW_PROCESS_GROUP
 
             with self._lock:
                 self._process = subprocess.Popen(**popen_kwargs)
 
+            # Read line-by-line in binary mode; decode each line manually.
+            # iter(..., b'') stops at EOF; readline() blocks until \n or EOF.
             assert self._process.stdout is not None
-            for line in self._process.stdout:
-                self.on_output(line.rstrip("\n\r"))
+            for raw in iter(self._process.stdout.readline, b""):
+                self.on_output(raw.decode("utf-8", errors="replace").rstrip("\r\n"))
 
             self._process.wait()
             exit_code = self._process.returncode

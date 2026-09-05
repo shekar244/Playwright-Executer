@@ -347,15 +347,33 @@ function switchTab(tab) {
   if (tab === 'filemanager') initFileManager();
 }
 
+// ── Status polling fallback (Windows SSE reliability) ─────────────────────────
+// Polls every 4 s; if server says idle but UI still shows running, resets UI.
+let _pollTimer = null;
+function _startStatusPoll() {
+  _stopStatusPoll();
+  _pollTimer = setInterval(async () => {
+    const s = await fetch('/api/status').then(r => r.json()).catch(() => ({}));
+    if (!s.running && document.getElementById('runBtn')?.disabled) {
+      setRunning(false);
+      _runContext  = 'executor';
+      _activeLogEl = null;
+      setStatus('idle', 'IDLE');
+    }
+  }, 4000);
+}
+function _stopStatusPoll() { if (_pollTimer) { clearInterval(_pollTimer); _pollTimer = null; } }
+
 function connectStream() {
   if (eventSource) eventSource.close();
   eventSource = new EventSource('/api/stream');
   eventSource.addEventListener('cmd', e => {
     const cmd = JSON.parse(e.data);
     appendLine('$ ' + cmd, 'cmd');
-    appendLine('─'.repeat(72), 'sep');
+    appendLine('─'.repeat(60), 'sep');
     setStatus('running', 'RUNNING', cmd);
     document.getElementById('statusCmd').textContent = cmd.slice(0, 120);
+    _startStatusPoll();  // begin polling so UI recovers if SSE drops
   });
   eventSource.addEventListener('line', e => {
     appendLine(JSON.parse(e.data), classifyLine(JSON.parse(e.data)));
@@ -382,7 +400,8 @@ function connectStream() {
     }
     setRunning(false);
     _runContext  = 'executor';
-    _activeLogEl = null;  // Release so next run sets its own target
+    _activeLogEl = null;
+    _stopStatusPoll();  // SSE confirmed completion — no need to poll
   });
   eventSource.addEventListener('done', e => {
     refreshReport();

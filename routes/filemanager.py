@@ -9,9 +9,40 @@ from __future__ import annotations
 import csv
 import io
 import json
+import sys
 from pathlib import Path
 
 from flask import Blueprint, jsonify, request
+from ui_launcher.config_reader import ConfigReader
+from ui_launcher.command_builder import resolve_python
+
+
+def _ensure_repo_venv_on_path() -> None:
+    """
+    Add the active repo venv's site-packages to sys.path so packages like
+    openpyxl that are installed only in the repo venv (not the tool's own
+    Python) can be imported by the Flask server.
+    Called lazily before any import that may live in the repo venv.
+    """
+    try:
+        cfg      = ConfigReader().load()
+        repo     = cfg.get("repo_root", "").strip()
+        venv_cfg = cfg.get("venv_path", "").strip()
+        if not repo:
+            return
+        python = resolve_python(repo, venv_cfg)
+        if python == sys.executable:
+            return   # tool and repo share the same Python — nothing to add
+        # site-packages lives at <venv>/lib/pythonX.Y/site-packages (POSIX)
+        # or <venv>/Lib/site-packages (Windows)
+        venv_root = Path(python).parent.parent
+        for sp in venv_root.rglob("site-packages"):
+            sp_str = str(sp)
+            if sp_str not in sys.path:
+                sys.path.insert(0, sp_str)
+            break
+    except Exception:
+        pass
 
 bp = Blueprint("filemanager", __name__)
 
@@ -109,6 +140,7 @@ def read_file():
     if ext in (".yaml", ".yml"):
         content = p.read_text(encoding="utf-8")
         try:
+            _ensure_repo_venv_on_path()
             import yaml
             parsed = yaml.safe_load(content)
             return jsonify({
@@ -163,8 +195,11 @@ def read_file():
         }), 400
 
     try:
+        _ensure_repo_venv_on_path()
         import openpyxl
         wb = openpyxl.load_workbook(str(p), data_only=True)
+    except ImportError:
+        return jsonify({"error": "openpyxl is not installed. Run: pip install openpyxl"}), 500
     except Exception as exc:
         msg = str(exc)
         if "not a zip" in msg.lower() or "badzip" in msg.lower():
@@ -214,6 +249,7 @@ def save_file():
     if ext in (".yaml", ".yml"):
         content = body.get("content", "")
         try:
+            _ensure_repo_venv_on_path()
             import yaml
             yaml.safe_load(content)
         except Exception as exc:
@@ -246,6 +282,7 @@ def save_file():
 
     # ── Excel ─────────────────────────────────────────────────────────────────
     try:
+        _ensure_repo_venv_on_path()
         import openpyxl
         sheets_data = body.get("sheets", {})
         wb = openpyxl.load_workbook(str(p)) if p.exists() else openpyxl.Workbook()
