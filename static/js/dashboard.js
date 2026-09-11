@@ -416,7 +416,7 @@ function _sortAndRenderTests() {
   const key = _dashSortKey, asc = _dashSortAsc;
   _dashFiltered.sort((a, b) => {
     let av = a[key] ?? '', bv = b[key] ?? '';
-    if (key === 'duration') { av = a.duration; bv = b.duration; }
+    if (key === 'duration' || key === 'start') { av = Number(a[key] ?? 0); bv = Number(b[key] ?? 0); }
     if (av < bv) return asc ? -1 : 1;
     if (av > bv) return asc ? 1  : -1;
     return 0;

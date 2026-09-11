@@ -150,6 +150,27 @@ def save_config_to_repo():
     return jsonify({"ok": True, "saved_to": str(dest)})
 
 
+@bp.route("/api/config/allure", methods=["POST"])
+def save_allure_config():
+    """Save Allure report generation settings."""
+    body = request.json or {}
+    allowed = {
+        "allure_format", "allure2_bin", "allure3_bin",
+        "allure_results_dir",
+        "report_consolidated_dir", "report_pertest_dir", "generate_pertest_reports",
+    }
+    reader = ConfigReader()
+    cfg = reader.load()
+    for key in allowed:
+        if key in body:
+            cfg[key] = body[key]
+    try:
+        reader.save(cfg)
+    except OSError as exc:
+        return jsonify({"error": str(exc)}), 500
+    return jsonify({"ok": True})
+
+
 @bp.route("/api/config/pinned-repos", methods=["POST"])
 def save_pinned_repos():
     body = request.json or {}

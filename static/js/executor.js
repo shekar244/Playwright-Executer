@@ -73,7 +73,7 @@ function applyRepo(path, andDiscover = true) {
   document.getElementById('repo').value = path;
   const name = path.split(/[/\\]/).filter(Boolean).pop() || path;
   document.getElementById('repoSubtitle').textContent = '📁 ' + name;
-  document.title = 'Amplyfy QEA — ' + name;
+  document.title = 'Amplify QEA — ' + name;
 
   // Update active banner
   const banner = document.getElementById('activeRepoBanner');
@@ -594,6 +594,32 @@ async function persistFeatures() {
   if (!res.ok) { const err = await res.json().catch(() => ({})); alert('Save failed: ' + (err.error || 'unknown error')); }
 }
 
+async function runQuickScript() {
+  const script  = document.getElementById('qr_script')?.value.trim();
+  const runtime = document.getElementById('qr_runtime')?.value || 'python';
+  const args    = document.getElementById('qr_args')?.value.trim() || '';
+  const cwd     = document.getElementById('qr_cwd')?.value.trim() || '';
+  if (!script) { alert('Enter a script path or command.'); return; }
+
+  _runContext = 'executor';
+  _activeLogEl = document.getElementById('log');
+  setRunning(true);
+
+  const repo = document.getElementById('repo').value.trim();
+  const feature = { runtime, script, args, cwd: cwd || repo };
+
+  const res = await fetch('/api/features/run', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ feature }),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    appendLine('✗ ' + (err.error || 'Failed to start'), 'failed');
+    setRunning(false);
+  }
+}
+
 async function runFeature() {
   if (_selectedFeat === null || _selectedFeat === undefined) return;
   const feat = _features[_selectedFeat]; if (!feat) return;
@@ -777,7 +803,7 @@ async function persistTools() {
 
 // ── Config sub-tabs ────────────────────────────────────────────────────────────
 function switchCfgTab(tab) {
-  const panels = { features: 'cfgFeatures', git: 'cfgGit', tools: 'cfgTools', mapping: 'cfgMapping', zephyr: 'cfgZephyr', uitabs: 'cfgUiTabs' };
+  const panels = { features: 'cfgFeatures', git: 'cfgGit', tools: 'cfgTools', allure: 'cfgAllure', mapping: 'cfgMapping', zephyr: 'cfgZephyr', uitabs: 'cfgUiTabs' };
   Object.entries(panels).forEach(([key, id]) => {
     const panel = document.getElementById(id);
     if (panel) panel.style.display = key === tab ? 'flex' : 'none';
@@ -792,6 +818,7 @@ function switchCfgTab(tab) {
   if (tab === 'mapping') onMappingStepsFormatChange();
   if (tab === 'git')     loadGitCommands();
   if (tab === 'uitabs')  loadUiTabs();
+  if (tab === 'allure')  loadAllureConfig();
 }
 
 // ── UI Tab kill-switch ────────────────────────────────────────────────────────
@@ -820,6 +847,48 @@ async function saveUiTabs() {
   });
   // Apply immediately without page reload
   if (typeof applyUiTabs === 'function') applyUiTabs(tabs);
+}
+
+// ── Allure config ─────────────────────────────────────────────────────────────
+
+async function loadAllureConfig() {
+  const cfg = await fetch('/api/config').then(r => r.json()).catch(() => ({}));
+  const sel = document.getElementById('al_format');
+  if (sel) sel.value = cfg.allure_format || 'allure2';
+  const set = (id, val) => { const el = document.getElementById(id); if (el) el.value = val || ''; };
+  set('al_bin2',           cfg.allure2_bin            || '');
+  set('al_bin3',           cfg.allure3_bin            || '');
+  set('al_results_dir',    cfg.allure_results_dir     || 'allure/results');
+  set('al_consolidated_dir', cfg.report_consolidated_dir || 'allure/reports/consolidated');
+  set('al_pertest_dir',    cfg.report_pertest_dir     || 'allure/reports/individual');
+  const chk = document.getElementById('al_gen_pertest');
+  if (chk) chk.checked = cfg.generate_pertest_reports !== false;
+}
+
+async function saveAllureConfig() {
+  const fmt  = document.getElementById('al_format')?.value || 'allure2';
+  const body = {
+    allure_format:            fmt,
+    allure2_bin:              document.getElementById('al_bin2')?.value.trim()           || '',
+    allure3_bin:              document.getElementById('al_bin3')?.value.trim()           || '',
+    allure_results_dir:       document.getElementById('al_results_dir')?.value.trim()   || 'allure/results',
+    report_consolidated_dir:  document.getElementById('al_consolidated_dir')?.value.trim() || 'allure/reports/consolidated',
+    report_pertest_dir:       document.getElementById('al_pertest_dir')?.value.trim()   || 'allure/reports/individual',
+    generate_pertest_reports: document.getElementById('al_gen_pertest')?.checked !== false,
+  };
+  const st = document.getElementById('allureSaveStatus');
+  try {
+    const res = await fetch('/api/config/allure', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+    const data = await res.json();
+    if (st) { st.textContent = data.ok ? '✓ Saved' : '✗ ' + (data.error || 'Error'); st.style.color = data.ok ? 'var(--green)' : 'var(--red)'; }
+  } catch (e) {
+    if (st) { st.textContent = '✗ Network error'; st.style.color = 'var(--red)'; }
+  }
+  setTimeout(() => { if (st) st.textContent = ''; }, 3000);
 }
 
 function toggleConfigSection(bodyId, arrowId) {

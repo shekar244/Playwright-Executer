@@ -27,7 +27,7 @@ from ui_launcher.test_discovery import TestDiscovery
 
 bp = Blueprint("executor", __name__)
 
-_ROOT = Path(__file__).parent.parent   # Amplyfy-QEA root
+_ROOT = Path(__file__).parent.parent   # Amplify-QEA root
 
 
 def _read_pip_ini_flags(python_path: str) -> list[str]:
@@ -427,7 +427,7 @@ def readme():
         md = readme_path.read_text(encoding="utf-8")
     except OSError:
         return "<p>README.md not found.</p>", 404
-    source_label = "Amplyfy-QEA"
+    source_label = "Amplify-QEA"
     import re, html as html_lib
     lines = md.split("\n")
     out, in_code, in_table = [], False, False
@@ -712,24 +712,108 @@ def run_feature():
         if not script:
             return jsonify({"error": "No script specified"}), 400
 
-        if not cwd:
-            cwd = str(Path(script).parent) if Path(script).exists() else str(_ROOT)
-        if not os.path.isdir(cwd):
-            cwd = str(_ROOT)
-
-        cfg      = ConfigReader().load()
+        cfg       = ConfigReader().load()
         repo_root = cfg.get("repo_root", "").strip() or str(_ROOT)
-        py       = resolve_python(repo_root, cfg.get("venv_path", ""))
-        if runtime == "python":
-            cmd = [py, script]
+        py        = resolve_python(repo_root, cfg.get("venv_path", ""))
+
+        # Resolve node-ecosystem binaries (npx, npm, node) cross-platform.
+        # shutil.which handles .cmd / .exe on Windows via PATHEXT automatically.
+        def _node_bin(name: str) -> str:
+            found = shutil.which(name)
+            return found or name  # fall back to bare name; let OS resolve it
+
+        import shlex as _shlex
+
+        script_path = Path(script)
+
+        # Detect inline command: has spaces OR is not an existing file path.
+        is_inline = " " in script or not script_path.exists()
+
+        if runtime == "npx":
+            bin_ = _node_bin("npx")
+            if is_inline:
+                parts = _shlex.split(script)
+                # Don't double-prefix if user already typed "npx ..."
+                cmd = parts if parts and parts[0].lower() in ("npx",) else [bin_] + parts
+            else:
+                cmd = [bin_, script]
+
+        elif runtime == "npm":
+            bin_ = _node_bin("npm")
+            if is_inline:
+                parts = _shlex.split(script)
+                cmd = parts if parts and parts[0].lower() in ("npm",) else [bin_] + parts
+            else:
+                cmd = [bin_, "run", script]
+
         elif runtime == "node":
-            cmd = ["node", script]
+            bin_ = _node_bin("node")
+            if is_inline:
+                parts = _shlex.split(script)
+                first = parts[0].lower() if parts else ""
+                # Don't prepend "node" if user typed node/npm/npx themselves
+                cmd = parts if first in ("node", "npm", "npx") else [bin_] + parts
+            else:
+                cmd = [bin_, script]
+
+        elif runtime == "python":
+            if is_inline:
+                parts = _shlex.split(script)
+                first = parts[0].lower() if parts else ""
+                venv_bin = Path(py).parent  # e.g. venv/bin/
+
+                if first in ("python", "python3"):
+                    # Replace generic python/python3 with the resolved venv Python
+                    cmd = [py] + parts[1:]
+
+                elif first in ("pip", "pip3"):
+                    # Resolve pip from the same venv bin directory as python
+                    pip_bin = str(venv_bin / first)
+                    if not Path(pip_bin).exists():
+                        pip_bin = str(venv_bin / "pip")
+                    if not Path(pip_bin).exists():
+                        # Fallback: run as `python -m pip`
+                        pip_bin = None
+                    if pip_bin:
+                        cmd = [pip_bin] + parts[1:]
+                    else:
+                        cmd = [py, "-m", "pip"] + parts[1:]
+
+                else:
+                    # Unknown first token (e.g. a script name) — prepend venv python
+                    cmd = [py] + parts
+            else:
+                cmd = [py, script]
+
+        elif runtime == "powershell":
+            # PowerShell: works on Windows (powershell.exe / pwsh) and macOS/Linux (pwsh)
+            ps = shutil.which("pwsh") or shutil.which("powershell") or "powershell"
+            if is_inline:
+                cmd = [ps, "-Command", script]
+            else:
+                cmd = [ps, "-File", script]
+
+        elif runtime == "cmd":
+            # Windows Command Prompt — cmd /C runs a command string or batch file
+            cmd = ["cmd", "/C", script]
+
         else:
-            cmd = [script]
+            # shell / bash
+            sh = shutil.which("bash") or shutil.which("sh") or "sh"
+            if is_inline:
+                cmd = [sh, "-c", script]
+            else:
+                cmd = [sh, script]
 
         if args:
-            import shlex
-            cmd.extend(shlex.split(args))
+            cmd.extend(_shlex.split(args))
+
+        if not cwd:
+            cwd = repo_root if os.path.isdir(repo_root) else (
+                str(script_path.parent) if script_path.exists() else str(_ROOT)
+            )
+        if not os.path.isdir(cwd):
+            cwd = str(_ROOT)
 
         display = " ".join(cmd)
         state.broadcast("cmd", display)

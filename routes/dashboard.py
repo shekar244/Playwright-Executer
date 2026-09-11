@@ -3,13 +3,14 @@ Blueprint: Dashboard / Report routes
   /api/dashboard
   /api/report  /api/report/open
   /api/report/history  /api/report/history/clear
+  /allure/  /allure/<path>   ← HTTP-serves the active Allure SPA directory
 """
 from __future__ import annotations
 
-import os
+import webbrowser
 from pathlib import Path
 
-from flask import Blueprint, jsonify, request
+from flask import Blueprint, jsonify, request, send_from_directory
 
 from routes.history import (
     load_history, save_history,
@@ -20,12 +21,108 @@ from ui_launcher.report_resolver import ReportResolver
 
 bp = Blueprint("dashboard", __name__)
 
+# Report directory currently mounted at /allure/ — updated on each open.
+_active_report_dir: str = ""
+
+
+# ── Built-in Allure SPA HTTP server ──────────────────────────────────────────
+
+@bp.route("/allure/")
+@bp.route("/allure/<path:filepath>")
+def serve_allure_spa(filepath: str = "index.html") -> object:
+    """
+    Serve the active Allure SPA over HTTP so the report's JavaScript can load
+    its relative data/ JSON files.  Allure 3 (and full Allure 2) reports are
+    SPAs that require HTTP — file:// blocks local XHR/fetch.
+    """
+    if not _active_report_dir or not Path(_active_report_dir).is_dir():
+        return "No Allure report loaded. Open a report from the Dashboard first.", 404
+    try:
+        return send_from_directory(_active_report_dir, filepath)
+    except Exception:
+        return "File not found in report directory.", 404
+
+
+def _resolve_report_path(path: str, rel_path: str) -> tuple[str, str]:
+    """
+    Return (abs_path_without_anchor, anchor) for the first candidate that exists.
+    abs_path is empty string when nothing is found.
+    """
+    anchor = ""
+    if "#" in path:
+        path, frag = path.split("#", 1)
+        anchor = "#" + frag
+
+    cfg = ConfigReader().load()
+    repo_root = cfg.get("repo_root", "").strip()
+
+    candidates: list[str] = []
+    if path:
+        candidates.append(path)
+    if repo_root and rel_path:
+        candidates.append(str(Path(repo_root) / rel_path.split("#")[0]))
+    if rel_path:
+        candidates.append(str(Path(__file__).parent.parent / rel_path.split("#")[0]))
+
+    for c in candidates:
+        if c and Path(c).exists():
+            return c, anchor
+    return "", anchor
+
+
+# ── Report open logic ─────────────────────────────────────────────────────────
+
+@bp.route("/api/report/open", methods=["POST"])
+def open_report():
+    """
+    Open an Allure report in the default browser.
+
+    Decision:
+      • filename == index.html  →  Allure SPA (2 or 3).  Mount the parent
+        directory at /allure/ and open http://amplify-qea:7777/allure/{anchor}.
+        SPA reports must be served over HTTP; file:// blocks the JS data loads.
+
+      • any other filename      →  self-contained single-file report
+        (Allure 2 complete.html, allure3 --single-file index.html copied as
+        {uid}-allure3.html, Allure 2 per-run {timestamp}.html, etc.).
+        Open directly as file:// — these embed all assets and need no server.
+    """
+    global _active_report_dir
+
+    body     = request.json or {}
+    path     = body.get("path",    "").strip()
+    rel_path = body.get("relpath", "").strip()
+
+    if not path and not rel_path:
+        return jsonify({"error": "No path provided"}), 400
+
+    abs_path, anchor = _resolve_report_path(path, rel_path)
+    if not abs_path:
+        tried = " | ".join(x for x in [path, rel_path] if x)
+        return jsonify({"error": f"Report not found. Tried: {tried}"}), 404
+
+    p = Path(abs_path)
+
+    if p.name.lower() == "index.html":
+        # SPA — serve via built-in HTTP server
+        _active_report_dir = str(p.parent)
+        url = f"http://amplify-qea:7777/allure/{anchor}"
+        webbrowser.open(url)
+        return jsonify({"ok": True, "url": url, "mode": "http", "dir": str(p.parent)})
+    else:
+        # Single-file — open directly
+        url = p.as_uri() + anchor
+        webbrowser.open(url)
+        return jsonify({"ok": True, "url": url, "mode": "file"})
+
+
+# ── Dashboard ─────────────────────────────────────────────────────────────────
 
 @bp.route("/api/dashboard")
 def get_dashboard():
     repo = request.args.get("repo", "").strip()
     cfg  = ConfigReader().load()
-    tests, summaries, allure_trend = [], [], []
+    tests, allure_trend = [], []
     report_path = ""
 
     if repo:
@@ -33,7 +130,6 @@ def get_dashboard():
         tests = parse_allure_results_full(results_dir)
         allure_trend = parse_allure_history_trend(repo, cfg)
 
-        # Prefer the consolidated report for the suite-level link
         try:
             resolver = ReportResolver(repo, cfg.get("report_paths", []))
             report_path = (
@@ -44,7 +140,6 @@ def get_dashboard():
         except Exception:
             report_path = ""
 
-        # Stamp suite-level report onto tests that have no individual report yet
         if report_path:
             for t in tests:
                 if not t.get("report_path"):
@@ -69,52 +164,6 @@ def get_report():
     individual   = resolver.find_latest_in_dir(cfg.get("report_individual_dir", "allure/reports"))
     consolidated = resolver.find_latest_in_dir(cfg.get("report_consolidated_dir", ""))
     return jsonify({"individual": individual, "consolidated": consolidated})
-
-
-@bp.route("/api/report/open", methods=["POST"])
-def open_report():
-    import webbrowser
-    from pathlib import Path as _Path
-    from ui_launcher.config_reader import ConfigReader as _CR
-
-    body = request.json or {}
-    path     = body.get("path", "").strip()
-    rel_path = body.get("relpath", "").strip()
-    if not path and not rel_path:
-        return jsonify({"error": "No path provided"}), 400
-
-    # Build candidate list — try in order, open the first one that exists.
-    candidates: list[str] = []
-    if path:
-        candidates.append(path)
-
-    # Also resolve relative path against current repo root and the tool root.
-    rp = rel_path or path
-    if rp:
-        try:
-            cfg      = _CR().load()
-            repo_root = cfg.get("repo_root", "").strip()
-            if repo_root:
-                candidates.append(str(_Path(repo_root) / rp))
-            # Fallback: relative to the tool directory
-            candidates.append(str(_Path(__file__).parent.parent / rp))
-        except Exception:
-            pass
-
-    for c in candidates:
-        try:
-            p = _Path(c)
-            if p.exists():
-                # Path.as_uri() produces the correct file:// URL on all platforms:
-                #   Windows: C:\dir\index.html  →  file:///C:/dir/index.html
-                #   Mac/Linux: /dir/index.html  →  file:///dir/index.html
-                webbrowser.open(p.as_uri())
-                return jsonify({"ok": True, "resolved": str(p)})
-        except Exception:
-            continue
-
-    tried = " | ".join(candidates)
-    return jsonify({"error": f"Report not found. Tried: {tried}"}), 404
 
 
 @bp.route("/api/report/history")

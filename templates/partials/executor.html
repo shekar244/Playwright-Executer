@@ -184,6 +184,51 @@
       </div>
     </div>
 
+    <!-- Quick Script Runner -->
+    <div class="section-block">
+      <div class="section-title" onclick="toggleConfigSection('quickRunBody','quickRunArrow')" style="cursor:pointer;user-select:none;">
+        <span class="stitle-icon">⚡</span>Quick Script Runner
+        <span id="quickRunArrow" style="margin-left:auto;font-size:10px;color:var(--text-dim);">▶ Expand</span>
+      </div>
+      <div id="quickRunBody" class="section-content" style="display:none;gap:10px;">
+        <div class="hint">Run any Python or Node.js script or command without saving it as a feature.</div>
+        <div class="field">
+          <label>Runtime</label>
+          <select id="qr_runtime">
+            <option value="python">Python (repo venv)</option>
+            <option value="node">Node.js</option>
+            <option value="npx">npx</option>
+            <option value="npm">npm</option>
+            <option value="shell">Shell / bash (macOS · Linux)</option>
+            <option value="powershell">PowerShell (Windows)</option>
+            <option value="cmd">Command Prompt / cmd (Windows)</option>
+          </select>
+        </div>
+        <div class="field">
+          <label>Script / Command</label>
+          <input type="text" id="qr_script"
+            placeholder="e.g. scripts/seed.py  or  npm run generate"
+            style="font-family:'JetBrains Mono',monospace;font-size:11px;" />
+          <div class="hint" style="margin-top:4px;">File path <em>or</em> full inline command (e.g. <code>python -m mymodule</code>)</div>
+        </div>
+        <div class="field">
+          <label>Arguments <span style="font-weight:400;color:var(--text-dim);">(optional)</span></label>
+          <input type="text" id="qr_args" placeholder="e.g. --env qa3 --dry-run"
+            style="font-family:'JetBrains Mono',monospace;font-size:11px;" />
+        </div>
+        <div class="field">
+          <label>Working Directory <span style="font-weight:400;color:var(--text-dim);">(optional, defaults to repo root)</span></label>
+          <input type="text" id="qr_cwd" placeholder="leave blank for repo root"
+            style="font-family:'JetBrains Mono',monospace;font-size:11px;" />
+        </div>
+        <div class="action-row">
+          <button class="btn btn-run" id="qrRunBtn" onclick="runQuickScript()">▶ Run</button>
+          <button class="btn btn-stop" id="qrStopBtn" onclick="stopTests()" disabled>■ Stop</button>
+          <button class="btn btn-sm" onclick="clearLog()">Clear Log</button>
+        </div>
+      </div>
+    </div>
+
   </div>
 
   <div class="panel-right">
@@ -205,6 +250,7 @@
     <button type="button" class="cfg-tab-btn active" onclick="switchCfgTab('features')" id="ctab-features">🔌 Features</button>
     <button type="button" class="cfg-tab-btn" onclick="switchCfgTab('git')" id="ctab-git">🔀 Git</button>
     <button type="button" class="cfg-tab-btn" onclick="switchCfgTab('tools')" id="ctab-tools">🔧 CLI Tools</button>
+    <button type="button" class="cfg-tab-btn" onclick="switchCfgTab('allure')" id="ctab-allure">📊 Allure</button>
     <button type="button" class="cfg-tab-btn" onclick="switchCfgTab('mapping')" id="ctab-mapping">🗂️ Field Mapping</button>
     <button type="button" class="cfg-tab-btn" onclick="switchCfgTab('zephyr')" id="ctab-zephyr">🔷 Zephyr Config</button>
     <button type="button" class="cfg-tab-btn" onclick="switchCfgTab('uitabs')" id="ctab-uitabs" style="margin-left:auto;">🎛️ Tabs</button>
@@ -225,7 +271,11 @@
           <select id="ff_runtime">
             <option value="python">Python</option>
             <option value="node">Node.js</option>
-            <option value="shell">Shell / bash</option>
+            <option value="npx">npx</option>
+            <option value="npm">npm</option>
+            <option value="shell">Shell / bash (macOS · Linux)</option>
+            <option value="powershell">PowerShell (Windows)</option>
+            <option value="cmd">Command Prompt / cmd (Windows)</option>
           </select>
         </div>
         <div class="field"><label>Script Path</label><input type="text" id="ff_script" placeholder="/path/to/script.py" /></div>
@@ -298,6 +348,78 @@
         </div>
       </div>
       <div id="toolsList"></div>
+    </div>
+
+    <!-- Panel: Allure Report Config -->
+    <div id="cfgAllure" style="display:none;flex-direction:column;gap:14px;">
+
+      <div class="section-block" style="border-radius:var(--radius-lg);overflow:hidden;border-color:rgba(137,180,250,0.25);">
+        <div class="section-title" style="background:rgba(137,180,250,0.08);">
+          <span class="stitle-icon">📊</span>Report Format
+        </div>
+        <div class="section-content" style="gap:10px;">
+          <div class="hint">Choose which Allure CLI generates reports after each run.</div>
+          <div class="field">
+            <label>Allure Format</label>
+            <select id="al_format">
+              <option value="allure2">Allure 2 (Java — single-file snapshots, history via history/ folder)</option>
+              <option value="allure3">Allure 3 (Node.js — SPA report, history via JSONL)</option>
+              <option value="both">Both — generate Allure 2 and Allure 3 reports</option>
+            </select>
+          </div>
+        </div>
+      </div>
+
+      <div class="section-block" style="border-radius:var(--radius-lg);overflow:hidden;border-color:rgba(166,227,161,0.25);">
+        <div class="section-title" style="background:rgba(166,227,161,0.08);">
+          <span class="stitle-icon">🔧</span>Binary Paths
+        </div>
+        <div class="section-content" style="gap:10px;">
+          <div class="hint">Leave blank to auto-detect (Homebrew / Scoop / PATH). Set an explicit path if auto-detect picks the wrong binary.</div>
+          <div class="field">
+            <label>Allure 2 binary path</label>
+            <input type="text" id="al_bin2" placeholder="e.g. /opt/homebrew/bin/allure  or  C:\scoop\apps\allure\current\bin\allure.bat" style="font-family:'JetBrains Mono',monospace;font-size:11px;" />
+          </div>
+          <div class="field">
+            <label>Allure 3 binary path</label>
+            <input type="text" id="al_bin3" placeholder="e.g. /usr/local/bin/allure3  or  allure  (if on PATH)" style="font-family:'JetBrains Mono',monospace;font-size:11px;" />
+          </div>
+        </div>
+      </div>
+
+      <div class="section-block" style="border-radius:var(--radius-lg);overflow:hidden;border-color:rgba(203,166,247,0.25);">
+        <div class="section-title" style="background:rgba(203,166,247,0.08);">
+          <span class="stitle-icon">📁</span>Report Directories
+        </div>
+        <div class="section-content" style="gap:10px;">
+          <div class="hint">Paths are relative to the repo root. Directories are created automatically.</div>
+          <div class="field">
+            <label>Allure results dir <span style="font-weight:400;color:var(--text-dim);">(written by allure-pytest)</span></label>
+            <input type="text" id="al_results_dir" placeholder="allure/results" style="font-family:'JetBrains Mono',monospace;font-size:11px;" />
+          </div>
+          <div class="field">
+            <label>Consolidated report dir <span style="font-weight:400;color:var(--text-dim);">(all-tests report, history preserved here)</span></label>
+            <input type="text" id="al_consolidated_dir" placeholder="allure/reports/consolidated" style="font-family:'JetBrains Mono',monospace;font-size:11px;" />
+          </div>
+          <div class="field">
+            <label>Per-test report dir <span style="font-weight:400;color:var(--text-dim);">(individual single-file reports when &gt;1 test ran)</span></label>
+            <input type="text" id="al_pertest_dir" placeholder="allure/reports/individual" style="font-family:'JetBrains Mono',monospace;font-size:11px;" />
+          </div>
+          <div style="display:flex;align-items:center;gap:8px;padding-top:2px;">
+            <input type="checkbox" id="al_gen_pertest" style="width:14px;height:14px;cursor:pointer;" />
+            <label for="al_gen_pertest" style="cursor:pointer;font-size:12px;user-select:none;">
+              Generate individual per-test reports
+              <span style="font-weight:400;color:var(--text-dim);">(disable on large suites to save time)</span>
+            </label>
+          </div>
+        </div>
+      </div>
+
+      <div class="action-row">
+        <button class="btn btn-sm" onclick="saveAllureConfig()">💾 Save Allure Config</button>
+        <button class="btn btn-sm" onclick="loadAllureConfig()">↺ Reload</button>
+        <span id="allureSaveStatus" style="font-size:11px;color:var(--text-dim);margin-left:6px;"></span>
+      </div>
     </div>
 
     <!-- Panel: Field Mapping -->
