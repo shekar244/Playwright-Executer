@@ -51,24 +51,96 @@ class TestDiscovery:
 
     def discover_markers(self) -> List[str]:
         """
-        Parse custom markers registered via addinivalue_line in conftest.py.
-        Falls back to an empty list if the file cannot be read.
-        """
-        conftest = self.tests_dir / "conftest.py"
-        markers: List[str] = []
-        if not conftest.exists():
-            return markers
+        Collect custom markers from all standard pytest configuration sources:
+          1. pytest.ini / config/pytest.ini — [pytest] markers = section
+          2. pyproject.toml               — [tool.pytest.ini_options] markers
+          3. setup.cfg                    — [tool:pytest] markers = section
+          4. conftest.py                  — addinivalue_line("markers", ...) calls
 
-        try:
-            with open(conftest, "r", encoding="utf-8", errors="replace") as fh:
-                for line in fh:
-                    m = re.search(r'addinivalue_line\s*\(\s*"markers"\s*,\s*"([^":]+)', line)
-                    if m:
-                        marker_name = m.group(1).strip()
-                        if marker_name and marker_name not in markers:
-                            markers.append(marker_name)
-        except OSError:
-            pass
+        All sources are merged; duplicates are removed preserving first-seen order.
+        """
+        seen: set = set()
+        markers: List[str] = []
+
+        def _add(name: str) -> None:
+            name = name.strip()
+            if name and name not in seen:
+                seen.add(name)
+                markers.append(name)
+
+        # ── 1 & 3. pytest.ini / setup.cfg — ini-style [pytest] or [tool:pytest]
+        for ini_name in ("pytest.ini", "config/pytest.ini", "setup.cfg"):
+            ini_path = self.repo_root / ini_name
+            if not ini_path.exists():
+                continue
+            try:
+                import configparser
+                cp = configparser.ConfigParser(strict=False)
+                cp.read(str(ini_path), encoding="utf-8")
+                for section in ("pytest", "tool:pytest"):
+                    if cp.has_option(section, "markers"):
+                        raw = cp.get(section, "markers")
+                        for line in raw.splitlines():
+                            line = line.strip()
+                            if not line or line.startswith("#") or line.startswith(";"):
+                                continue
+                            # "marker_name: description" or just "marker_name"
+                            name = line.split(":")[0].split()[0]
+                            _add(name)
+            except Exception:
+                pass
+
+        # ── 2. pyproject.toml — [tool.pytest.ini_options] markers
+        pyproject = self.repo_root / "pyproject.toml"
+        if pyproject.exists():
+            try:
+                import tomllib  # Python 3.11+
+            except ImportError:
+                try:
+                    import tomli as tomllib  # type: ignore[no-redef]
+                except ImportError:
+                    tomllib = None  # type: ignore[assignment]
+            if tomllib is not None:
+                try:
+                    with open(pyproject, "rb") as fh:
+                        data = tomllib.load(fh)
+                    for entry in data.get("tool", {}).get("pytest", {}).get("ini_options", {}).get("markers", []):
+                        name = str(entry).split(":")[0].split()[0].strip()
+                        _add(name)
+                except Exception:
+                    pass
+            else:
+                # Fallback: plain-text scan for quoted marker strings
+                try:
+                    text = pyproject.read_text(encoding="utf-8", errors="replace")
+                    in_markers = False
+                    for line in text.splitlines():
+                        stripped = line.strip()
+                        if re.match(r'^markers\s*=', stripped):
+                            in_markers = True
+                        elif in_markers and stripped.startswith("["):
+                            in_markers = False
+                        if in_markers:
+                            m = re.search(r'["\']([A-Za-z_][A-Za-z0-9_]*)[\s:"\':]', stripped)
+                            if m:
+                                _add(m.group(1))
+                except Exception:
+                    pass
+
+        # ── 4. conftest.py — addinivalue_line("markers", "name: desc") calls
+        conftest = self.tests_dir / "conftest.py"
+        if conftest.exists():
+            try:
+                with open(conftest, "r", encoding="utf-8", errors="replace") as fh:
+                    for line in fh:
+                        m = re.search(
+                            r'addinivalue_line\s*\(\s*["\']markers["\']\s*,\s*["\']([^"\':\s]+)',
+                            line,
+                        )
+                        if m:
+                            _add(m.group(1))
+            except OSError:
+                pass
 
         return markers
 

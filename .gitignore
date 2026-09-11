@@ -36,3 +36,6 @@ last_run.json
 .claude/
 .firecrawl/
 report_history.json
+config.json
+.gitignore
+config.json
