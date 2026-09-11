@@ -369,14 +369,14 @@
       <div style="border:1px solid var(--border);border-radius:var(--radius);overflow:hidden;">
         <div style="display:flex;align-items:center;gap:6px;padding:7px 12px;background:rgba(255,255,255,0.02);border-bottom:1px solid var(--border);flex-shrink:0;">
           <span style="font-size:11px;font-weight:700;color:var(--text-muted);flex:1;">Folder Results</span>
-          <button class="btn btn-sm" onclick="zMetricsCopyTable()" title="Copy as plain table (no icons, no distribution)">📋 Copy</button>
+          <button class="btn btn-sm" onclick="zMetricsCopyTable()" title="Copy as CSV — same format as the download, paste into Excel or Sheets">📋 Copy CSV</button>
           <button class="btn btn-sm" onclick="zMetricsDownloadCsv()" title="Download as CSV">⬇ CSV</button>
         </div>
-        <div style="overflow-x:auto;">
-          <table class="history-tbl" id="zMetricsTable">
+        <div style="overflow:auto;max-height:480px;">
+          <table class="history-tbl" id="zMetricsTable" style="min-width:max-content;width:100%;">
             <thead style="position:sticky;top:0;z-index:2;">
               <tr id="zMetricsTheadRow">
-                <th>Folder</th>
+                <th style="position:sticky;left:0;z-index:3;background:var(--surface2);">Folder</th>
                 <th>Total</th>
                 <th style="min-width:120px;">Distribution</th>
               </tr>

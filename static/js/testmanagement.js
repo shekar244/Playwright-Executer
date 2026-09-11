@@ -908,7 +908,7 @@ async function loadZephyrMetrics() {
         : depth === 0
           ? 'background:rgba(255,255,255,0.02);font-weight:600;'
           : 'font-weight:400;';
-      const nameStyle = `padding-left:${8 + indent}px;font-size:11px;white-space:nowrap;`;
+      const nameStyle = `padding-left:${8 + indent}px;font-size:11px;white-space:nowrap;position:sticky;left:0;background:${isRoot ? 'rgba(137,180,250,0.06)' : depth === 0 ? 'rgba(40,40,56,1)' : 'var(--surface2)'};z-index:1;`;
 
       const statusCells = _zsSortedKeys().map(k =>
         `<td style="text-align:center;color:${_ZS[k].color};">${counts[k] || 0}</td>`
@@ -1014,16 +1014,12 @@ function _zMetricsTableData() {
 function zMetricsCopyTable() {
   const { headers, rows } = _zMetricsTableData();
   if (!rows.length) { zLog('⚠  No data to copy.', 'warning'); return; }
-  const colWidths = headers.map((h, i) =>
-    Math.max(h.length, ...rows.map(r => (r[i] || '').length))
-  );
-  const pad = (s, w) => String(s).padEnd(w);
-  const line  = colWidths.map(w => '-'.repeat(w)).join('  ');
-  const hdr   = headers.map((h, i) => pad(h, colWidths[i])).join('  ');
-  const body  = rows.map(r => r.map((c, i) => pad(c, colWidths[i])).join('  ')).join('\n');
-  const text  = `${hdr}\n${line}\n${body}`;
+  // Exact CSV format — same quoting as the download so paste into Excel/Sheets works identically
+  const escape = v => `"${String(v).replace(/"/g, '""')}"`;
+  const csvLines = [headers.map(escape).join(','), ...rows.map(r => r.map(escape).join(','))];
+  const text = csvLines.join('\r\n');
   navigator.clipboard.writeText(text).then(
-    () => zLog('✓  Table copied to clipboard.', 'passed'),
+    () => zLog('✓  Copied as CSV — paste directly into Excel or Google Sheets.', 'passed'),
     () => zLog('✗  Clipboard access denied.', 'failed')
   );
 }

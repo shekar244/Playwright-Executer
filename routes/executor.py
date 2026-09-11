@@ -80,29 +80,39 @@ def _read_pip_ini_flags(python_path: str) -> list[str]:
 
 # ── Allure binary discovery ────────────────────────────────────────────────────
 
+_NPX_SENTINEL = "npx"   # returned when Allure 3 should be invoked via npx
+
+
 def _find_allure_bin(configured: str, want_v2: bool) -> str:
     """
     Return the path to the Allure binary for the requested format.
 
+    Special value for Allure 3:  set allure3_bin = "npx"
+      When the sentinel "npx" is returned, callers must build the command as
+      ["npx", "allure", <subcommand>, ...] instead of [bin, <subcommand>, ...].
+      This covers installations done via  npm install -g allure-commandline  or
+      any setup where the allure executable is only reachable through npx.
+
     Resolution order (no version check — trust what is configured):
-      1. Explicit path from config (allure2_bin / allure3_bin) — used as-is.
-      2. PATH lookup via shutil.which (works on macOS, Linux, and Windows;
-         finds .cmd/.bat/.exe on Windows automatically via PATHEXT).
-      3. Well-known install locations per platform:
-           macOS/Linux Allure 2: /opt/homebrew/bin/allure, /usr/local/bin/allure
-           Windows Allure 2 (Scoop / Chocolatey):
-             %USERPROFILE%\scoop\apps\allure\current\bin\allure.bat
-             C:\ProgramData\chocolatey\bin\allure.cmd
+      1. Explicit path from config (allure2_bin / allure3_bin):
+           • "npx" keyword → verify npx is on PATH, return sentinel "npx"
+           • File path     → used as-is if it exists
+      2. PATH lookup via shutil.which (finds .cmd/.bat/.exe on Windows).
+      3. Well-known install locations per platform.
     """
     import platform
 
     if configured:
+        # Support "npx" (or "npx allure") as a keyword for Allure 3 npm installs
+        if configured.strip().lower().startswith("npx"):
+            if shutil.which("npx"):
+                return _NPX_SENTINEL
+            return ""
         p = Path(configured)
         if p.exists():
             return str(p)
 
-    # PATH lookup works cross-platform and is the most reliable when no path is
-    # configured. On Windows, shutil.which resolves .cmd/.bat extensions.
+    # PATH lookup — most reliable when no path is configured.
     found = shutil.which("allure")
     if found and Path(found).exists():
         return found
@@ -113,12 +123,13 @@ def _find_allure_bin(configured: str, want_v2: bool) -> str:
             Path.home() / "scoop" / "apps" / "allure" / "current" / "bin" / "allure.bat",
             Path("C:/ProgramData/chocolatey/bin/allure.cmd"),
             Path("C:/ProgramData/chocolatey/bin/allure.exe"),
+            # npm global install on Windows → %APPDATA%\npm\allure.cmd
+            Path.home() / "AppData" / "Roaming" / "npm" / "allure.cmd",
         ]
     else:
-        # macOS (Homebrew) / Linux
         candidates = [
-            Path("/opt/homebrew/bin/allure"),   # Apple Silicon Homebrew
-            Path("/usr/local/bin/allure"),       # Intel Homebrew / manual
+            Path("/opt/homebrew/bin/allure"),
+            Path("/usr/local/bin/allure"),
             Path("/usr/bin/allure"),
         ]
 
@@ -127,6 +138,21 @@ def _find_allure_bin(configured: str, want_v2: bool) -> str:
             return str(c)
 
     return ""
+
+
+def _allure3_base(bin3: str, subcommand: str) -> list[str]:
+    """
+    Build the opening tokens of an Allure 3 command.
+
+    When bin3 == _NPX_SENTINEL ("npx"), Allure 3 is accessed via npx
+    (e.g. npm install -g allure-commandline):
+      npx allure awesome ...
+    Otherwise use the binary path directly:
+      /path/to/allure awesome ...
+    """
+    if bin3 == _NPX_SENTINEL:
+        return ["npx", "allure", subcommand]
+    return [bin3, subcommand]
 
 
 # ── Per-test file collection ───────────────────────────────────────────────────
@@ -236,7 +262,7 @@ def _allure3_single_file(
         for f in files:
             shutil.copy2(str(f), str(tmp_in / f.name))
         tmp_out = Path(tmp) / "out"
-        cmd = [bin3, "awesome", str(tmp_in),
+        cmd = _allure3_base(bin3, "awesome") + [str(tmp_in),
                "--output", str(tmp_out),
                "--single-file",
                "--report-name", name]
@@ -332,10 +358,31 @@ def _allure2_consolidated(
             stderr = (r.stderr or b"").decode("utf-8", errors="replace")[:300] if r else ""
             return f"ERROR:{stderr or 'index.html not found after allure generate'}"
 
-        # Step 3 — merge updated history back into shared history_dir so it is
-        # available for the next run (both consolidated and individual reports).
+        # Step 3 — merge updated history back into shared history_dir
         new_hist = run_dir / "history"
         _copy_json_files(new_hist, history_dir)
+
+        # Step 4 — also generate a standalone single-file alongside the full report.
+        # The single-file (complete.html) is self-contained and shareable via file://
+        # while the full SPA above is served via the Flask /allure/ server with history.
+        standalone_dest = out_dir / f"consolidated-{timestamp}.html"
+        tmp_single = Path(tmp) / "single"
+        try:
+            subprocess.run(
+                [bin2, "generate", str(tmp_results), "--single-file", "--clean",
+                 "-o", str(tmp_single)],
+                capture_output=True, timeout=180,
+                cwd=tmp,
+            )
+            candidate = tmp_single / "complete.html"
+            if not candidate.exists():
+                htmls = sorted(tmp_single.glob("*.html"),
+                               key=lambda f: f.stat().st_size, reverse=True)
+                candidate = htmls[0] if htmls else None
+            if candidate and candidate.exists():
+                shutil.copy2(str(candidate), str(standalone_dest))
+        except Exception:
+            pass  # standalone is best-effort; full report is the authoritative one
 
     return str(idx) if idx.exists() else ""
 
@@ -363,7 +410,7 @@ def _allure3_consolidated(
         # Allure 3 creates the JSONL on the first run and appends on every
         # subsequent run.  Omitting it on the first run means history is never
         # started and no accumulation ever happens.
-        cmd = [bin3, "awesome", str(results_dir),
+        cmd = _allure3_base(bin3, "awesome") + [str(results_dir),
                "--output", str(tmp_out),
                "--single-file",
                "--name", name,
