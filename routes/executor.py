@@ -296,6 +296,35 @@ def _allure3_consolidated(
     return str(idx) if idx.exists() else ""
 
 
+# ── Pre-run cleanup ───────────────────────────────────────────────────────────
+
+def _clean_allure_results(repo: str, cfg: dict) -> None:
+    """
+    Remove stale Allure result files from the results directory before each run
+    so the generated report contains only the current run's tests.
+
+    The history/ subfolder is intentionally preserved — it stores Allure 2
+    trend JSON files that carry historical data into the next report.
+
+    Repos that already clean results via pytest_configure (conftest.py) are
+    unaffected: this becomes a no-op when the dir is already empty.
+    """
+    results_rel = cfg.get("allure_results_dir", "allure/results")
+    results_dir = Path(repo) / results_rel
+    if not results_dir.is_dir():
+        return
+    for item in results_dir.iterdir():
+        if item.name == "history":
+            continue  # keep Allure 2 history trend files
+        try:
+            if item.is_file():
+                item.unlink()
+            elif item.is_dir():
+                shutil.rmtree(str(item))
+        except Exception:
+            pass
+
+
 # ── Main orchestrator ──────────────────────────────────────────────────────────
 
 def _generate_reports(repo: str, cfg: dict) -> dict:
@@ -319,16 +348,28 @@ def _generate_reports(repo: str, cfg: dict) -> dict:
       }
     """
     results_dir = Path(repo) / cfg.get("allure_results_dir", "allure/results")
-    fmt = cfg.get("allure_format", "allure3")
+    fmt = cfg.get("allure_format", "allure2")
     report_name = f"{Path(repo).name} — Test Report"
+    warnings: list[str] = []
 
     bin2 = (_find_allure_bin(cfg.get("allure2_bin", ""), want_v2=True)
             if fmt in ("allure2", "both") else "")
     bin3 = (_find_allure_bin(cfg.get("allure3_bin", ""), want_v2=False)
             if fmt in ("allure3", "both") else "")
 
+    if fmt in ("allure2", "both") and not bin2:
+        warnings.append(
+            "Allure 2 binary not found — set allure2_bin in Config → Allure "
+            "(e.g. /opt/homebrew/bin/allure  or  C:\\scoop\\apps\\allure\\current\\bin\\allure.bat)"
+        )
+    if fmt in ("allure3", "both") and not bin3:
+        warnings.append(
+            "Allure 3 binary not found — set allure3_bin in Config → Allure "
+            "(e.g. allure  or  /usr/local/bin/allure3)"
+        )
+
     if not bin2 and not bin3:
-        return {"run_report": "", "pertest": {}}
+        return {"run_report": "", "pertest": {}, "warnings": warnings}
 
     uid_files: dict[str, Path] = {}
     if results_dir.is_dir():
@@ -353,12 +394,17 @@ def _generate_reports(repo: str, cfg: dict) -> dict:
         path = _allure3_consolidated(bin3, results_dir, consolidated_dir, history_jsonl, report_name)
         if path:
             run_report = path
+        else:
+            warnings.append("Allure 3 consolidated report generation failed — check binary path and results dir")
 
     if fmt in ("allure2", "both") and bin2:
         a2_dir = consolidated_dir if fmt == "allure2" else Path(str(consolidated_dir) + "-allure2")
         path = _allure2_consolidated(bin2, results_dir, a2_dir)
-        if path and not run_report:
-            run_report = path
+        if path:
+            if not run_report:
+                run_report = path
+        else:
+            warnings.append("Allure 2 consolidated report generation failed — check binary path and results dir")
 
     # ── Per-test individual single-file reports (only when >1 test) ────────────
     if test_count > 1 and cfg.get("generate_pertest_reports", True):
@@ -384,7 +430,10 @@ def _generate_reports(repo: str, cfg: dict) -> dict:
                 if path:
                     pertest[uid] = path
 
-    return {"run_report": run_report, "pertest": pertest}
+        if not pertest and (bin2 or bin3):
+            warnings.append("No individual per-test reports generated — result files may be missing attachments")
+
+    return {"run_report": run_report, "pertest": pertest, "warnings": warnings}
 
 
 def _display_cmd(cmd: list[str], repo: str) -> str:
@@ -616,6 +665,13 @@ def run_tests():
         except Exception as exc:
             return jsonify({"error": str(exc)}), 500
 
+        # Clean stale Allure result files before the run so each report only
+        # contains results from the current run.  The history/ subfolder is
+        # preserved — it carries Allure 2 trend JSON files for the next report.
+        # Repos that already clean results via pytest_configure are unaffected
+        # (cleaning an already-clean dir is a no-op).
+        _clean_allure_results(repo, cfg)
+
         state.broadcast("cmd", _display_cmd(cmd, repo))
         state._is_running = True
 
@@ -632,11 +688,13 @@ def run_tests():
                 run_status = f"failed:{exit_code}"
             state.broadcast("status", run_status)
             report_info = _generate_reports(repo, cfg)
+            for w in report_info.get("warnings", []):
+                state.broadcast("line", f"[Report] ⚠  {w}")
             if report_info.get("run_report"):
-                state.broadcast("line", f"[Report] Consolidated → {report_info['run_report']}")
+                state.broadcast("line", f"[Report] ✓  Consolidated → {report_info['run_report']}")
             n_pertest = len(report_info.get("pertest", {}))
             if n_pertest:
-                state.broadcast("line", f"[Report] {n_pertest} individual test report(s) generated")
+                state.broadcast("line", f"[Report] ✓  {n_pertest} individual test report(s) generated")
             record_run_history(repo, run_status, cfg, report_info=report_info)
             state.broadcast("done", "")
 

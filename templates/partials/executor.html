@@ -184,51 +184,6 @@
       </div>
     </div>
 
-    <!-- Quick Script Runner -->
-    <div class="section-block">
-      <div class="section-title" onclick="toggleConfigSection('quickRunBody','quickRunArrow')" style="cursor:pointer;user-select:none;">
-        <span class="stitle-icon">⚡</span>Quick Script Runner
-        <span id="quickRunArrow" style="margin-left:auto;font-size:10px;color:var(--text-dim);">▶ Expand</span>
-      </div>
-      <div id="quickRunBody" class="section-content" style="display:none;gap:10px;">
-        <div class="hint">Run any Python or Node.js script or command without saving it as a feature.</div>
-        <div class="field">
-          <label>Runtime</label>
-          <select id="qr_runtime">
-            <option value="python">Python (repo venv)</option>
-            <option value="node">Node.js</option>
-            <option value="npx">npx</option>
-            <option value="npm">npm</option>
-            <option value="shell">Shell / bash (macOS · Linux)</option>
-            <option value="powershell">PowerShell (Windows)</option>
-            <option value="cmd">Command Prompt / cmd (Windows)</option>
-          </select>
-        </div>
-        <div class="field">
-          <label>Script / Command</label>
-          <input type="text" id="qr_script"
-            placeholder="e.g. scripts/seed.py  or  npm run generate"
-            style="font-family:'JetBrains Mono',monospace;font-size:11px;" />
-          <div class="hint" style="margin-top:4px;">File path <em>or</em> full inline command (e.g. <code>python -m mymodule</code>)</div>
-        </div>
-        <div class="field">
-          <label>Arguments <span style="font-weight:400;color:var(--text-dim);">(optional)</span></label>
-          <input type="text" id="qr_args" placeholder="e.g. --env qa3 --dry-run"
-            style="font-family:'JetBrains Mono',monospace;font-size:11px;" />
-        </div>
-        <div class="field">
-          <label>Working Directory <span style="font-weight:400;color:var(--text-dim);">(optional, defaults to repo root)</span></label>
-          <input type="text" id="qr_cwd" placeholder="leave blank for repo root"
-            style="font-family:'JetBrains Mono',monospace;font-size:11px;" />
-        </div>
-        <div class="action-row">
-          <button class="btn btn-run" id="qrRunBtn" onclick="runQuickScript()">▶ Run</button>
-          <button class="btn btn-stop" id="qrStopBtn" onclick="stopTests()" disabled>■ Stop</button>
-          <button class="btn btn-sm" onclick="clearLog()">Clear Log</button>
-        </div>
-      </div>
-    </div>
-
   </div>
 
   <div class="panel-right">
@@ -261,26 +216,30 @@
 
     <!-- Panel: Features -->
     <div id="cfgFeatures" style="display:flex;flex-direction:column;gap:10px;">
-      <div class="hint">Run Python, Node.js, or shell scripts directly from the executor.</div>
+      <div class="hint">Save and run scripts or commands — Python, Node.js, npx, npm, PowerShell, cmd, or shell. Script path <em>or</em> any inline command (e.g. <code>npx allure generate</code>).</div>
       <div class="feat-form" id="featForm" style="display:none;">
         <h3 id="featFormTitle">Add Feature</h3>
         <input type="hidden" id="ff_index" value="-1" />
-        <div class="field"><label>Name</label><input type="text" id="ff_name" placeholder="e.g. Seed Test Data" /></div>
+        <div class="field"><label>Name</label><input type="text" id="ff_name" placeholder="e.g. Generate Allure Report" /></div>
         <div class="field"><label>Description</label><input type="text" id="ff_desc" placeholder="(optional)" /></div>
         <div class="field"><label>Runtime</label>
           <select id="ff_runtime">
-            <option value="python">Python</option>
+            <option value="python">Python (repo venv)</option>
             <option value="node">Node.js</option>
             <option value="npx">npx</option>
             <option value="npm">npm</option>
-            <option value="shell">Shell / bash (macOS · Linux)</option>
             <option value="powershell">PowerShell (Windows)</option>
             <option value="cmd">Command Prompt / cmd (Windows)</option>
+            <option value="shell">Shell / bash (macOS · Linux)</option>
           </select>
         </div>
-        <div class="field"><label>Script Path</label><input type="text" id="ff_script" placeholder="/path/to/script.py" /></div>
-        <div class="field"><label>Working Directory</label><input type="text" id="ff_cwd" placeholder="(defaults to script folder)" /></div>
-        <div class="field"><label>Arguments</label><input type="text" id="ff_args" placeholder="e.g. --env=qa3 --dry-run" /></div>
+        <div class="field">
+          <label>Script / Command</label>
+          <input type="text" id="ff_script" placeholder="e.g. scripts/seed.py  or  npx allure generate  or  npm run build" style="font-family:'JetBrains Mono',monospace;font-size:11px;" />
+          <div class="hint" style="margin-top:3px;">File path <em>or</em> full inline command. Runtime prefix is added automatically when absent.</div>
+        </div>
+        <div class="field"><label>Working Directory <span style="font-weight:400;color:var(--text-dim);">(optional, defaults to repo root)</span></label><input type="text" id="ff_cwd" placeholder="leave blank for repo root" style="font-family:'JetBrains Mono',monospace;font-size:11px;" /></div>
+        <div class="field"><label>Arguments <span style="font-weight:400;color:var(--text-dim);">(optional)</span></label><input type="text" id="ff_args" placeholder="e.g. --env qa3 --dry-run" style="font-family:'JetBrains Mono',monospace;font-size:11px;" /></div>
         <div class="feat-form-actions">
           <button type="button" class="btn btn-sm" onclick="cancelFeatForm()">Cancel</button>
           <button type="button" class="btn btn-run" onclick="saveFeatForm()" style="padding:6px 16px;font-size:12px;">Save</button>

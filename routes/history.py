@@ -265,12 +265,14 @@ def record_run_history(
             uid = t.get("uid", "")
 
             # Priority for per-test report path:
-            #   1. Individual single-file report from report_info (best — self-contained)
-            #   2. Consolidated report with #/test/{uid} anchor (Allure 3 deep-link)
-            #   3. Run-level report (fallback)
+            #   1. Individual single-file report (self-contained, format-agnostic)
+            #   2. Allure 3 SPA deep-link: consolidated#/test/{uid} — ONLY for allure3/both
+            #      (Allure 2 uses a different fragment scheme; don't stamp broken links)
+            #   3. Run-level consolidated report (fallback, no anchor)
+            fmt = cfg.get("allure_format", "allure2")
             if uid and uid in pertest_map:
                 test_report_abs, test_report_rel = _report_paths(repo, pertest_map[uid])
-            elif uid and run_abs:
+            elif uid and run_abs and fmt in ("allure3", "both"):
                 test_report_abs = f"{run_abs}#/test/{uid}"
                 test_report_rel = f"{run_rel}#/test/{uid}" if run_rel else ""
             else:

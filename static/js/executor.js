@@ -594,32 +594,6 @@ async function persistFeatures() {
   if (!res.ok) { const err = await res.json().catch(() => ({})); alert('Save failed: ' + (err.error || 'unknown error')); }
 }
 
-async function runQuickScript() {
-  const script  = document.getElementById('qr_script')?.value.trim();
-  const runtime = document.getElementById('qr_runtime')?.value || 'python';
-  const args    = document.getElementById('qr_args')?.value.trim() || '';
-  const cwd     = document.getElementById('qr_cwd')?.value.trim() || '';
-  if (!script) { alert('Enter a script path or command.'); return; }
-
-  _runContext = 'executor';
-  _activeLogEl = document.getElementById('log');
-  setRunning(true);
-
-  const repo = document.getElementById('repo').value.trim();
-  const feature = { runtime, script, args, cwd: cwd || repo };
-
-  const res = await fetch('/api/features/run', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ feature }),
-  });
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({}));
-    appendLine('✗ ' + (err.error || 'Failed to start'), 'failed');
-    setRunning(false);
-  }
-}
-
 async function runFeature() {
   if (_selectedFeat === null || _selectedFeat === undefined) return;
   const feat = _features[_selectedFeat]; if (!feat) return;
