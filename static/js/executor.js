@@ -833,6 +833,7 @@ async function loadAllureConfig() {
   set('al_bin2',           cfg.allure2_bin            || '');
   set('al_bin3',           cfg.allure3_bin            || '');
   set('al_results_dir',    cfg.allure_results_dir     || 'allure/results');
+  set('al_history_dir',    cfg.allure_history_dir     || 'allure/allure-history');
   set('al_consolidated_dir', cfg.report_consolidated_dir || 'allure/reports/consolidated');
   set('al_pertest_dir',    cfg.report_pertest_dir     || 'allure/reports/individual');
   const chk = document.getElementById('al_gen_pertest');
@@ -845,9 +846,10 @@ async function saveAllureConfig() {
     allure_format:            fmt,
     allure2_bin:              document.getElementById('al_bin2')?.value.trim()           || '',
     allure3_bin:              document.getElementById('al_bin3')?.value.trim()           || '',
-    allure_results_dir:       document.getElementById('al_results_dir')?.value.trim()   || 'allure/results',
+    allure_results_dir:       document.getElementById('al_results_dir')?.value.trim()      || 'allure/results',
+    allure_history_dir:       document.getElementById('al_history_dir')?.value.trim()      || 'allure/allure-history',
     report_consolidated_dir:  document.getElementById('al_consolidated_dir')?.value.trim() || 'allure/reports/consolidated',
-    report_pertest_dir:       document.getElementById('al_pertest_dir')?.value.trim()   || 'allure/reports/individual',
+    report_pertest_dir:       document.getElementById('al_pertest_dir')?.value.trim()      || 'allure/reports/individual',
     generate_pertest_reports: document.getElementById('al_gen_pertest')?.checked !== false,
   };
   const st = document.getElementById('allureSaveStatus');

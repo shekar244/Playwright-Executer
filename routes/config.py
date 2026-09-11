@@ -156,7 +156,7 @@ def save_allure_config():
     body = request.json or {}
     allowed = {
         "allure_format", "allure2_bin", "allure3_bin",
-        "allure_results_dir",
+        "allure_results_dir", "allure_history_dir",
         "report_consolidated_dir", "report_pertest_dir", "generate_pertest_reports",
     }
     reader = ConfigReader()

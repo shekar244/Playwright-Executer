@@ -33,6 +33,7 @@ _DEFAULTS: dict = {
     "allure_format":           "allure2",                       # "allure2" | "allure3" | "both"
     "allure2_bin":             "",                              # explicit path; "" = auto-detect
     "allure3_bin":             "",                              # explicit path; "" = auto-detect
+    "allure_history_dir":      "allure/allure-history",        # shared history for all report types
     "generate_pertest_reports": True,                          # per-test single-file reports when >1 test
     "extra_options": [],
     "config_override_path": "",

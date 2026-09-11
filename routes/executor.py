@@ -174,13 +174,24 @@ def _files_for_uid(uid: str, results_dir: Path) -> list[Path]:
 
 # ── Single-file generators ─────────────────────────────────────────────────────
 
-def _allure2_single_file(bin2: str, files: list[Path], dest: Path) -> bool:
-    """Generate an Allure 2 --single-file report from an explicit file list."""
+def _allure2_single_file(
+    bin2: str, files: list[Path], dest: Path,
+    history_dir: "Path | None" = None,
+) -> bool:
+    """
+    Generate an Allure 2 --single-file report from an explicit file list.
+    When history_dir is provided, the shared Allure 2 history JSON files are
+    injected so the History tab shows this test's performance over previous runs.
+    Individual reports never write history back — only consolidated does.
+    """
     with tempfile.TemporaryDirectory() as tmp:
         tmp_in = Path(tmp) / "in"
         tmp_in.mkdir()
         for f in files:
             shutil.copy2(str(f), str(tmp_in / f.name))
+        # Inject shared history so the History tab works in per-test reports
+        if history_dir and history_dir.is_dir():
+            shutil.copytree(str(history_dir), str(tmp_in / "history"))
         tmp_out = Path(tmp) / "out"
         try:
             subprocess.run(
@@ -190,7 +201,6 @@ def _allure2_single_file(bin2: str, files: list[Path], dest: Path) -> bool:
             )
         except Exception:
             return False
-        # Allure 2 --single-file writes complete.html
         candidate = tmp_out / "complete.html"
         if not candidate.exists():
             htmls = list(tmp_out.glob("*.html"))
@@ -202,22 +212,30 @@ def _allure2_single_file(bin2: str, files: list[Path], dest: Path) -> bool:
     return False
 
 
-def _allure3_single_file(bin3: str, files: list[Path], dest: Path, name: str) -> bool:
-    """Generate an Allure 3 awesome --single-file report from an explicit file list."""
+def _allure3_single_file(
+    bin3: str, files: list[Path], dest: Path, name: str,
+    history_jsonl: "Path | None" = None,
+) -> bool:
+    """
+    Generate an Allure 3 awesome --single-file report from an explicit file list.
+    When history_jsonl is provided, the shared JSONL is passed via --history-path
+    so the History tab shows this test's trend across previous runs.
+    Individual reports never write history back — only consolidated does.
+    """
     with tempfile.TemporaryDirectory() as tmp:
         tmp_in = Path(tmp) / "in"
         tmp_in.mkdir()
         for f in files:
             shutil.copy2(str(f), str(tmp_in / f.name))
         tmp_out = Path(tmp) / "out"
+        cmd = [bin3, "awesome", str(tmp_in),
+               "--output", str(tmp_out),
+               "--single-file",
+               "--report-name", name]
+        if history_jsonl and history_jsonl.exists():
+            cmd += ["--history-path", str(history_jsonl)]
         try:
-            subprocess.run(
-                [bin3, "awesome", str(tmp_in),
-                 "--output", str(tmp_out),
-                 "--single-file",
-                 "--report-name", name],
-                capture_output=True, timeout=90,
-            )
+            subprocess.run(cmd, capture_output=True, timeout=90)
         except Exception:
             return False
         candidate = tmp_out / "index.html"
@@ -230,70 +248,104 @@ def _allure3_single_file(bin3: str, files: list[Path], dest: Path, name: str) ->
 
 # ── Consolidated report generators (with history) ─────────────────────────────
 
-def _allure2_consolidated(bin2: str, results_dir: Path, out_dir: Path) -> str:
+def _allure2_consolidated(
+    bin2: str, results_dir: Path, out_dir: Path,
+    history_dir: Path, timestamp: str,
+) -> str:
     """
-    Generate an Allure 2 report with accumulated history.
+    Generate a standalone Allure 2 single-file consolidated report.
 
-    History flow (per Allure docs):
-      1. Read history from {out_dir}/history/ (written by the previous run).
-      2. Inject it into a temp copy of results as results/history/.
-      3. Run 'allure generate' — Allure 2 reads results/history/ and writes
-         updated history back to {out_dir}/history/ automatically.
+    Filename: {out_dir}/consolidated-{timestamp}.html
 
-    This self-contained chain means the executor's Allure 2 history is
-    independent from any project-level pytest_configure flow.
+    History flow (single pass, shared history_dir):
+      1. Copy {history_dir}/ → temp_results/history/   (inject shared history)
+      2. allure generate --single-file -o temp_out      (reads history, generates)
+      3. Copy temp_out/complete.html → dest
+      4. Copy temp_out/history/      → {history_dir}/  (update shared history)
     """
-    history_src = out_dir / "history"
+    out_dir.mkdir(parents=True, exist_ok=True)
+    history_dir.mkdir(parents=True, exist_ok=True)
+    dest = out_dir / f"consolidated-{timestamp}.html"
+
     with tempfile.TemporaryDirectory() as tmp:
-        tmp_in = Path(tmp) / "results"
+        tmp_results = Path(tmp) / "results"
         if results_dir.is_dir():
-            shutil.copytree(str(results_dir), str(tmp_in))
+            shutil.copytree(str(results_dir), str(tmp_results))
         else:
-            tmp_in.mkdir()
-        # Inject executor's own history (does not overwrite what pytest_configure restored)
-        tmp_hist = tmp_in / "history"
-        if history_src.is_dir() and not tmp_hist.exists():
-            shutil.copytree(str(history_src), str(tmp_hist))
-        out_dir.mkdir(parents=True, exist_ok=True)
+            tmp_results.mkdir()
+
+        # Step 1 — inject shared accumulated history
+        tmp_hist = tmp_results / "history"
+        if history_dir.is_dir() and any(history_dir.iterdir()) and not tmp_hist.exists():
+            shutil.copytree(str(history_dir), str(tmp_hist))
+
+        # Step 2 — generate single-file report (also writes updated history/)
+        tmp_out = Path(tmp) / "report"
         try:
             subprocess.run(
-                [bin2, "generate", str(tmp_in), "--clean", "-o", str(out_dir)],
+                [bin2, "generate", str(tmp_results), "--single-file", "--clean",
+                 "-o", str(tmp_out)],
                 capture_output=True, timeout=180,
             )
         except Exception:
             return ""
-        idx = out_dir / "index.html"
-        return str(idx) if idx.exists() else ""
+
+        # Step 3 — locate the single-file HTML
+        candidate = tmp_out / "complete.html"
+        if not candidate.exists():
+            htmls = sorted(tmp_out.glob("*.html"),
+                           key=lambda f: f.stat().st_size, reverse=True)
+            candidate = htmls[0] if htmls else None
+        if not candidate or not candidate.exists():
+            return ""
+        shutil.copy2(str(candidate), str(dest))
+
+        # Step 4 — persist updated history back to shared history_dir
+        new_hist = tmp_out / "history"
+        if new_hist.is_dir():
+            if history_dir.exists():
+                shutil.rmtree(str(history_dir))
+            shutil.copytree(str(new_hist), str(history_dir))
+
+    return str(dest) if dest.exists() else ""
 
 
 def _allure3_consolidated(
     bin3: str, results_dir: Path, out_dir: Path,
-    history_jsonl: Path, name: str
+    history_jsonl: Path, name: str, timestamp: str,
 ) -> str:
     """
-    Generate an Allure 3 report with JSONL-based accumulated history.
+    Generate a standalone Allure 3 single-file consolidated report.
 
-    History flow (per Allure docs):
-      - Pass --history-path pointing to a persistent JSONL file.
-      - Allure 3 reads prior runs from the file and appends the current run.
-      - The JSONL file grows by one line per run (stores up to 20 by default).
+    Filename: {out_dir}/consolidated-{timestamp}.html
 
-    Allure 3 does not clean its output dir; stale files corrupt the report,
-    so we wipe it before each generation.
+    History flow (single pass):
+      allure awesome --single-file --history-path history.jsonl
+        Reads prior runs from JSONL → embeds in HTML → appends current run.
     """
-    if out_dir.exists():
-        shutil.rmtree(str(out_dir))
     out_dir.mkdir(parents=True, exist_ok=True)
     history_jsonl.parent.mkdir(parents=True, exist_ok=True)
+    dest = out_dir / f"consolidated-{timestamp}.html"
 
-    cmd = [bin3, "awesome", str(results_dir), "-o", str(out_dir), "--name", name,
-           "--history-path", str(history_jsonl)]
-    try:
-        subprocess.run(cmd, capture_output=True, timeout=180)
-    except Exception:
-        return ""
-    idx = out_dir / "index.html"
-    return str(idx) if idx.exists() else ""
+    with tempfile.TemporaryDirectory() as tmp:
+        tmp_out = Path(tmp) / "report"
+        cmd = [bin3, "awesome", str(results_dir),
+               "--output", str(tmp_out),
+               "--single-file",
+               "--name", name]
+        if history_jsonl.exists():
+            cmd += ["--history-path", str(history_jsonl)]
+        try:
+            subprocess.run(cmd, capture_output=True, timeout=180)
+        except Exception:
+            return ""
+
+        candidate = tmp_out / "index.html"
+        if not candidate.exists():
+            return ""
+        shutil.copy2(str(candidate), str(dest))
+
+    return str(dest) if dest.exists() else ""
 
 
 # ── Pre-run cleanup ───────────────────────────────────────────────────────────
@@ -347,9 +399,11 @@ def _generate_reports(repo: str, cfg: dict) -> dict:
         "pertest":    { "{uid}": "/abs/path/to/individual/{uid}-allure3.html", ... }
       }
     """
-    results_dir = Path(repo) / cfg.get("allure_results_dir", "allure/results")
-    fmt = cfg.get("allure_format", "allure2")
-    report_name = f"{Path(repo).name} — Test Report"
+    import datetime as _dt
+    results_dir  = Path(repo) / cfg.get("allure_results_dir",  "allure/results")
+    fmt          = cfg.get("allure_format", "allure2")
+    report_name  = f"{Path(repo).name} — Test Report"
+    timestamp    = _dt.datetime.now().strftime("%Y%m%d_%H%M%S")
     warnings: list[str] = []
 
     bin2 = (_find_allure_bin(cfg.get("allure2_bin", ""), want_v2=True)
@@ -380,18 +434,20 @@ def _generate_reports(repo: str, cfg: dict) -> dict:
     if not uid_files:
         return {"run_report": "", "pertest": {}}
 
-    test_count = len(uid_files)
+    test_count       = len(uid_files)
     consolidated_dir = Path(repo) / cfg.get("report_consolidated_dir", "allure/reports/consolidated")
-    pertest_dir      = Path(repo) / cfg.get("report_pertest_dir",      "allure/reports/individual")
-    # Allure 3 JSONL history lives alongside the consolidated report
-    history_jsonl    = consolidated_dir.parent / "allure3-history.jsonl"
+    pertest_dir      = Path(repo) / cfg.get("report_pertest_dir",       "allure/reports/individual")
+    history_dir      = Path(repo) / cfg.get("allure_history_dir",       "allure/allure-history")
+    history_jsonl    = history_dir / "allure3-history.jsonl"
 
     run_report = ""
     pertest: dict[str, str] = {}
 
     # ── Consolidated report ────────────────────────────────────────────────────
     if fmt in ("allure3", "both") and bin3:
-        path = _allure3_consolidated(bin3, results_dir, consolidated_dir, history_jsonl, report_name)
+        path = _allure3_consolidated(
+            bin3, results_dir, consolidated_dir, history_jsonl, report_name, timestamp
+        )
         if path:
             run_report = path
         else:
@@ -399,7 +455,7 @@ def _generate_reports(repo: str, cfg: dict) -> dict:
 
     if fmt in ("allure2", "both") and bin2:
         a2_dir = consolidated_dir if fmt == "allure2" else Path(str(consolidated_dir) + "-allure2")
-        path = _allure2_consolidated(bin2, results_dir, a2_dir)
+        path = _allure2_consolidated(bin2, results_dir, a2_dir, history_dir, timestamp)
         if path:
             if not run_report:
                 run_report = path
@@ -408,19 +464,38 @@ def _generate_reports(repo: str, cfg: dict) -> dict:
 
     # ── Per-test individual single-file reports (only when >1 test) ────────────
     if test_count > 1 and cfg.get("generate_pertest_reports", True):
+        # Build uid → method name map from result files for meaningful filenames
+        uid_methods: dict[str, str] = {}
+        for uid, result_file in uid_files.items():
+            try:
+                data = json.loads(result_file.read_text(encoding="utf-8"))
+                full = data.get("fullName", "")
+                method = (full.split("#")[-1] if "#" in full
+                          else full.split("::")[-1] if "::" in full
+                          else data.get("name", uid))
+                # Sanitise for filesystem
+                safe = "".join(c if c.isalnum() or c in "-_." else "_" for c in method)[:80]
+                uid_methods[uid] = safe or uid[:16]
+            except Exception:
+                uid_methods[uid] = uid[:16]
+
         def _gen_one(uid: str) -> tuple[str, str]:
             files = _files_for_uid(uid, results_dir)
             if not files:
                 return uid, ""
-            short_name = f"{uid[:8]} — {report_name}"
+            method   = uid_methods.get(uid, uid[:16])
+            basename = f"{method}-{timestamp}"
+            short_name = f"{method} — {report_name}"
             best = ""
             if fmt in ("allure3", "both") and bin3:
-                dest3 = pertest_dir / f"{uid}-allure3.html"
-                if _allure3_single_file(bin3, files, dest3, short_name):
+                dest3 = pertest_dir / f"{basename}-allure3.html"
+                if _allure3_single_file(bin3, files, dest3, short_name,
+                                        history_jsonl=history_jsonl if history_jsonl.exists() else None):
                     best = str(dest3)
             if fmt in ("allure2", "both") and bin2:
-                dest2 = pertest_dir / f"{uid}-allure2.html"
-                if _allure2_single_file(bin2, files, dest2):
+                dest2 = pertest_dir / f"{basename}-allure2.html"
+                if _allure2_single_file(bin2, files, dest2,
+                                        history_dir=history_dir if history_dir.is_dir() else None):
                     best = best or str(dest2)
             return uid, best
 

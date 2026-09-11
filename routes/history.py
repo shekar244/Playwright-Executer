@@ -280,19 +280,23 @@ def record_run_history(
                 test_report_rel = run_rel
 
             tests_detail.append({
-                "suite":          t.get("suite", ""),
-                "name":           t["name"],
-                "method":         t.get("method") or t["name"],
-                "fullName":       t.get("fullName", ""),
-                "status":         t["status"],
-                "uid":            uid,
-                "historyId":      t.get("historyId", ""),
-                "date":           datetime.datetime.fromtimestamp(start_ms / 1000).strftime("%Y-%m-%d") if start_ms else "",
-                "time":           datetime.datetime.fromtimestamp(start_ms / 1000).strftime("%H:%M:%S") if start_ms else "",
-                "duration_ms":    dur_ms,
-                "duration_s":     round(dur_ms / 1000, 2),
-                "report_path":    test_report_abs,
-                "report_relpath": test_report_rel,
+                "suite":               t.get("suite", ""),
+                "name":                t["name"],
+                "method":              t.get("method") or t["name"],
+                "fullName":            t.get("fullName", ""),
+                "status":              t["status"],
+                "uid":                 uid,
+                "historyId":           t.get("historyId", ""),
+                "date":                datetime.datetime.fromtimestamp(start_ms / 1000).strftime("%Y-%m-%d") if start_ms else "",
+                "time":                datetime.datetime.fromtimestamp(start_ms / 1000).strftime("%H:%M:%S") if start_ms else "",
+                "duration_ms":         dur_ms,
+                "duration_s":          round(dur_ms / 1000, 2),
+                # report_path = individual single-file when available, else consolidated
+                "report_path":         test_report_abs,
+                "report_relpath":      test_report_rel,
+                # consolidated_path = always the full-run SPA / consolidated report
+                "consolidated_path":   run_abs,
+                "consolidated_relpath": run_rel,
             })
 
     record = {
