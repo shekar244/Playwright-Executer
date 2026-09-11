@@ -392,40 +392,67 @@ def _allure3_consolidated(
     history_jsonl: Path, name: str, timestamp: str,
 ) -> str:
     """
-    Generate a standalone Allure 3 single-file consolidated report.
+    Generate an Allure 3 consolidated report — full SPA + standalone single-file.
 
-    Filename: {out_dir}/consolidated-{timestamp}.html
+    Why two passes:
+      --single-file reads --history-path to embed history in the HTML but does
+      NOT write back to the JSONL.  Only the full (non-single-file) generate
+      updates the JSONL.  So we run the full generate first to update the JSONL,
+      then the --single-file generate to produce a shareable standalone HTML.
 
-    History flow (single pass):
-      allure awesome --single-file --history-path history.jsonl
-        Reads prior runs from JSONL → embeds in HTML → appends current run.
+    History flow:
+      Pass 1: allure awesome {results} --output {run_dir} --history-path {jsonl}
+                → JSONL updated with current run  ← this is what was missing
+      Pass 2: allure awesome {results} --output {tmp} --single-file --history-path {jsonl}
+                → reads the now-updated JSONL, embeds full history in HTML
+
+    Output:
+      {out_dir}/{timestamp}/index.html          ← full SPA, served via /allure/
+      {out_dir}/consolidated-{timestamp}.html  ← standalone, shareable via file://
     """
-    out_dir.mkdir(parents=True, exist_ok=True)
+    run_dir = out_dir / timestamp
+    run_dir.mkdir(parents=True, exist_ok=True)
     history_jsonl.parent.mkdir(parents=True, exist_ok=True)
     dest = out_dir / f"consolidated-{timestamp}.html"
 
     with tempfile.TemporaryDirectory() as tmp:
-        tmp_out = Path(tmp) / "report"
-        # Always pass --history-path regardless of whether the file exists yet.
-        # Allure 3 creates the JSONL on the first run and appends on every
-        # subsequent run.  Omitting it on the first run means history is never
-        # started and no accumulation ever happens.
-        cmd = _allure3_base(bin3, "awesome") + [str(results_dir),
-               "--output", str(tmp_out),
-               "--single-file",
-               "--name", name,
-               "--history-path", str(history_jsonl)]
+        # Pass 1 — full report; this is the step that writes to the JSONL
+        tmp_full = Path(tmp) / "full"
+        base_cmd = _allure3_base(bin3, "awesome") + [str(results_dir),
+                   "--name", name,
+                   "--history-path", str(history_jsonl)]
         try:
-            subprocess.run(cmd, capture_output=True, timeout=180)
+            subprocess.run(
+                base_cmd + ["--output", str(tmp_full)],
+                capture_output=True, timeout=180,
+            )
         except Exception:
             return ""
 
-        candidate = tmp_out / "index.html"
-        if not candidate.exists():
+        idx = tmp_full / "index.html"
+        if not idx.exists():
             return ""
-        shutil.copy2(str(candidate), str(dest))
 
-    return str(dest) if dest.exists() else ""
+        # Copy full report to timestamped run_dir for Flask /allure/ serving
+        if run_dir.exists():
+            shutil.rmtree(str(run_dir))
+        shutil.copytree(str(tmp_full), str(run_dir))
+
+        # Pass 2 — single-file using the now-updated JSONL (best-effort)
+        tmp_single = Path(tmp) / "single"
+        try:
+            subprocess.run(
+                base_cmd + ["--output", str(tmp_single), "--single-file"],
+                capture_output=True, timeout=180,
+            )
+            candidate = tmp_single / "index.html"
+            if candidate.exists():
+                shutil.copy2(str(candidate), str(dest))
+        except Exception:
+            pass
+
+    idx_dest = run_dir / "index.html"
+    return str(idx_dest) if idx_dest.exists() else ""
 
 
 # ── Pre-run cleanup ───────────────────────────────────────────────────────────
