@@ -267,19 +267,24 @@ def _allure2_consolidated(
     history_dir: Path, timestamp: str,
 ) -> str:
     """
-    Generate a standalone Allure 2 single-file consolidated report.
+    Generate an Allure 2 consolidated report for the full run.
 
-    Filename: {out_dir}/consolidated-{timestamp}.html
+    Output: {out_dir}/{timestamp}/index.html  (multi-file SPA, served via /allure/)
 
-    History flow (single pass, shared history_dir):
-      1. Copy {history_dir}/ → temp_results/history/   (inject shared history)
-      2. allure generate --single-file -o temp_out      (reads history, generates)
-      3. Copy temp_out/complete.html → dest
-      4. Copy temp_out/history/      → {history_dir}/  (update shared history)
+    Why NOT --single-file: Allure 2 --single-file only outputs complete.html and
+    never writes a history/ folder, so history cannot be captured from that pass.
+    The full report correctly writes {out}/history/ which we merge back into the
+    shared history_dir for trend accumulation.
+
+    History flow:
+      1. Inject {history_dir}/*.json → temp_results/history/   (previous runs)
+      2. allure generate -o {timestamp_dir}                     (full report)
+      3. Merge {timestamp_dir}/history/*.json → {history_dir}/  (update history)
     """
-    out_dir.mkdir(parents=True, exist_ok=True)
+    # Each run gets its own timestamped subdirectory so reports accumulate.
+    run_dir = out_dir / timestamp
+    run_dir.mkdir(parents=True, exist_ok=True)
     history_dir.mkdir(parents=True, exist_ok=True)
-    dest = out_dir / f"consolidated-{timestamp}.html"
 
     with tempfile.TemporaryDirectory() as tmp:
         tmp_results = Path(tmp) / "results"
@@ -288,48 +293,51 @@ def _allure2_consolidated(
         else:
             tmp_results.mkdir()
 
-        # Step 1 — inject Allure 2 history JSON files from shared history_dir.
-        # Only .json files are copied so allure3-history.jsonl is not included.
+        # Step 1 — inject Allure 2 history JSON files into the temp results.
+        # Priority: use history_dir (our persistent store). If it is empty on
+        # the first run ever, fall back to allure/results/history/ which the
+        # project conftest restores from allure/reports/html/history/.
         tmp_hist = tmp_results / "history"
         tmp_hist.mkdir(exist_ok=True)
-        for hf in history_dir.iterdir():
-            if hf.is_file() and hf.suffix == ".json":
-                shutil.copy2(str(hf), str(tmp_hist / hf.name))
 
-        # Step 2 — generate single-file report (also writes updated history/).
-        # cwd=tmp keeps Allure 2 side-effect dirs (allure-history-storage etc.)
-        # inside the temp context so they never appear in the repo.
-        tmp_out = Path(tmp) / "report"
+        def _copy_json_files(src: Path, dst: Path) -> int:
+            count = 0
+            if src.is_dir():
+                for hf in src.iterdir():
+                    if hf.is_file() and hf.suffix == ".json":
+                        shutil.copy2(str(hf), str(dst / hf.name))
+                        count += 1
+            return count
+
+        copied = _copy_json_files(history_dir, tmp_hist)
+        if copied == 0:
+            # Bootstrap from the standard Allure 2 results/history/ location
+            # (populated by the project conftest from its own dashboard history).
+            _copy_json_files(results_dir / "history", tmp_hist)
+
+        # Step 2 — full report generate; cwd=tmp contains Allure 2 side-effect
+        # dirs (allure-history-storage etc.) so they never appear in the repo.
+        r = None
         try:
-            subprocess.run(
-                [bin2, "generate", str(tmp_results), "--single-file", "--clean",
-                 "-o", str(tmp_out)],
+            r = subprocess.run(
+                [bin2, "generate", str(tmp_results), "--clean", "-o", str(run_dir)],
                 capture_output=True, timeout=180,
                 cwd=tmp,
             )
-        except Exception:
-            return ""
+        except Exception as exc:
+            return f"ERROR:{exc}"  # caller broadcasts as warning
 
-        # Step 3 — locate the single-file HTML
-        candidate = tmp_out / "complete.html"
-        if not candidate.exists():
-            htmls = sorted(tmp_out.glob("*.html"),
-                           key=lambda f: f.stat().st_size, reverse=True)
-            candidate = htmls[0] if htmls else None
-        if not candidate or not candidate.exists():
-            return ""
-        shutil.copy2(str(candidate), str(dest))
+        idx = run_dir / "index.html"
+        if not idx.exists():
+            stderr = (r.stderr or b"").decode("utf-8", errors="replace")[:300] if r else ""
+            return f"ERROR:{stderr or 'index.html not found after allure generate'}"
 
-        # Step 4 — merge updated Allure 2 history JSON files back into shared history_dir.
-        # File-level merge (not directory replace) preserves allure3-history.jsonl.
-        new_hist = tmp_out / "history"
-        if new_hist.is_dir():
-            history_dir.mkdir(parents=True, exist_ok=True)
-            for hf in new_hist.iterdir():
-                if hf.is_file() and hf.suffix == ".json":
-                    shutil.copy2(str(hf), str(history_dir / hf.name))
+        # Step 3 — merge updated history back into shared history_dir so it is
+        # available for the next run (both consolidated and individual reports).
+        new_hist = run_dir / "history"
+        _copy_json_files(new_hist, history_dir)
 
-    return str(dest) if dest.exists() else ""
+    return str(idx) if idx.exists() else ""
 
 
 def _allure3_consolidated(
@@ -480,11 +488,12 @@ def _generate_reports(repo: str, cfg: dict) -> dict:
     if fmt in ("allure2", "both") and bin2:
         a2_dir = consolidated_dir if fmt == "allure2" else Path(str(consolidated_dir) + "-allure2")
         path = _allure2_consolidated(bin2, results_dir, a2_dir, history_dir, timestamp)
-        if path:
+        if path and not path.startswith("ERROR:"):
             if not run_report:
                 run_report = path
         else:
-            warnings.append("Allure 2 consolidated report generation failed — check binary path and results dir")
+            detail = path[6:] if path.startswith("ERROR:") else "index.html not generated"
+            warnings.append(f"Allure 2 consolidated failed — {detail}")
 
     if fmt in ("allure3", "both") and bin3:
         path = _allure3_consolidated(

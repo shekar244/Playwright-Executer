@@ -140,10 +140,30 @@ def get_dashboard():
         except Exception:
             report_path = ""
 
-        if report_path:
-            for t in tests:
-                if not t.get("report_path"):
-                    t["report_path"] = report_path
+        # Build uid → individual-report-path map from the latest history record.
+        # record_run_history stores per-test individual paths after each run;
+        # using them here ensures the current-run view shows both "📄 Test" and
+        # "📊 Run" buttons, not just the consolidated link.
+        uid_to_individual: dict = {}
+        history_records = load_history(repo)
+        if history_records:
+            for ht in (history_records[0].get("tests") or []):
+                uid = ht.get("uid", "")
+                ind  = ht.get("report_path", "")
+                cons = ht.get("consolidated_path", "")
+                if uid and ind and ind != cons:
+                    uid_to_individual[uid] = ind
+
+        for t in tests:
+            uid = t.get("uid", "")
+            # consolidated_path = the suite-level report for this run
+            if not t.get("consolidated_path"):
+                t["consolidated_path"] = report_path
+            # report_path = individual per-test file when available, else consolidated
+            if uid and uid in uid_to_individual:
+                t["report_path"] = uid_to_individual[uid]
+            elif not t.get("report_path"):
+                t["report_path"] = report_path
 
     return jsonify({
         "tests":       tests,
