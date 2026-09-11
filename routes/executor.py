@@ -189,9 +189,13 @@ def _allure2_single_file(
         tmp_in.mkdir()
         for f in files:
             shutil.copy2(str(f), str(tmp_in / f.name))
-        # Inject shared history so the History tab works in per-test reports
+        # Inject Allure 2 history JSON files — only .json, not allure3-history.jsonl
         if history_dir and history_dir.is_dir():
-            shutil.copytree(str(history_dir), str(tmp_in / "history"))
+            hist_target = tmp_in / "history"
+            hist_target.mkdir(exist_ok=True)
+            for hf in history_dir.iterdir():
+                if hf.is_file() and hf.suffix == ".json":
+                    shutil.copy2(str(hf), str(hist_target / hf.name))
         tmp_out = Path(tmp) / "out"
         try:
             subprocess.run(
@@ -274,10 +278,13 @@ def _allure2_consolidated(
         else:
             tmp_results.mkdir()
 
-        # Step 1 — inject shared accumulated history
+        # Step 1 — inject Allure 2 history JSON files from shared history_dir.
+        # Only .json files are copied so allure3-history.jsonl is not included.
         tmp_hist = tmp_results / "history"
-        if history_dir.is_dir() and any(history_dir.iterdir()) and not tmp_hist.exists():
-            shutil.copytree(str(history_dir), str(tmp_hist))
+        tmp_hist.mkdir(exist_ok=True)
+        for hf in history_dir.iterdir():
+            if hf.is_file() and hf.suffix == ".json":
+                shutil.copy2(str(hf), str(tmp_hist / hf.name))
 
         # Step 2 — generate single-file report (also writes updated history/)
         tmp_out = Path(tmp) / "report"
@@ -300,12 +307,14 @@ def _allure2_consolidated(
             return ""
         shutil.copy2(str(candidate), str(dest))
 
-        # Step 4 — persist updated history back to shared history_dir
+        # Step 4 — merge updated Allure 2 history JSON files back into shared history_dir.
+        # File-level merge (not directory replace) preserves allure3-history.jsonl.
         new_hist = tmp_out / "history"
         if new_hist.is_dir():
-            if history_dir.exists():
-                shutil.rmtree(str(history_dir))
-            shutil.copytree(str(new_hist), str(history_dir))
+            history_dir.mkdir(parents=True, exist_ok=True)
+            for hf in new_hist.iterdir():
+                if hf.is_file() and hf.suffix == ".json":
+                    shutil.copy2(str(hf), str(history_dir / hf.name))
 
     return str(dest) if dest.exists() else ""
 
@@ -437,21 +446,20 @@ def _generate_reports(repo: str, cfg: dict) -> dict:
     test_count       = len(uid_files)
     consolidated_dir = Path(repo) / cfg.get("report_consolidated_dir", "allure/reports/consolidated")
     pertest_dir      = Path(repo) / cfg.get("report_pertest_dir",       "allure/reports/individual")
-    history_dir      = Path(repo) / cfg.get("allure_history_dir",       "allure/allure-history")
-    history_jsonl    = history_dir / "allure3-history.jsonl"
+
+    # Shared history directory — single source of truth for all report types.
+    # Created upfront so generators can always reference it, even on the first run.
+    history_dir   = Path(repo) / cfg.get("allure_history_dir", "allure/allure-history")
+    history_dir.mkdir(parents=True, exist_ok=True)
+    history_jsonl = history_dir / "allure3-history.jsonl"
 
     run_report = ""
     pertest: dict[str, str] = {}
 
     # ── Consolidated report ────────────────────────────────────────────────────
-    if fmt in ("allure3", "both") and bin3:
-        path = _allure3_consolidated(
-            bin3, results_dir, consolidated_dir, history_jsonl, report_name, timestamp
-        )
-        if path:
-            run_report = path
-        else:
-            warnings.append("Allure 3 consolidated report generation failed — check binary path and results dir")
+    # Consolidated runs first so it updates history_dir before individual reports
+    # read from it. Individual reports inject the same history data so the
+    # History tab in every report shows how that test performed in previous runs.
 
     if fmt in ("allure2", "both") and bin2:
         a2_dir = consolidated_dir if fmt == "allure2" else Path(str(consolidated_dir) + "-allure2")
@@ -462,9 +470,20 @@ def _generate_reports(repo: str, cfg: dict) -> dict:
         else:
             warnings.append("Allure 2 consolidated report generation failed — check binary path and results dir")
 
+    if fmt in ("allure3", "both") and bin3:
+        path = _allure3_consolidated(
+            bin3, results_dir, consolidated_dir, history_jsonl, report_name, timestamp
+        )
+        if path:
+            run_report = run_report or path
+        else:
+            warnings.append("Allure 3 consolidated report generation failed — check binary path and results dir")
+
     # ── Per-test individual single-file reports (only when >1 test) ────────────
+    # history_dir is always passed — by now consolidated has updated it with the
+    # current run's history, so individual reports include up-to-date trend data.
     if test_count > 1 and cfg.get("generate_pertest_reports", True):
-        # Build uid → method name map from result files for meaningful filenames
+        # Build uid → sanitised method name for meaningful filenames
         uid_methods: dict[str, str] = {}
         for uid, result_file in uid_files.items():
             try:
@@ -473,7 +492,6 @@ def _generate_reports(repo: str, cfg: dict) -> dict:
                 method = (full.split("#")[-1] if "#" in full
                           else full.split("::")[-1] if "::" in full
                           else data.get("name", uid))
-                # Sanitise for filesystem
                 safe = "".join(c if c.isalnum() or c in "-_." else "_" for c in method)[:80]
                 uid_methods[uid] = safe or uid[:16]
             except Exception:
@@ -483,20 +501,19 @@ def _generate_reports(repo: str, cfg: dict) -> dict:
             files = _files_for_uid(uid, results_dir)
             if not files:
                 return uid, ""
-            method   = uid_methods.get(uid, uid[:16])
-            basename = f"{method}-{timestamp}"
+            method     = uid_methods.get(uid, uid[:16])
+            basename   = f"{method}-{timestamp}"
             short_name = f"{method} — {report_name}"
             best = ""
+            if fmt in ("allure2", "both") and bin2:
+                dest2 = pertest_dir / f"{basename}-allure2.html"
+                if _allure2_single_file(bin2, files, dest2, history_dir=history_dir):
+                    best = str(dest2)
             if fmt in ("allure3", "both") and bin3:
                 dest3 = pertest_dir / f"{basename}-allure3.html"
                 if _allure3_single_file(bin3, files, dest3, short_name,
-                                        history_jsonl=history_jsonl if history_jsonl.exists() else None):
-                    best = str(dest3)
-            if fmt in ("allure2", "both") and bin2:
-                dest2 = pertest_dir / f"{basename}-allure2.html"
-                if _allure2_single_file(bin2, files, dest2,
-                                        history_dir=history_dir if history_dir.is_dir() else None):
-                    best = best or str(dest2)
+                                        history_jsonl=history_jsonl):
+                    best = best or str(dest3)
             return uid, best
 
         workers = min(4, test_count)

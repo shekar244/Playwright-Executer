@@ -411,6 +411,19 @@ function connectStream() {
   eventSource.onerror = () => { eventSource.close(); setTimeout(connectStream, 1000); };
 }
 
+function refreshLog() {
+  // Reconnect SSE stream — the server replays recent buffered events on connect.
+  // Useful when logs stop appearing due to a dropped connection.
+  connectStream();
+  const btn = event?.currentTarget;
+  if (btn) {
+    const orig = btn.textContent;
+    btn.textContent = '↺ …';
+    btn.disabled = true;
+    setTimeout(() => { btn.textContent = orig; btn.disabled = false; }, 1200);
+  }
+}
+
 document.getElementById('log').addEventListener('scroll', function() {
   autoScroll = this.scrollTop + this.clientHeight >= this.scrollHeight - 20;
 });
