@@ -223,34 +223,74 @@ def _report_paths(repo: str, abs_path: str) -> tuple[str, str]:
     return abs_fwd, rel_fwd
 
 
-def record_run_history(repo: str, status: str, cfg: dict) -> None:
+def record_run_history(
+    repo: str, status: str, cfg: dict, report_info: dict | None = None
+) -> None:
+    """
+    Append a run record to report_history.json.
+
+    report_info (from _generate_reports in executor.py):
+      {
+        "run_report": "/abs/path/to/consolidated/index.html",
+        "pertest":    { "{uid}": "/abs/path/to/individual/{uid}-allure3.html", ... }
+      }
+
+    When report_info is provided:
+      - run_report is used as the run-level report_path on the record.
+      - Each test's report_path comes from pertest[uid] when available (a
+        self-contained single-file report for that test), or falls back to
+        run_report with a #/test/{uid} anchor for Allure 3 deep-linking.
+    When report_info is absent (legacy / feature runs), behaviour is unchanged.
+    """
     results_rel = cfg.get("allure_results_dir", "allure/results")
     results_dir = str(Path(repo) / results_rel) if repo else ""
     stats = parse_allure_results(results_dir) if results_dir else {
         "passed": 0, "failed": 0, "broken": 0, "skipped": 0, "total": 0
     }
 
-    run_abs, run_rel = _report_paths(repo, _find_report_path(repo, cfg))
+    # Determine run-level report path
+    if report_info and report_info.get("run_report"):
+        run_abs, run_rel = _report_paths(repo, report_info["run_report"])
+    else:
+        run_abs, run_rel = _report_paths(repo, _find_report_path(repo, cfg))
+
+    pertest_map: dict[str, str] = (report_info or {}).get("pertest", {})
+
     tests_detail: list[dict] = []
     if results_dir:
         for t in parse_allure_results_full(results_dir):
             start_ms = t.get("start") or 0
             stop_ms  = t.get("stop")  or 0
             dur_ms   = max(0, stop_ms - start_ms)
-            full_name = t.get("fullName", "")
-            method_name = full_name.split("::")[-1] if "::" in full_name else t["name"]
+            uid = t.get("uid", "")
+
+            # Priority for per-test report path:
+            #   1. Individual single-file report from report_info (best — self-contained)
+            #   2. Consolidated report with #/test/{uid} anchor (Allure 3 deep-link)
+            #   3. Run-level report (fallback)
+            if uid and uid in pertest_map:
+                test_report_abs, test_report_rel = _report_paths(repo, pertest_map[uid])
+            elif uid and run_abs:
+                test_report_abs = f"{run_abs}#/test/{uid}"
+                test_report_rel = f"{run_rel}#/test/{uid}" if run_rel else ""
+            else:
+                test_report_abs = run_abs
+                test_report_rel = run_rel
+
             tests_detail.append({
-                "suite":        t.get("suite", ""),
-                "name":         t["name"],
-                "method":       method_name,
-                "fullName":     full_name,
-                "status":       t["status"],
-                "date":         datetime.datetime.fromtimestamp(start_ms / 1000).strftime("%Y-%m-%d") if start_ms else "",
-                "time":         datetime.datetime.fromtimestamp(start_ms / 1000).strftime("%H:%M:%S") if start_ms else "",
-                "duration_ms":  dur_ms,
-                "duration_s":   round(dur_ms / 1000, 2),
-                "report_path":  run_abs,   # absolute path (forward slashes)
-                "report_relpath": run_rel, # relative to repo root (fallback)
+                "suite":          t.get("suite", ""),
+                "name":           t["name"],
+                "method":         t.get("method") or t["name"],
+                "fullName":       t.get("fullName", ""),
+                "status":         t["status"],
+                "uid":            uid,
+                "historyId":      t.get("historyId", ""),
+                "date":           datetime.datetime.fromtimestamp(start_ms / 1000).strftime("%Y-%m-%d") if start_ms else "",
+                "time":           datetime.datetime.fromtimestamp(start_ms / 1000).strftime("%H:%M:%S") if start_ms else "",
+                "duration_ms":    dur_ms,
+                "duration_s":     round(dur_ms / 1000, 2),
+                "report_path":    test_report_abs,
+                "report_relpath": test_report_rel,
             })
 
     record = {

@@ -334,9 +334,16 @@ Full example with all supported keys:
   "default_browser": "chromium",
   "default_workers": 1,
   "auto_open_report": false,
+
   "allure_results_dir": "allure/results",
+  "allure_format": "allure3",
+  "allure2_bin": "",
+  "allure3_bin": "",
+  "report_consolidated_dir": "allure/reports/consolidated",
+  "report_pertest_dir": "allure/reports/individual",
   "report_individual_dir": "allure/reports",
-  "report_consolidated_dir": "allure/reports/history",
+  "generate_pertest_reports": true,
+
   "extra_options": [],
   "features": [],
   "git_commands": [],
@@ -374,6 +381,104 @@ Full example with all supported keys:
   }
 }
 ```
+
+---
+
+## Allure Report Generation
+
+After every test run Amplyfy QEA generates Allure reports automatically. The behaviour adapts to how many tests ran and which format is configured.
+
+### Format selection (`allure_format`)
+
+| Value | Reports generated |
+|---|---|
+| `"allure3"` | Allure 3 only (default) |
+| `"allure2"` | Allure 2 only |
+| `"both"` | Both formats; consolidated report link uses Allure 3 |
+
+### Binary resolution (`allure2_bin` / `allure3_bin`)
+
+Set either key to the **full path** of the binary you want to use. Leave blank (`""`) to auto-detect:
+
+| Platform | Allure 2 fallback | Allure 3 fallback |
+|---|---|---|
+| macOS (Homebrew) | `/opt/homebrew/bin/allure` | `allure` on PATH |
+| Linux | `/usr/local/bin/allure` | `allure` on PATH |
+| Windows (Scoop) | `%USERPROFILE%\scoop\apps\allure\current\bin\allure.bat` | `allure` on PATH |
+| Windows (Chocolatey) | `C:\ProgramData\chocolatey\bin\allure.cmd` | `allure` on PATH |
+
+Example — explicit paths on macOS when both versions are installed:
+
+```json
+"allure_format": "both",
+"allure2_bin": "/opt/homebrew/bin/allure",
+"allure3_bin": "/usr/local/bin/allure3"
+```
+
+Example — Windows with Scoop:
+
+```json
+"allure_format": "allure2",
+"allure2_bin": "C:/Users/you/scoop/apps/allure/current/bin/allure.bat",
+"allure3_bin": ""
+```
+
+### Report logic by test count
+
+| Tests in run | What is generated |
+|---|---|
+| **= 1** | One consolidated report (Allure 2 and/or 3) in `report_consolidated_dir`. No per-test split needed. |
+| **> 1** | Consolidated report for the whole run **+** individual single-file shareable reports per test in `report_pertest_dir` (generated in parallel, max 4 workers). |
+
+### Directory layout
+
+```
+allure/
+  results/                        ← written by allure-pytest during the run
+  reports/
+    consolidated/                 ← all-tests report (report_consolidated_dir)
+      index.html                  ← Allure 3 SPA
+      history/                    ← Allure 2 history files (auto-managed)
+    consolidated-allure2/         ← Allure 2 report when format is "both"
+      index.html
+      history/
+    individual/                   ← per-test single-file reports (report_pertest_dir)
+      {uid}-allure3.html          ← self-contained Allure 3 report for one test
+      {uid}-allure2.html          ← self-contained Allure 2 report for one test
+  allure3-history.jsonl           ← Allure 3 accumulated history (auto-managed)
+```
+
+### History preservation
+
+**Allure 2** — history is preserved automatically between runs:
+1. Before each generate, the executor injects `{consolidated_dir}/history/` into a temporary results copy.
+2. Allure 2 reads it and writes updated history back to `{consolidated_dir}/history/`.
+3. The next run reads from there — up to 20 previous runs are tracked.
+
+**Allure 3** — history is accumulated in `allure3-history.jsonl` (next to `report_consolidated_dir`):
+1. The file is passed to Allure 3 via `--history-path` on every generate.
+2. Allure 3 reads prior runs from the file and appends the current run.
+3. No manual copying required — the JSONL grows by one line per run.
+
+### Report links in `report_history.json`
+
+Each test entry in the history file carries its own `report_path`:
+
+| Situation | Link stored |
+|---|---|
+| Individual single-file report exists for this test | Direct path to `{uid}-allure3.html` (self-contained, shareable) |
+| No individual report (e.g. `generate_pertest_reports: false`) | `{consolidated_report}#/test/{uid}` — deep-link into the Allure 3 SPA |
+| Fallback | Path to the consolidated report |
+
+### Disabling per-test reports
+
+For large test suites where generating one report per test is too slow:
+
+```json
+"generate_pertest_reports": false
+```
+
+Each test will then link to the consolidated report with an Allure 3 deep-link anchor (`#/test/{uid}`) instead.
 
 ---
 

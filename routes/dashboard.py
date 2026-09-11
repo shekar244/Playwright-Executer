@@ -13,7 +13,7 @@ from flask import Blueprint, jsonify, request
 
 from routes.history import (
     load_history, save_history,
-    parse_allure_results_full, parse_smart_reporter, parse_allure_history_trend,
+    parse_allure_results_full, parse_allure_history_trend,
 )
 from ui_launcher.config_reader import ConfigReader
 from ui_launcher.report_resolver import ReportResolver
@@ -30,25 +30,21 @@ def get_dashboard():
 
     if repo:
         results_dir = str(Path(repo) / cfg.get("allure_results_dir", "allure/results"))
-        allure_tests = parse_allure_results_full(results_dir)
-
-        report_dir = str(Path(repo) / cfg.get("report_individual_dir", "allure/reports"))
-        smart = parse_smart_reporter(report_dir)
-
-        tests = allure_tests if len(allure_tests) >= len(smart["results"]) else smart["results"]
-        if not tests:
-            tests = allure_tests or smart["results"]
-        summaries = smart["summaries"]
+        tests = parse_allure_results_full(results_dir)
         allure_trend = parse_allure_history_trend(repo, cfg)
 
-        # Suite-level report path
+        # Prefer the consolidated report for the suite-level link
         try:
             resolver = ReportResolver(repo, cfg.get("report_paths", []))
-            report_path = resolver.find_latest_in_dir(cfg.get("report_individual_dir", "allure/reports")) or ""
+            report_path = (
+                resolver.find_latest_in_dir(cfg.get("report_consolidated_dir", "allure/reports/consolidated"))
+                or resolver.find_latest_in_dir(cfg.get("report_individual_dir", "allure/reports"))
+                or ""
+            )
         except Exception:
             report_path = ""
 
-        # Every test in this run shares the same consolidated report path
+        # Stamp suite-level report onto tests that have no individual report yet
         if report_path:
             for t in tests:
                 if not t.get("report_path"):
@@ -56,7 +52,7 @@ def get_dashboard():
 
     return jsonify({
         "tests":       tests,
-        "summaries":   summaries,
+        "summaries":   [],
         "trend":       allure_trend,
         "run_history": load_history(repo),
         "report_path": report_path,

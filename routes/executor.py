@@ -6,11 +6,14 @@ Blueprint: Executor routes
 """
 from __future__ import annotations
 
+import concurrent.futures
+import json
 import os
 import queue
 import shutil
 import subprocess
 import sys
+import tempfile
 from pathlib import Path
 
 from flask import Blueprint, Response, jsonify, request
@@ -75,44 +78,313 @@ def _read_pip_ini_flags(python_path: str) -> list[str]:
     return []
 
 
-def _generate_allure3_report(repo: str, cfg: dict) -> str:
+# ── Allure binary discovery ────────────────────────────────────────────────────
+
+def _find_allure_bin(configured: str, want_v2: bool) -> str:
     """
-    Generate an Allure 3 single-file HTML report after a test run.
-    Returns the absolute path of the generated index.html, or '' on failure.
+    Return the path to the Allure binary for the requested format.
+
+    Resolution order (no version check — trust what is configured):
+      1. Explicit path from config (allure2_bin / allure3_bin) — used as-is.
+      2. PATH lookup via shutil.which (works on macOS, Linux, and Windows;
+         finds .cmd/.bat/.exe on Windows automatically via PATHEXT).
+      3. Well-known install locations per platform:
+           macOS/Linux Allure 2: /opt/homebrew/bin/allure, /usr/local/bin/allure
+           Windows Allure 2 (Scoop / Chocolatey):
+             %USERPROFILE%\scoop\apps\allure\current\bin\allure.bat
+             C:\ProgramData\chocolatey\bin\allure.cmd
     """
-    allure_bin = shutil.which("allure")
-    if not allure_bin:
-        return ""
+    import platform
 
-    results_rel = cfg.get("allure_results_dir", "allure/results")
-    report_rel  = cfg.get("report_individual_dir", "allure/reports")
-    results_dir = Path(repo) / results_rel
-    report_dir  = Path(repo) / report_rel
+    if configured:
+        p = Path(configured)
+        if p.exists():
+            return str(p)
 
-    if not results_dir.is_dir():
-        return ""
+    # PATH lookup works cross-platform and is the most reliable when no path is
+    # configured. On Windows, shutil.which resolves .cmd/.bat extensions.
+    found = shutil.which("allure")
+    if found and Path(found).exists():
+        return found
 
-    report_dir.mkdir(parents=True, exist_ok=True)
-    report_name = f"{Path(repo).name} — Test Report"
+    # Platform-specific well-known fallback locations
+    if platform.system() == "Windows":
+        candidates = [
+            Path.home() / "scoop" / "apps" / "allure" / "current" / "bin" / "allure.bat",
+            Path("C:/ProgramData/chocolatey/bin/allure.cmd"),
+            Path("C:/ProgramData/chocolatey/bin/allure.exe"),
+        ]
+    else:
+        # macOS (Homebrew) / Linux
+        candidates = [
+            Path("/opt/homebrew/bin/allure"),   # Apple Silicon Homebrew
+            Path("/usr/local/bin/allure"),       # Intel Homebrew / manual
+            Path("/usr/bin/allure"),
+        ]
+
+    for c in candidates:
+        if c.exists():
+            return str(c)
+
+    return ""
+
+
+# ── Per-test file collection ───────────────────────────────────────────────────
+
+def _files_for_uid(uid: str, results_dir: Path) -> list[Path]:
+    """Return all result, attachment, and container files needed for one test UID."""
+    result_file = results_dir / f"{uid}-result.json"
+    if not result_file.exists():
+        return []
+
+    files: list[Path] = [result_file]
+    seen: set[str] = {result_file.name}
+
+    def _add(p: Path) -> None:
+        if p.exists() and p.name not in seen:
+            files.append(p)
+            seen.add(p.name)
+
+    def _collect_attachments(node: dict) -> None:
+        for att in node.get("attachments", []):
+            src = att.get("source", "")
+            if src:
+                _add(results_dir / src)
+        for step in node.get("steps", []):
+            _collect_attachments(step)
 
     try:
-        subprocess.run(
-            [
-                allure_bin, "awesome",
-                str(results_dir),
-                "--output", str(report_dir),
-                "--single-file",
-                "--report-name", report_name,
-            ],
-            cwd=repo,
-            timeout=120,
-            capture_output=True,
-        )
-        # Allure 3 --single-file writes index.html
-        idx = report_dir / "index.html"
+        data = json.loads(result_file.read_text(encoding="utf-8"))
+        _collect_attachments(data)
+    except Exception:
+        pass
+
+    for cf in results_dir.glob("*-container.json"):
+        try:
+            cdata = json.loads(cf.read_text(encoding="utf-8"))
+            if uid in cdata.get("children", []):
+                _add(cf)
+                for stage in cdata.get("befores", []) + cdata.get("afters", []):
+                    _collect_attachments(stage)
+        except Exception:
+            pass
+
+    return files
+
+
+# ── Single-file generators ─────────────────────────────────────────────────────
+
+def _allure2_single_file(bin2: str, files: list[Path], dest: Path) -> bool:
+    """Generate an Allure 2 --single-file report from an explicit file list."""
+    with tempfile.TemporaryDirectory() as tmp:
+        tmp_in = Path(tmp) / "in"
+        tmp_in.mkdir()
+        for f in files:
+            shutil.copy2(str(f), str(tmp_in / f.name))
+        tmp_out = Path(tmp) / "out"
+        try:
+            subprocess.run(
+                [bin2, "generate", str(tmp_in), "--single-file", "--clean",
+                 "-o", str(tmp_out)],
+                capture_output=True, timeout=90,
+            )
+        except Exception:
+            return False
+        # Allure 2 --single-file writes complete.html
+        candidate = tmp_out / "complete.html"
+        if not candidate.exists():
+            htmls = list(tmp_out.glob("*.html"))
+            candidate = htmls[0] if htmls else None
+        if candidate and candidate.exists():
+            dest.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(str(candidate), str(dest))
+            return True
+    return False
+
+
+def _allure3_single_file(bin3: str, files: list[Path], dest: Path, name: str) -> bool:
+    """Generate an Allure 3 awesome --single-file report from an explicit file list."""
+    with tempfile.TemporaryDirectory() as tmp:
+        tmp_in = Path(tmp) / "in"
+        tmp_in.mkdir()
+        for f in files:
+            shutil.copy2(str(f), str(tmp_in / f.name))
+        tmp_out = Path(tmp) / "out"
+        try:
+            subprocess.run(
+                [bin3, "awesome", str(tmp_in),
+                 "--output", str(tmp_out),
+                 "--single-file",
+                 "--report-name", name],
+                capture_output=True, timeout=90,
+            )
+        except Exception:
+            return False
+        candidate = tmp_out / "index.html"
+        if candidate.exists():
+            dest.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(str(candidate), str(dest))
+            return True
+    return False
+
+
+# ── Consolidated report generators (with history) ─────────────────────────────
+
+def _allure2_consolidated(bin2: str, results_dir: Path, out_dir: Path) -> str:
+    """
+    Generate an Allure 2 report with accumulated history.
+
+    History flow (per Allure docs):
+      1. Read history from {out_dir}/history/ (written by the previous run).
+      2. Inject it into a temp copy of results as results/history/.
+      3. Run 'allure generate' — Allure 2 reads results/history/ and writes
+         updated history back to {out_dir}/history/ automatically.
+
+    This self-contained chain means the executor's Allure 2 history is
+    independent from any project-level pytest_configure flow.
+    """
+    history_src = out_dir / "history"
+    with tempfile.TemporaryDirectory() as tmp:
+        tmp_in = Path(tmp) / "results"
+        if results_dir.is_dir():
+            shutil.copytree(str(results_dir), str(tmp_in))
+        else:
+            tmp_in.mkdir()
+        # Inject executor's own history (does not overwrite what pytest_configure restored)
+        tmp_hist = tmp_in / "history"
+        if history_src.is_dir() and not tmp_hist.exists():
+            shutil.copytree(str(history_src), str(tmp_hist))
+        out_dir.mkdir(parents=True, exist_ok=True)
+        try:
+            subprocess.run(
+                [bin2, "generate", str(tmp_in), "--clean", "-o", str(out_dir)],
+                capture_output=True, timeout=180,
+            )
+        except Exception:
+            return ""
+        idx = out_dir / "index.html"
         return str(idx) if idx.exists() else ""
+
+
+def _allure3_consolidated(
+    bin3: str, results_dir: Path, out_dir: Path,
+    history_jsonl: Path, name: str
+) -> str:
+    """
+    Generate an Allure 3 report with JSONL-based accumulated history.
+
+    History flow (per Allure docs):
+      - Pass --history-path pointing to a persistent JSONL file.
+      - Allure 3 reads prior runs from the file and appends the current run.
+      - The JSONL file grows by one line per run (stores up to 20 by default).
+
+    Allure 3 does not clean its output dir; stale files corrupt the report,
+    so we wipe it before each generation.
+    """
+    if out_dir.exists():
+        shutil.rmtree(str(out_dir))
+    out_dir.mkdir(parents=True, exist_ok=True)
+    history_jsonl.parent.mkdir(parents=True, exist_ok=True)
+
+    cmd = [bin3, "awesome", str(results_dir), "-o", str(out_dir), "--name", name,
+           "--history-path", str(history_jsonl)]
+    try:
+        subprocess.run(cmd, capture_output=True, timeout=180)
     except Exception:
         return ""
+    idx = out_dir / "index.html"
+    return str(idx) if idx.exists() else ""
+
+
+# ── Main orchestrator ──────────────────────────────────────────────────────────
+
+def _generate_reports(repo: str, cfg: dict) -> dict:
+    """
+    Generate Allure reports after a test run.
+
+    Rules:
+      - 1 test  → one consolidated report (no per-test split needed)
+      - >1 tests → consolidated report + individual per-test single-file reports
+                   (generated in parallel, max 4 workers)
+
+    Format is controlled by cfg["allure_format"]:
+      "allure2" → Allure 2 only (with history)
+      "allure3" → Allure 3 only (with history.jsonl)
+      "both"    → both formats; run_report prefers allure3
+
+    Returns:
+      {
+        "run_report": "/abs/path/to/consolidated/index.html",
+        "pertest":    { "{uid}": "/abs/path/to/individual/{uid}-allure3.html", ... }
+      }
+    """
+    results_dir = Path(repo) / cfg.get("allure_results_dir", "allure/results")
+    fmt = cfg.get("allure_format", "allure3")
+    report_name = f"{Path(repo).name} — Test Report"
+
+    bin2 = (_find_allure_bin(cfg.get("allure2_bin", ""), want_v2=True)
+            if fmt in ("allure2", "both") else "")
+    bin3 = (_find_allure_bin(cfg.get("allure3_bin", ""), want_v2=False)
+            if fmt in ("allure3", "both") else "")
+
+    if not bin2 and not bin3:
+        return {"run_report": "", "pertest": {}}
+
+    uid_files: dict[str, Path] = {}
+    if results_dir.is_dir():
+        for f in results_dir.glob("*-result.json"):
+            uid = f.stem[:-7] if f.stem.endswith("-result") else f.stem
+            uid_files[uid] = f
+
+    if not uid_files:
+        return {"run_report": "", "pertest": {}}
+
+    test_count = len(uid_files)
+    consolidated_dir = Path(repo) / cfg.get("report_consolidated_dir", "allure/reports/consolidated")
+    pertest_dir      = Path(repo) / cfg.get("report_pertest_dir",      "allure/reports/individual")
+    # Allure 3 JSONL history lives alongside the consolidated report
+    history_jsonl    = consolidated_dir.parent / "allure3-history.jsonl"
+
+    run_report = ""
+    pertest: dict[str, str] = {}
+
+    # ── Consolidated report ────────────────────────────────────────────────────
+    if fmt in ("allure3", "both") and bin3:
+        path = _allure3_consolidated(bin3, results_dir, consolidated_dir, history_jsonl, report_name)
+        if path:
+            run_report = path
+
+    if fmt in ("allure2", "both") and bin2:
+        a2_dir = consolidated_dir if fmt == "allure2" else Path(str(consolidated_dir) + "-allure2")
+        path = _allure2_consolidated(bin2, results_dir, a2_dir)
+        if path and not run_report:
+            run_report = path
+
+    # ── Per-test individual single-file reports (only when >1 test) ────────────
+    if test_count > 1 and cfg.get("generate_pertest_reports", True):
+        def _gen_one(uid: str) -> tuple[str, str]:
+            files = _files_for_uid(uid, results_dir)
+            if not files:
+                return uid, ""
+            short_name = f"{uid[:8]} — {report_name}"
+            best = ""
+            if fmt in ("allure3", "both") and bin3:
+                dest3 = pertest_dir / f"{uid}-allure3.html"
+                if _allure3_single_file(bin3, files, dest3, short_name):
+                    best = str(dest3)
+            if fmt in ("allure2", "both") and bin2:
+                dest2 = pertest_dir / f"{uid}-allure2.html"
+                if _allure2_single_file(bin2, files, dest2):
+                    best = best or str(dest2)
+            return uid, best
+
+        workers = min(4, test_count)
+        with concurrent.futures.ThreadPoolExecutor(max_workers=workers) as ex:
+            for uid, path in ex.map(_gen_one, uid_files.keys()):
+                if path:
+                    pertest[uid] = path
+
+    return {"run_report": run_report, "pertest": pertest}
 
 
 def _display_cmd(cmd: list[str], repo: str) -> str:
@@ -359,11 +631,13 @@ def run_tests():
             else:
                 run_status = f"failed:{exit_code}"
             state.broadcast("status", run_status)
-            # Generate Allure 3 single-file HTML report
-            report_path = _generate_allure3_report(repo, cfg)
-            if report_path:
-                state.broadcast("line", f"[Report] Allure 3 report → {report_path}")
-            record_run_history(repo, run_status, cfg)
+            report_info = _generate_reports(repo, cfg)
+            if report_info.get("run_report"):
+                state.broadcast("line", f"[Report] Consolidated → {report_info['run_report']}")
+            n_pertest = len(report_info.get("pertest", {}))
+            if n_pertest:
+                state.broadcast("line", f"[Report] {n_pertest} individual test report(s) generated")
+            record_run_history(repo, run_status, cfg, report_info=report_info)
             state.broadcast("done", "")
 
         python = cmd[0] if cmd else sys.executable

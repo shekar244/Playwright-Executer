@@ -26,9 +26,14 @@ _DEFAULTS: dict = {
     ],
     "default_workers": 1,
     "auto_open_report": False,
-    "allure_results_dir": "allure/results",
-    "report_individual_dir": "allure/reports",
-    "report_consolidated_dir": "allure/reports/history",
+    "allure_results_dir":      "allure/results",
+    "report_consolidated_dir": "allure/reports/consolidated",   # all-tests report output
+    "report_pertest_dir":      "allure/reports/individual",     # per-test shareable reports
+    "report_individual_dir":   "allure/reports",                # legacy scan dir (dashboard fallback)
+    "allure_format":           "allure3",                       # "allure2" | "allure3" | "both"
+    "allure2_bin":             "",                              # explicit path; "" = auto-detect
+    "allure3_bin":             "",                              # explicit path; "" = auto-detect
+    "generate_pertest_reports": True,                          # per-test single-file reports when >1 test
     "extra_options": [],
     "config_override_path": "",
     "venv_path": "",          # relative to repo root (e.g. ".venv", "venv") or absolute
