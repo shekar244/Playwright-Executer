@@ -91,11 +91,26 @@ class TestRunner:
             with self._lock:
                 self._process = subprocess.Popen(**popen_kwargs)
 
-            # Read line-by-line in binary mode; decode each line manually.
-            # iter(..., b'') stops at EOF; readline() blocks until \n or EOF.
             assert self._process.stdout is not None
-            for raw in iter(self._process.stdout.readline, b""):
-                self.on_output(raw.decode("utf-8", errors="replace").rstrip("\r\n"))
+            if sys.platform == "win32":
+                # On Windows, readline() on a pipe can stall waiting for the OS
+                # buffer to fill.  Reading small chunks and splitting on \n gives
+                # lower latency — each pytest progress line arrives as it is written.
+                buf = b""
+                while True:
+                    chunk = self._process.stdout.read(128)
+                    if not chunk:
+                        break
+                    buf += chunk
+                    while b"\n" in buf:
+                        line, buf = buf.split(b"\n", 1)
+                        self.on_output(line.decode("utf-8", errors="replace").rstrip("\r"))
+                if buf:
+                    self.on_output(buf.decode("utf-8", errors="replace").rstrip("\r\n"))
+            else:
+                # On macOS / Linux readline() is fast and line-buffered.
+                for raw in iter(self._process.stdout.readline, b""):
+                    self.on_output(raw.decode("utf-8", errors="replace").rstrip("\r\n"))
 
             self._process.wait()
             exit_code = self._process.returncode

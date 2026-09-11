@@ -198,10 +198,14 @@ def _allure2_single_file(
                     shutil.copy2(str(hf), str(hist_target / hf.name))
         tmp_out = Path(tmp) / "out"
         try:
+            # cwd=tmp keeps any Allure 2 side-effect directories (e.g.
+            # allure-history-storage) inside the temp dir so they are
+            # automatically cleaned up and never appear in the repo.
             subprocess.run(
                 [bin2, "generate", str(tmp_in), "--single-file", "--clean",
                  "-o", str(tmp_out)],
                 capture_output=True, timeout=90,
+                cwd=tmp,
             )
         except Exception:
             return False
@@ -236,8 +240,14 @@ def _allure3_single_file(
                "--output", str(tmp_out),
                "--single-file",
                "--report-name", name]
+        # Use a temp COPY of the shared JSONL so the History tab is populated
+        # in the individual report but the real JSONL is never modified —
+        # Allure 3 appends to --history-path on every generate, so passing the
+        # real file here would corrupt it with single-test entries.
         if history_jsonl and history_jsonl.exists():
-            cmd += ["--history-path", str(history_jsonl)]
+            tmp_jsonl = Path(tmp) / "history-readonly.jsonl"
+            shutil.copy2(str(history_jsonl), str(tmp_jsonl))
+            cmd += ["--history-path", str(tmp_jsonl)]
         try:
             subprocess.run(cmd, capture_output=True, timeout=90)
         except Exception:
@@ -286,13 +296,16 @@ def _allure2_consolidated(
             if hf.is_file() and hf.suffix == ".json":
                 shutil.copy2(str(hf), str(tmp_hist / hf.name))
 
-        # Step 2 — generate single-file report (also writes updated history/)
+        # Step 2 — generate single-file report (also writes updated history/).
+        # cwd=tmp keeps Allure 2 side-effect dirs (allure-history-storage etc.)
+        # inside the temp context so they never appear in the repo.
         tmp_out = Path(tmp) / "report"
         try:
             subprocess.run(
                 [bin2, "generate", str(tmp_results), "--single-file", "--clean",
                  "-o", str(tmp_out)],
                 capture_output=True, timeout=180,
+                cwd=tmp,
             )
         except Exception:
             return ""
@@ -338,12 +351,15 @@ def _allure3_consolidated(
 
     with tempfile.TemporaryDirectory() as tmp:
         tmp_out = Path(tmp) / "report"
+        # Always pass --history-path regardless of whether the file exists yet.
+        # Allure 3 creates the JSONL on the first run and appends on every
+        # subsequent run.  Omitting it on the first run means history is never
+        # started and no accumulation ever happens.
         cmd = [bin3, "awesome", str(results_dir),
                "--output", str(tmp_out),
                "--single-file",
-               "--name", name]
-        if history_jsonl.exists():
-            cmd += ["--history-path", str(history_jsonl)]
+               "--name", name,
+               "--history-path", str(history_jsonl)]
         try:
             subprocess.run(cmd, capture_output=True, timeout=180)
         except Exception:
@@ -764,6 +780,11 @@ def run_tests():
         # (cleaning an already-clean dir is a no-op).
         _clean_allure_results(repo, cfg)
 
+        # Create history dir upfront (before subprocess) so it exists from
+        # the very first run and Allure can reference it immediately.
+        history_dir = Path(repo) / cfg.get("allure_history_dir", "allure/allure-history")
+        history_dir.mkdir(parents=True, exist_ok=True)
+
         state.broadcast("cmd", _display_cmd(cmd, repo))
         state._is_running = True
 
@@ -832,16 +853,26 @@ def stream():
                 yield buffered
             while True:
                 try:
-                    msg = q.get(timeout=25)
+                    msg = q.get(timeout=3)
                     yield msg
                 except queue.Empty:
+                    # Short heartbeat keeps the TCP connection alive and forces
+                    # Windows' TCP stack to flush buffered SSE data immediately.
                     yield ": heartbeat\n\n"
         finally:
             if q in state._output_queues:
                 state._output_queues.remove(q)
 
-    return Response(generate(), mimetype="text/event-stream",
-                    headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
+    return Response(
+        generate(),
+        mimetype="text/event-stream",
+        headers={
+            "Cache-Control":      "no-cache",
+            "X-Accel-Buffering":  "no",        # disable nginx/proxy buffering
+            "Connection":         "keep-alive", # keep socket open between events
+            "Transfer-Encoding":  "chunked",    # each yield is sent as a chunk immediately
+        },
+    )
 
 
 # ── Features run ───────────────────────────────────────────────────────────────

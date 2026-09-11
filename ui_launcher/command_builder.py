@@ -62,7 +62,10 @@ class CommandBuilder:
         """Return a list of strings suitable for subprocess.Popen(args=...)."""
 
         python = self._resolve_python()
-        cmd: List[str] = [python, "-m", "pytest"]
+        # -u forces truly unbuffered stdout/stderr at the Python level.
+        # On Windows, PYTHONUNBUFFERED=1 alone is not always honoured when
+        # stdout is a pipe; the -u flag is the most reliable override.
+        cmd: List[str] = [python, "-u", "-m", "pytest"]
 
         # ── Test target ───────────────────────────────────────────────────────
         target = self._resolve_target(suite, file_sel, test_tree)

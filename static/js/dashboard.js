@@ -438,21 +438,21 @@ function _renderTestTable(tests) {
     const runAt    = t.start ? new Date(t.start).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : '—';
     const suite    = escHtml(t.file  || t.fullName?.split('#')[0]?.replace(/^\./, '') || t.suite || '—');
     const name     = escHtml(t.method || t.fullName?.split('#').pop() || t.name || '—');
-    // Per-test links: individual single-file + consolidated SPA (when available and different)
-    const indivPath  = t.report_path       || _currentReportPath;
-    const consPath   = t.consolidated_path || _currentReportPath;
-    const hasIndiv   = !!indivPath;
-    const hasCons    = !!consPath;
-    const bothDiffer = hasIndiv && hasCons && indivPath !== consPath;
-    const linkStyle  = 'font-size:10px;font-weight:600;color:var(--accent);text-decoration:none;border:1px solid rgba(137,180,250,0.25);border-radius:4px;padding:2px 7px;background:var(--accent-glow);';
-    const reportCell = !hasIndiv && !hasCons
+    // Per-test links: always use report_path for the individual test link.
+    // consolidated_path is the run-level report shown as a secondary button only
+    // when it differs from report_path (i.e. an individual per-test file exists).
+    const testPath  = t.report_path       || t.report_relpath  || '';
+    const consPath  = t.consolidated_path || t.consolidated_relpath || '';
+    const linkStyle = 'font-size:10px;font-weight:600;color:var(--accent);text-decoration:none;border:1px solid rgba(137,180,250,0.25);border-radius:4px;padding:2px 7px;background:var(--accent-glow);';
+    const showBoth  = testPath && consPath && testPath !== consPath;
+    const reportCell = !testPath && !consPath
       ? `<span style="font-size:10px;color:var(--text-dim);">N/A</span>`
-      : bothDiffer
+      : showBoth
         ? `<span style="display:flex;gap:4px;justify-content:center;flex-wrap:wrap;">
-             <a href="#" onclick="event.preventDefault();_openReportPath(this.dataset.path,'')" data-path="${escHtml(indivPath)}" style="${linkStyle}" title="Individual test report (self-contained)">📄 Test</a>
+             <a href="#" onclick="event.preventDefault();_openReportPath(this.dataset.path,'')" data-path="${escHtml(testPath)}" style="${linkStyle}" title="Individual test report">📄 Test</a>
              <a href="#" onclick="event.preventDefault();_openReportPath(this.dataset.path,'')" data-path="${escHtml(consPath)}" style="${linkStyle}" title="Consolidated run report">📊 Run</a>
            </span>`
-        : `<a href="#" onclick="event.preventDefault();_openReportPath(this.dataset.path,'')" data-path="${escHtml(indivPath || consPath)}" style="${linkStyle}" title="${escHtml(indivPath || consPath)}">📊 View</a>`;
+        : `<a href="#" onclick="event.preventDefault();_openReportPath(this.dataset.path,'')" data-path="${escHtml(testPath || consPath)}" style="${linkStyle}" title="${escHtml(testPath || consPath)}">📊 View</a>`;
     return `<tr>
       <td style="color:var(--text-dim);font-size:11px;max-width:130px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${suite}">${suite}</td>
       <td style="max-width:340px;" title="${name}"><span style="font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--text);">${name}</span></td>
@@ -587,8 +587,10 @@ function showRunDetail(absIdx) {
       suite:             t.suite       || '',
       status:            t.status      || 'unknown',
       fullName:          t.fullName    || '',
-      report_path:       t.report_path || record.report_path || '',
-      consolidated_path: t.consolidated_path || record.report_path || '',
+      report_path:         t.report_path         || '',
+      report_relpath:      t.report_relpath      || '',
+      consolidated_path:   t.consolidated_path   || record.report_path    || '',
+      consolidated_relpath: t.consolidated_relpath || record.report_relpath || '',
       start,
       duration: t.duration_ms || Math.round((t.duration_s || 0) * 1000),
     };
