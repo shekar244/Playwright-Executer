@@ -209,6 +209,7 @@
     <button type="button" class="cfg-tab-btn" onclick="switchCfgTab('tools')" id="ctab-tools">🔧 CLI Tools</button>
     <button type="button" class="cfg-tab-btn" onclick="switchCfgTab('allure')" id="ctab-allure">📊 Allure</button>
     <button type="button" class="cfg-tab-btn" onclick="switchCfgTab('jfrog')" id="ctab-jfrog">🏺 JFrog</button>
+    <button type="button" class="cfg-tab-btn" onclick="switchCfgTab('atlassian')" id="ctab-atlassian">🔗 Atlassian</button>
     <button type="button" class="cfg-tab-btn" onclick="switchCfgTab('mapping')" id="ctab-mapping">🗂️ Field Mapping</button>
     <button type="button" class="cfg-tab-btn" onclick="switchCfgTab('zephyr')" id="ctab-zephyr">🔷 Zephyr Config</button>
     <button type="button" class="cfg-tab-btn" onclick="switchCfgTab('uitabs')" id="ctab-uitabs" style="margin-left:auto;">🎛️ Tabs</button>
@@ -434,6 +435,59 @@
         <button class="btn btn-sm" onclick="loadJfrogConfig()">↺ Reload</button>
         <span id="jfrogStatus" style="font-size:11px;color:var(--text-dim);margin-left:4px;width:100%;"></span>
       </div>
+    </div>
+
+    <!-- Panel: Atlassian OAuth -->
+    <div id="cfgAtlassian" style="display:none;flex-direction:column;gap:14px;">
+      <div class="hint">
+        Connect Amplify QEA to Atlassian via OAuth 2.0. Once connected, the AI Studio tab can search
+        linked Jira tickets for failing tests. No Jira admin access required — you authorize your own account.
+      </div>
+
+      <!-- Auth status banner -->
+      <div id="atlassianStatusBanner" style="padding:10px 14px;border-radius:var(--radius);border:1px solid var(--border);font-size:12px;display:flex;align-items:center;gap:10px;background:rgba(255,255,255,0.03);">
+        <span id="atlassianStatusDot" style="width:9px;height:9px;border-radius:50%;background:#6e7681;flex-shrink:0;"></span>
+        <span id="atlassianStatusText" style="color:var(--text-dim);">Checking…</span>
+        <button type="button" class="btn btn-sm" id="atlassianDisconnectBtn" onclick="atlassianDisconnect()" style="display:none;margin-left:auto;border-color:#f85149;color:#f85149;">Disconnect</button>
+      </div>
+
+      <!-- Setup instructions -->
+      <div style="font-size:11px;color:var(--text-dim);line-height:1.7;padding:10px 12px;border:1px solid var(--border);border-radius:var(--radius);background:rgba(255,255,255,0.02);">
+        <strong style="color:var(--text);display:block;margin-bottom:6px;">One-time setup (2 min):</strong>
+        1. Go to <a href="https://developer.atlassian.com/console/myapps/" target="_blank" style="color:var(--accent);">developer.atlassian.com/console/myapps</a><br>
+        2. Create app → <strong>OAuth 2.0 (3LO)</strong><br>
+        3. Under <em>Authorization</em>, set callback URL to:
+        <code style="font-size:10px;padding:1px 5px;background:var(--bg);border-radius:3px;margin-left:4px;">http://amplify-qea:7777/auth/atlassian/callback</code><br>
+        4. Enable scopes: <code style="font-size:10px;padding:1px 5px;background:var(--bg);border-radius:3px;">read:me  read:jira-user  read:jira-work  offline_access</code><br>
+        5. Paste <strong>Client ID</strong> and <strong>Client Secret</strong> below → Save → Connect
+      </div>
+
+      <div class="field"><label>Client ID</label>
+        <input type="text" id="at_client_id" placeholder="From developer.atlassian.com → your app → Settings" style="font-family:'JetBrains Mono',monospace;font-size:11px;" />
+      </div>
+      <div class="field"><label>Client Secret</label>
+        <input type="password" id="at_client_secret" placeholder="••••••••••••••••••••••••••••••••" style="font-family:'JetBrains Mono',monospace;font-size:11px;" />
+      </div>
+      <div class="field"><label>Cloud ID <span style="font-weight:400;color:var(--text-dim);">(auto-filled after first connect)</span></label>
+        <input type="text" id="at_cloud_id" placeholder="e.g. a1b2c3d4-xxxx-xxxx-xxxx-xxxxxxxxxxxx" style="font-family:'JetBrains Mono',monospace;font-size:11px;" readonly />
+      </div>
+
+      <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+        <button type="button" class="btn btn-sm" onclick="atlassianSaveCredentials()">💾 Save Credentials</button>
+        <button type="button" class="btn btn-run" onclick="atlassianConnect()" style="padding:6px 18px;font-size:12px;" id="atlassianConnectBtn">🔗 Connect Atlassian</button>
+        <button type="button" class="btn btn-sm" onclick="atlassianProbeSites()" id="atlassianSitesBtn" style="display:none;">🔍 Load Sites</button>
+        <button type="button" class="btn btn-sm" onclick="atlassianProbeRovo()" id="atlassianRovoBtn" style="display:none;">🤖 Probe Rovo API</button>
+        <span id="atlassianSaveStatus" style="font-size:11px;color:var(--text-dim);"></span>
+      </div>
+
+      <!-- Sites list (populated after connect) -->
+      <div id="atlassianSitesList" style="display:none;">
+        <div style="font-size:11px;font-weight:700;color:var(--text-dim);margin-bottom:6px;text-transform:uppercase;letter-spacing:.06em;">Accessible Sites</div>
+        <div id="atlassianSitesTable" style="font-size:12px;display:flex;flex-direction:column;gap:4px;"></div>
+      </div>
+
+      <!-- Rovo probe result -->
+      <div id="atlassianRovoResult" style="display:none;font-size:11px;padding:10px 12px;border-radius:var(--radius);border:1px solid var(--border);"></div>
     </div>
 
     <!-- Panel: Field Mapping -->

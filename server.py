@@ -22,8 +22,11 @@ from routes.git         import bp as git_bp
 from routes.dashboard   import bp as dashboard_bp
 from routes.zephyr      import bp as zephyr_bp
 from routes.filemanager import bp as filemanager_bp
+from routes.studio      import bp as studio_bp
+from routes.atlassian   import bp as atlassian_bp
 
 app = Flask(__name__, static_folder="static", template_folder="templates")
+app.secret_key = os.environ.get("AMPLIFY_SECRET_KEY") or "amplify-qea-local-secret-change-me"
 
 app.register_blueprint(executor_bp)
 app.register_blueprint(config_bp)
@@ -31,6 +34,8 @@ app.register_blueprint(git_bp)
 app.register_blueprint(dashboard_bp)
 app.register_blueprint(zephyr_bp)
 app.register_blueprint(filemanager_bp)
+app.register_blueprint(studio_bp)
+app.register_blueprint(atlassian_bp)
 
 
 @app.route("/")

@@ -180,7 +180,7 @@ def read_jfrog_pip_ini():
 
     Returns 404 when no pip.ini exists or it has no parseable index-url.
     """
-    import platform, re, sys
+    import re, sys
     from ui_launcher.command_builder import resolve_python
 
     cfg       = ConfigReader().load()
@@ -188,8 +188,7 @@ def read_jfrog_pip_ini():
     python    = resolve_python(repo_root, cfg.get("venv_path", "")) if repo_root else sys.executable
     venv_root = Path(python).parent.parent
 
-    pip_ini_name = "pip.ini" if platform.system() == "Windows" else "pip.conf"
-    pip_ini_path = venv_root / pip_ini_name
+    pip_ini_path = venv_root / "pip.ini"
 
     if not pip_ini_path.exists():
         return jsonify({"found": False, "path": str(pip_ini_path)}), 404
@@ -267,7 +266,7 @@ def generate_jfrog_pip_ini():
       [install]
       trusted-host = {hostname}
     """
-    import platform, re, sys
+    import re, sys
     from ui_launcher.command_builder import resolve_python
 
     body = request.json or {}
@@ -302,8 +301,7 @@ def generate_jfrog_pip_ini():
     python    = resolve_python(repo_root, cfg.get("venv_path", "")) if repo_root else sys.executable
     venv_root = Path(python).parent.parent
 
-    pip_ini_name = "pip.ini" if platform.system() == "Windows" else "pip.conf"
-    pip_ini_path = venv_root / pip_ini_name
+    pip_ini_path = venv_root / "pip.ini"
 
     try:
         pip_ini_path.write_text(content, encoding="utf-8")
@@ -344,6 +342,23 @@ def preview_jfrog_pip_ini():
         f"index-url = {index_url}\n"
     )
     return jsonify({"content": content})
+
+
+@bp.route("/api/config/atlassian", methods=["POST"])
+def save_atlassian_config():
+    """Save Atlassian OAuth app credentials (client_id + client_secret)."""
+    body    = request.json or {}
+    allowed = {"atlassian_client_id", "atlassian_client_secret", "atlassian_cloud_id"}
+    reader  = ConfigReader()
+    cfg     = reader.load()
+    for key in allowed:
+        if key in body:
+            cfg[key] = body[key]
+    try:
+        reader.save(cfg)
+    except OSError as exc:
+        return jsonify({"error": str(exc)}), 500
+    return jsonify({"ok": True})
 
 
 @bp.route("/api/config/pinned-repos", methods=["POST"])

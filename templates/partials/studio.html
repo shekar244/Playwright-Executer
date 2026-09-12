@@ -1,0 +1,498 @@
+<!-- ══════════════════════════════════════════════════════════════
+     AI Studio Tab  (#page-studio)
+     3-panel layout:
+       left   — test file sidebar with Allure status colour
+       top-right  — source code viewer
+       bottom-right — error trace + "Apply Code Fix" form
+     ══════════════════════════════════════════════════════════════ -->
+<style>
+  /* Studio layout */
+  #page-studio { display:none; flex:1; min-height:0; gap:0; }
+  #page-studio.active { display:flex; }
+
+  .studio-layout {
+    display: grid;
+    grid-template-columns: 240px 1fr;
+    grid-template-rows: 1fr;
+    width: 100%;
+    min-height: 0;
+    gap: 0;
+    overflow: hidden;
+  }
+
+  /* Left sidebar */
+  .studio-sidebar {
+    border-right: 1px solid var(--border);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    background: var(--bg);
+  }
+  .studio-sidebar-header {
+    padding: 10px 14px;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.07em;
+    color: var(--text-dim);
+    text-transform: uppercase;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-shrink: 0;
+  }
+  .studio-file-list {
+    overflow-y: auto;
+    flex: 1;
+    padding: 6px 0;
+  }
+  .studio-file-item {
+    padding: 7px 14px;
+    font-size: 12px;
+    cursor: pointer;
+    border-left: 3px solid transparent;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    color: var(--text-muted);
+    transition: all 0.1s;
+    word-break: break-all;
+  }
+  .studio-file-item:hover { background: rgba(255,255,255,0.04); color: var(--text); }
+  .studio-file-item.active-file { background: var(--accent-glow); color: var(--accent); border-left-color: var(--accent); }
+  .studio-file-item.status-passed  { border-left-color: #3fb950; }
+  .studio-file-item.status-failed  { border-left-color: #f85149; background: rgba(248,81,73,0.07); color: #f85149; }
+  .studio-file-item.status-broken  { border-left-color: #e3b341; background: rgba(227,179,65,0.07); color: #e3b341; }
+  .studio-file-item.status-skipped { border-left-color: #6e7681; color: #6e7681; }
+  .studio-status-dot {
+    width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0;
+    background: #6e7681;
+  }
+  .studio-status-dot.passed  { background: #3fb950; }
+  .studio-status-dot.failed  { background: #f85149; }
+  .studio-status-dot.broken  { background: #e3b341; }
+  .studio-status-dot.skipped { background: #6e7681; }
+
+  /* Right panels */
+  .studio-right {
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+    overflow: hidden;
+  }
+  .studio-pane {
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+    border-bottom: 1px solid var(--border);
+    overflow: hidden;
+  }
+  .studio-pane:last-child { border-bottom: none; }
+  .studio-pane-header {
+    padding: 8px 16px;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.07em;
+    color: var(--text-dim);
+    text-transform: uppercase;
+    border-bottom: 1px solid var(--border);
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    background: var(--bg);
+  }
+  .studio-pane-header span { color: var(--text-muted); font-weight: 400; text-transform: none; font-size: 11px; }
+
+  /* Source code pane */
+  .studio-code-wrap {
+    flex: 1;
+    overflow: auto;
+    padding: 0;
+    background: var(--surface);
+  }
+  .studio-code-wrap pre {
+    margin: 0;
+    padding: 14px 18px;
+    font-size: 12px;
+    font-family: 'JetBrains Mono', 'Fira Code', monospace;
+    color: var(--text);
+    white-space: pre;
+    line-height: 1.6;
+  }
+
+  /* Error trace pane */
+  .studio-error-pane { flex: 0 0 auto; }
+  .studio-trace-wrap {
+    padding: 10px 16px;
+    max-height: 130px;
+    overflow-y: auto;
+    font-size: 11px;
+    font-family: monospace;
+    color: #f85149;
+    background: rgba(248,81,73,0.06);
+    border-bottom: 1px solid var(--border);
+    white-space: pre-wrap;
+    word-break: break-all;
+    flex-shrink: 0;
+  }
+  .studio-trace-wrap.no-error { color: var(--text-dim); font-style: italic; }
+
+  /* Patch form */
+  .studio-patch-form {
+    padding: 12px 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    background: var(--surface);
+    flex-shrink: 0;
+  }
+  .studio-patch-form textarea {
+    width: 100%;
+    height: 120px;
+    resize: vertical;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    color: var(--text);
+    font-size: 12px;
+    font-family: 'JetBrains Mono', monospace;
+    padding: 8px 10px;
+    box-sizing: border-box;
+    line-height: 1.5;
+  }
+  .studio-patch-form textarea:focus { outline: none; border-color: var(--accent); }
+  .studio-patch-row { display: flex; align-items: center; gap: 10px; }
+  .studio-apply-btn {
+    background: var(--accent);
+    color: #0d1117;
+    border: none;
+    border-radius: var(--radius);
+    padding: 7px 18px;
+    font-size: 12px;
+    font-weight: 700;
+    cursor: pointer;
+    flex-shrink: 0;
+  }
+  .studio-apply-btn:hover { opacity: 0.85; }
+  .studio-apply-btn:disabled { opacity: 0.4; cursor: default; }
+  .studio-hint {
+    font-size: 11px;
+    color: var(--text-dim);
+    line-height: 1.5;
+  }
+  .studio-rerun-badge {
+    font-size: 10px;
+    padding: 2px 8px;
+    border-radius: 10px;
+    background: rgba(63,185,80,0.15);
+    color: #3fb950;
+    display: none;
+  }
+  .studio-launch-row {
+    padding: 8px 14px;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-shrink: 0;
+    background: rgba(255,255,255,0.015);
+  }
+  .studio-launch-btn {
+    background: transparent;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    color: var(--text-muted);
+    font-size: 11px;
+    font-weight: 600;
+    cursor: pointer;
+    padding: 4px 12px;
+    display: flex;
+    align-items: center;
+    gap: 5px;
+  }
+  .studio-launch-btn:hover { border-color: var(--accent); color: var(--accent); }
+  .studio-launch-label { font-size: 11px; color: var(--text-dim); }
+</style>
+
+<div id="page-studio">
+  <div class="studio-layout">
+
+    <!-- ── Left: file sidebar ─────────────────────────────────── -->
+    <div class="studio-sidebar">
+      <div class="studio-sidebar-header">
+        Test Files
+        <button class="studio-launch-btn" onclick="studioRefresh()" title="Refresh results" style="padding:2px 8px;font-size:10px;">↻ Refresh</button>
+      </div>
+
+      <!-- Atlassian connection status + Jira search -->
+      <div class="studio-launch-row" id="studioAtlassianRow">
+        <span id="studioAtlassianDot" style="width:8px;height:8px;border-radius:50%;background:#6e7681;flex-shrink:0;"></span>
+        <span id="studioAtlassianLabel" style="font-size:11px;color:var(--text-dim);">Checking Atlassian…</span>
+        <button type="button" class="studio-launch-btn" id="studioConnectBtn" onclick="switchTab('tools');switchCfgTab('atlassian')" style="display:none;margin-left:auto;">🔗 Connect</button>
+        <button type="button" class="studio-launch-btn" onclick="studioLaunchRovo()" style="margin-left:auto;">Open in Edge</button>
+      </div>
+
+      <!-- Jira search (shown when authenticated) -->
+      <div id="studioJiraSearch" style="display:none;padding:6px 10px;border-bottom:1px solid var(--border);gap:6px;flex-direction:column;">
+        <div style="display:flex;gap:6px;align-items:center;">
+          <input type="text" id="studioJiraQuery" placeholder="Search Jira: test name or keyword…"
+                 style="flex:1;font-size:11px;padding:4px 8px;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius);color:var(--text);"
+                 onkeydown="if(event.key==='Enter')studioJiraSearch()" />
+          <button type="button" class="studio-launch-btn" onclick="studioJiraSearch()">Search</button>
+        </div>
+        <div id="studioJiraResults" style="font-size:11px;color:var(--text-dim);max-height:160px;overflow-y:auto;"></div>
+      </div>
+
+      <div class="studio-file-list" id="studio-file-list">
+        <div style="padding:20px 14px;font-size:11px;color:var(--text-dim);">Loading…</div>
+      </div>
+    </div>
+
+    <!-- ── Right: source + error + patch ─────────────────────── -->
+    <div class="studio-right">
+
+      <!-- Source code viewer (top ~55%) -->
+      <div class="studio-pane" style="flex:55 55 0;">
+        <div class="studio-pane-header">
+          📄 Source Code
+          <span id="studio-active-file-label">— select a file</span>
+        </div>
+        <div class="studio-code-wrap">
+          <pre id="studio-code"><code style="color:var(--text-dim);font-style:italic;">Select a test file from the sidebar to view its source code.</code></pre>
+        </div>
+      </div>
+
+      <!-- Error trace (bottom-right top section) -->
+      <div class="studio-pane studio-error-pane" style="flex:45 45 0;">
+        <div class="studio-pane-header">
+          🔴 Allure Error Trace
+          <span id="studio-error-file-label"></span>
+          <span id="studio-rerun-badge" class="studio-rerun-badge">✓ Re-run triggered</span>
+        </div>
+        <div id="studio-trace" class="studio-trace-wrap no-error">No error — select a failed test file.</div>
+
+        <!-- Patch form -->
+        <div class="studio-patch-form">
+          <div class="studio-hint">Paste the fixed code from Rovo below and click <strong>Apply Code Fix</strong> to overwrite the file and trigger a background re-run.</div>
+          <textarea id="studio-patch-content" placeholder="Paste corrected code here…"></textarea>
+          <div class="studio-patch-row">
+            <button class="studio-apply-btn" id="studio-apply-btn" onclick="studioApplyFix()">Apply Code Fix</button>
+            <span id="studio-apply-status" style="font-size:11px;color:var(--text-dim);"></span>
+          </div>
+        </div>
+      </div>
+
+    </div><!-- /studio-right -->
+  </div><!-- /studio-layout -->
+</div><!-- /page-studio -->
+
+<script>
+// ── Studio state ──────────────────────────────────────────────────────────────
+let _studioActiveFile  = null;   // {path, relpath, name}
+let _studioActiveError = null;   // error dict from API
+let _studioFileMap     = {};     // path → file info object (avoids JSON-in-onclick quoting issues)
+
+let _studioAtlassianConnected = false;
+let _studioCloudId = '';
+
+async function _studioCheckAtlassian() {
+  const dot     = document.getElementById('studioAtlassianDot');
+  const label   = document.getElementById('studioAtlassianLabel');
+  const connBtn = document.getElementById('studioConnectBtn');
+  const jiraDiv = document.getElementById('studioJiraSearch');
+  try {
+    const s = await fetch('/api/atlassian/status').then(r => r.json());
+    _studioAtlassianConnected = s.connected;
+    if (s.connected) {
+      if (dot)   dot.style.background = '#3fb950';
+      if (label) { label.textContent = `Jira: ${s.display_name || s.email || 'connected'}`; label.style.color = '#3fb950'; }
+      if (connBtn) connBtn.style.display = 'none';
+      if (jiraDiv) jiraDiv.style.display = 'flex';
+      // Load cloud id from config
+      const cfg = await fetch('/api/config').then(r => r.json()).catch(() => ({}));
+      _studioCloudId = cfg.atlassian_cloud_id || '';
+    } else {
+      if (dot)   dot.style.background = '#6e7681';
+      if (label) { label.textContent = 'Atlassian not connected'; label.style.color = 'var(--text-dim)'; }
+      if (connBtn) connBtn.style.display = 'inline-block';
+      if (jiraDiv) jiraDiv.style.display = 'none';
+    }
+  } catch (e) {
+    if (label) label.textContent = 'Atlassian status unavailable';
+  }
+}
+
+async function studioJiraSearch() {
+  const query    = document.getElementById('studioJiraQuery')?.value.trim() || '';
+  const resultsEl = document.getElementById('studioJiraResults');
+  if (!resultsEl) return;
+  if (!query) { resultsEl.textContent = 'Enter a search term.'; return; }
+  if (!_studioCloudId) { resultsEl.textContent = 'Set Cloud ID in Config → 🔗 Atlassian first.'; return; }
+
+  resultsEl.textContent = 'Searching…';
+  const jql  = `text ~ "${query.replace(/"/g, '')}" ORDER BY updated DESC`;
+  const data = await fetch(`/api/atlassian/jira/search?cloudId=${encodeURIComponent(_studioCloudId)}&jql=${encodeURIComponent(jql)}&maxResults=8`)
+    .then(r => r.json()).catch(e => ({ error: String(e) }));
+
+  if (data.error) { resultsEl.innerHTML = `<span style="color:#f85149;">${escHtml(data.error)}</span>`; return; }
+
+  const issues = data.issues || [];
+  if (!issues.length) { resultsEl.textContent = 'No Jira issues found.'; return; }
+
+  resultsEl.innerHTML = issues.map(i => {
+    const f      = i.fields || {};
+    const key    = i.key;
+    const title  = f.summary || '(no title)';
+    const status = f.status?.name || '';
+    const jiraBase = (window._atlassianJiraBase || '').replace(/\/$/, '');
+    return `<div style="padding:4px 0;border-bottom:1px solid var(--border);display:flex;align-items:flex-start;gap:8px;">
+      <span style="font-weight:700;color:var(--accent);white-space:nowrap;">${escHtml(key)}</span>
+      <span style="color:var(--text);flex:1;">${escHtml(title)}</span>
+      <span style="color:var(--text-dim);font-size:10px;white-space:nowrap;">${escHtml(status)}</span>
+    </div>`;
+  }).join('');
+}
+
+async function studioRefresh() {
+  _studioCheckAtlassian();  // parallel — don't await
+  const list = document.getElementById('studio-file-list');
+  list.innerHTML = '<div style="padding:20px 14px;font-size:11px;color:var(--text-dim);">Loading…</div>';
+  let data;
+  try {
+    const r = await fetch('/studio/data');
+    data = await r.json();
+  } catch (e) {
+    list.innerHTML = `<div style="padding:14px;font-size:11px;color:#f85149;">Error loading studio data: ${e}</div>`;
+    return;
+  }
+  _studioFileMap = {};
+  (data.test_files || []).forEach(f => { _studioFileMap[f.path] = f; });
+  _studioRenderSidebar(data.test_files || []);
+}
+
+function _studioRenderSidebar(files) {
+  const list = document.getElementById('studio-file-list');
+  if (!files.length) {
+    list.innerHTML = '<div style="padding:14px;font-size:11px;color:var(--text-dim);">No test files found under tests/ directory.</div>';
+    return;
+  }
+  list.innerHTML = files.map(f => {
+    const st     = f.status || 'unknown';
+    const dot    = `<span class="studio-status-dot ${st}"></span>`;
+    const active = (_studioActiveFile && _studioActiveFile.path === f.path) ? ' active-file' : '';
+    // Use data-path attribute — avoids JSON/quote conflicts in onclick
+    return `<div class="studio-file-item status-${st}${active}" data-path="${escHtml(f.path)}" onclick="studioSelectByPath(this.dataset.path)">${dot}${escHtml(f.name)}</div>`;
+  }).join('');
+}
+
+function studioSelectByPath(absPath) {
+  const f = _studioFileMap[absPath];
+  if (f) studioSelectFile(f);
+}
+
+async function studioSelectFile(fileInfo) {
+  _studioActiveFile = fileInfo;
+
+  // Update active-file label
+  document.getElementById('studio-active-file-label').textContent = fileInfo.relpath || fileInfo.name;
+
+  // Highlight selected in sidebar
+  document.querySelectorAll('.studio-file-item').forEach(el => {
+    el.classList.toggle('active-file', el.textContent.trim().endsWith(fileInfo.name));
+  });
+
+  // Load source code — send the absolute path
+  const code = document.getElementById('studio-code');
+  code.innerHTML = '<code style="color:var(--text-dim)">Loading…</code>';
+  try {
+    const r = await fetch('/studio/file?path=' + encodeURIComponent(fileInfo.path || fileInfo.relpath || fileInfo.name));
+    const d = await r.json();
+    if (d.content !== undefined) {
+      code.textContent = d.content;
+    } else {
+      code.innerHTML = `<code style="color:#f85149">${escHtml(d.error || 'Unknown error')}</code>`;
+    }
+  } catch (e) {
+    code.innerHTML = `<code style="color:#f85149">${escHtml(String(e))}</code>`;
+  }
+
+  // Show error trace if present
+  const traceEl = document.getElementById('studio-trace');
+  const errLabel = document.getElementById('studio-error-file-label');
+  if (fileInfo.error) {
+    _studioActiveError = fileInfo.error;
+    const msg   = fileInfo.error.message || '';
+    const trace = fileInfo.error.trace || '';
+    const full  = [msg, trace].filter(Boolean).join('\n\n');
+    traceEl.textContent = full || '(no trace details)';
+    traceEl.classList.remove('no-error');
+    errLabel.textContent = `(${fileInfo.status})`;
+    // Pre-fill patch area with current source so user can edit inline
+    const patch = document.getElementById('studio-patch-content');
+    if (!patch.value) {
+      const codeText = document.getElementById('studio-code').textContent;
+      patch.value = codeText;
+    }
+  } else {
+    _studioActiveError = null;
+    traceEl.textContent = `No errors — status: ${fileInfo.status || 'unknown'}`;
+    traceEl.classList.add('no-error');
+    errLabel.textContent = '';
+  }
+}
+
+async function studioApplyFix() {
+  if (!_studioActiveFile) { alert('Select a test file first.'); return; }
+  const content = document.getElementById('studio-patch-content').value;
+  if (!content.trim()) { alert('Patch content is empty.'); return; }
+
+  const btn    = document.getElementById('studio-apply-btn');
+  const status = document.getElementById('studio-apply-status');
+  btn.disabled = true;
+  status.textContent = 'Saving…';
+
+  try {
+    const r = await fetch('/studio/save', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        path:    _studioActiveFile.path || _studioActiveFile.relpath || _studioActiveFile.name,
+        content: content,
+      }),
+    });
+    const d = await r.json();
+    if (d.ok) {
+      status.textContent = d.rerun ? '✓ Saved — re-run triggered in background' : '✓ Saved';
+      status.style.color = '#3fb950';
+      // Show badge briefly
+      const badge = document.getElementById('studio-rerun-badge');
+      badge.style.display = 'inline-block';
+      setTimeout(() => { badge.style.display = 'none'; }, 4000);
+      // Refresh sidebar after a delay
+      setTimeout(studioRefresh, 6000);
+    } else {
+      status.textContent = '✗ ' + (d.error || 'Save failed');
+      status.style.color = '#f85149';
+    }
+  } catch (e) {
+    status.textContent = '✗ Network error';
+    status.style.color = '#f85149';
+  }
+  btn.disabled = false;
+}
+
+async function studioLaunchRovo() {
+  try {
+    const r = await fetch('/studio/launch-rovo', { method: 'POST' });
+    const d = await r.json();
+    if (d.error) {
+      alert('Launch error: ' + d.error);
+    } else if (d.warnings && d.warnings.length) {
+      alert('Opened — but note:\n' + d.warnings.join('\n'));
+    }
+  } catch (e) {
+    alert('Launch error: ' + e);
+  }
+}
+</script>
