@@ -442,11 +442,8 @@ async function studioLaunchRovo() {
   try {
     const r = await fetch('/studio/launch-rovo', { method: 'POST' });
     const d = await r.json();
-    if (d.error) {
-      alert('Launch error: ' + d.error);
-    } else if (d.warnings && d.warnings.length) {
-      alert('Opened — but note:\n' + d.warnings.join('\n'));
-    }
+    if (d.error) alert('Could not open Edge: ' + d.error);
+    // warnings (e.g. missing jira_url) are silent — Edge still opens Studio tab
   } catch (e) {
     alert('Launch error: ' + e);
   }

@@ -28,7 +28,12 @@ def _load_jira_url() -> str:
         try:
             with open(cfg_path, encoding="utf-8") as fh:
                 cfg = json.load(fh)
-            return cfg.get("jira_url", "").strip().rstrip("/")
+            # Top-level jira_url takes priority; fall back to zephyr.jira_url
+            url = (
+                cfg.get("jira_url", "")
+                or cfg.get("zephyr", {}).get("jira_url", "")
+            )
+            return url.strip().rstrip("/")
         except Exception:
             pass
     return ""
