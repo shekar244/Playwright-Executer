@@ -410,9 +410,28 @@
             <input type="text" id="jf_email" placeholder="you@company.com" />
           </div>
           <div class="field">
-            <label>API Token / Identity Token</label>
+            <label>API Token / Identity Token <span style="font-weight:400;color:var(--text-dim);">(auto-filled after token rotation)</span></label>
             <input type="password" id="jf_token" placeholder="Artifactory API key or identity token" />
           </div>
+        </div>
+      </div>
+
+      <!-- Token rotation section -->
+      <div class="section-block" style="border-radius:var(--radius-lg);overflow:hidden;border-color:rgba(249,226,175,0.25);">
+        <div class="section-title" style="background:rgba(249,226,175,0.08);">
+          <span class="stitle-icon">🔄</span>Monthly Token Rotation
+        </div>
+        <div class="section-content" style="gap:10px;">
+          <div class="hint">Token expiring? Enter your SSO password once — Amplify calls the Artifactory API to generate a fresh token, fills it above, and regenerates <code>pip.ini</code> automatically. Your password is never stored.</div>
+          <div class="field">
+            <label>SSO Password <span style="font-weight:400;color:var(--text-dim);">(used once, never saved)</span></label>
+            <input type="password" id="jf_password" placeholder="Your Artifactory / SSO password" autocomplete="off" />
+          </div>
+          <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+            <button type="button" class="btn btn-run" onclick="jfrogRotateToken()" style="padding:6px 18px;font-size:12px;">🔑 Fetch New Token &amp; Update pip.ini</button>
+            <span id="jfrogRotateStatus" style="font-size:11px;color:var(--text-dim);"></span>
+          </div>
+          <div id="jfrogRotateDetail" style="display:none;font-size:11px;font-family:'JetBrains Mono',monospace;padding:8px 10px;border-radius:var(--radius);background:var(--log-bg);border:1px solid var(--border);color:var(--green);white-space:pre-wrap;word-break:break-all;"></div>
         </div>
       </div>
 
@@ -421,17 +440,17 @@
           <span class="stitle-icon">📄</span>pip.ini Preview
         </div>
         <div class="section-content" style="gap:8px;">
-          <div class="hint">Content that will be written to <code>{venv}/pip.ini</code> (Windows) or <code>{venv}/pip.conf</code> (macOS/Linux).</div>
+          <div class="hint">Content that will be written to <code>{venv}/pip.ini</code>.</div>
           <pre id="jf_preview" style="background:var(--log-bg);border:1px solid var(--border);border-radius:var(--radius);padding:10px 12px;font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--green);white-space:pre-wrap;word-break:break-all;overflow-wrap:break-word;min-height:80px;margin:0;overflow-x:auto;"># Fill in the fields above and click Preview</pre>
         </div>
       </div>
 
       <div class="action-row" style="flex-wrap:wrap;gap:6px;">
-        <button class="btn btn-sm" onclick="jfrogLoadFromFile()" title="Read URL, repo, email and token from the existing pip.ini in the venv">📂 Load from pip.ini</button>
-        <button class="btn btn-sm" onclick="jfrogPreview()">👁 Preview</button>
-        <button class="btn btn-run" onclick="jfrogGenerate()" style="padding:6px 16px;font-size:12px;">⚡ Generate pip.ini</button>
-        <button class="btn btn-sm" onclick="saveJfrogConfig()">💾 Save Settings</button>
-        <button class="btn btn-sm" onclick="loadJfrogConfig()">↺ Reload</button>
+        <button type="button" class="btn btn-sm" onclick="jfrogLoadFromFile()" title="Read URL, repo, email and token from the existing pip.ini in the venv">📂 Load from pip.ini</button>
+        <button type="button" class="btn btn-sm" onclick="jfrogPreview()">👁 Preview</button>
+        <button type="button" class="btn btn-run" onclick="jfrogGenerate()" style="padding:6px 16px;font-size:12px;">⚡ Generate pip.ini</button>
+        <button type="button" class="btn btn-sm" onclick="saveJfrogConfig()">💾 Save Settings</button>
+        <button type="button" class="btn btn-sm" onclick="loadJfrogConfig()">↺ Reload</button>
         <span id="jfrogStatus" style="font-size:11px;color:var(--text-dim);margin-left:4px;width:100%;"></span>
       </div>
     </div>

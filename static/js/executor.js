@@ -976,6 +976,72 @@ async function jfrogGenerate() {
   setTimeout(() => { if (st) st.textContent = ''; }, 6000);
 }
 
+async function jfrogRotateToken() {
+  const st     = document.getElementById('jfrogRotateStatus');
+  const detail = document.getElementById('jfrogRotateDetail');
+  const btn    = document.querySelector('[onclick="jfrogRotateToken()"]');
+
+  const url      = document.getElementById('jf_url')?.value.trim()      || '';
+  const email    = document.getElementById('jf_email')?.value.trim()     || '';
+  const password = document.getElementById('jf_password')?.value         || '';
+  const repo     = document.getElementById('jf_repo')?.value.trim()      || '';
+
+  if (!url || !email || !password) {
+    if (st) { st.textContent = '⚠ URL, email and password are required'; st.style.color = 'var(--yellow)'; }
+    return;
+  }
+
+  if (btn) btn.disabled = true;
+  if (st)  { st.textContent = 'Contacting Artifactory…'; st.style.color = 'var(--text-dim)'; }
+  if (detail) detail.style.display = 'none';
+
+  try {
+    const res  = await fetch('/api/config/jfrog/rotate-token', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ jfrog_url: url, jfrog_email: email, jfrog_password: password, jfrog_repo: repo }),
+    });
+    const data = await res.json();
+
+    if (data.ok) {
+      // Fill token field with new token
+      const tokenEl = document.getElementById('jf_token');
+      if (tokenEl) tokenEl.value = data.token || '';
+
+      // Clear password field immediately
+      const pwEl = document.getElementById('jf_password');
+      if (pwEl) pwEl.value = '';
+
+      // Update preview
+      await jfrogPreview();
+
+      const pipMsg = data.pip_written
+        ? `pip.ini written → ${data.pip_path}`
+        : `pip.ini not written: ${data.pip_error || 'unknown'}`;
+
+      if (st) { st.textContent = '✓ Token rotated successfully'; st.style.color = 'var(--green)'; }
+      if (detail) {
+        detail.style.display = 'block';
+        detail.style.color   = 'var(--green)';
+        detail.textContent   = pipMsg;
+      }
+    } else {
+      const errMsg = data.error || 'Unknown error';
+      const triedMsg = (data.tried || []).map(([ep, s]) => `  ${ep}: ${s}`).join('\n');
+      if (st) { st.textContent = '✗ ' + errMsg; st.style.color = 'var(--red)'; }
+      if (detail) {
+        detail.style.display = 'block';
+        detail.style.color   = 'var(--red)';
+        detail.textContent   = triedMsg || errMsg;
+      }
+    }
+  } catch (e) {
+    if (st) { st.textContent = '✗ Network error: ' + e; st.style.color = 'var(--red)'; }
+  }
+
+  if (btn) btn.disabled = false;
+}
+
 function toggleConfigSection(bodyId, arrowId) {
   const body  = document.getElementById(bodyId);
   const arrow = document.getElementById(arrowId);
