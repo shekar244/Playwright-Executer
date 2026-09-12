@@ -208,6 +208,7 @@
     <button type="button" class="cfg-tab-btn" onclick="switchCfgTab('git')" id="ctab-git">🔀 Git</button>
     <button type="button" class="cfg-tab-btn" onclick="switchCfgTab('tools')" id="ctab-tools">🔧 CLI Tools</button>
     <button type="button" class="cfg-tab-btn" onclick="switchCfgTab('allure')" id="ctab-allure">📊 Allure</button>
+    <button type="button" class="cfg-tab-btn" onclick="switchCfgTab('jfrog')" id="ctab-jfrog">🏺 JFrog</button>
     <button type="button" class="cfg-tab-btn" onclick="switchCfgTab('mapping')" id="ctab-mapping">🗂️ Field Mapping</button>
     <button type="button" class="cfg-tab-btn" onclick="switchCfgTab('zephyr')" id="ctab-zephyr">🔷 Zephyr Config</button>
     <button type="button" class="cfg-tab-btn" onclick="switchCfgTab('uitabs')" id="ctab-uitabs" style="margin-left:auto;">🎛️ Tabs</button>
@@ -384,6 +385,54 @@
         <button class="btn btn-sm" onclick="saveAllureConfig()">💾 Save Allure Config</button>
         <button class="btn btn-sm" onclick="loadAllureConfig()">↺ Reload</button>
         <span id="allureSaveStatus" style="font-size:11px;color:var(--text-dim);margin-left:6px;"></span>
+      </div>
+    </div>
+
+    <!-- Panel: JFrog Artifactory -->
+    <div id="cfgJfrog" style="display:none;flex-direction:column;gap:14px;">
+
+      <div class="section-block" style="border-radius:var(--radius-lg);overflow:hidden;border-color:rgba(137,180,250,0.25);">
+        <div class="section-title" style="background:rgba(137,180,250,0.08);">
+          <span class="stitle-icon">🔗</span>Artifactory Connection
+        </div>
+        <div class="section-content" style="gap:10px;">
+          <div class="hint">JFrog Artifactory PyPI configuration. Credentials are saved to <code>config.json</code> — do not commit that file to source control.</div>
+          <div class="field">
+            <label>Artifactory URL <span style="font-weight:400;color:var(--text-dim);">(hostname or full base URL)</span></label>
+            <input type="text" id="jf_url" placeholder="e.g. company.jfrog.io  or  https://company.jfrog.io" style="font-family:'JetBrains Mono',monospace;font-size:11px;" />
+          </div>
+          <div class="field">
+            <label>PyPI Repository name</label>
+            <input type="text" id="jf_repo" placeholder="e.g. pypi-virtual  or  pypi-local" style="font-family:'JetBrains Mono',monospace;font-size:11px;" />
+          </div>
+          <div class="field">
+            <label>Email / Username</label>
+            <input type="text" id="jf_email" placeholder="you@company.com" />
+          </div>
+          <div class="field">
+            <label>API Token / Identity Token</label>
+            <input type="password" id="jf_token" placeholder="Artifactory API key or identity token" />
+          </div>
+        </div>
+      </div>
+
+      <div class="section-block" style="border-radius:var(--radius-lg);overflow:hidden;border-color:rgba(166,227,161,0.25);">
+        <div class="section-title" style="background:rgba(166,227,161,0.08);">
+          <span class="stitle-icon">📄</span>pip.ini Preview
+        </div>
+        <div class="section-content" style="gap:8px;">
+          <div class="hint">Content that will be written to <code>{venv}/pip.ini</code> (Windows) or <code>{venv}/pip.conf</code> (macOS/Linux).</div>
+          <pre id="jf_preview" style="background:var(--log-bg);border:1px solid var(--border);border-radius:var(--radius);padding:10px 12px;font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--green);white-space:pre-wrap;word-break:break-all;overflow-wrap:break-word;min-height:80px;margin:0;overflow-x:auto;"># Fill in the fields above and click Preview</pre>
+        </div>
+      </div>
+
+      <div class="action-row" style="flex-wrap:wrap;gap:6px;">
+        <button class="btn btn-sm" onclick="jfrogLoadFromFile()" title="Read URL, repo, email and token from the existing pip.ini in the venv">📂 Load from pip.ini</button>
+        <button class="btn btn-sm" onclick="jfrogPreview()">👁 Preview</button>
+        <button class="btn btn-run" onclick="jfrogGenerate()" style="padding:6px 16px;font-size:12px;">⚡ Generate pip.ini</button>
+        <button class="btn btn-sm" onclick="saveJfrogConfig()">💾 Save Settings</button>
+        <button class="btn btn-sm" onclick="loadJfrogConfig()">↺ Reload</button>
+        <span id="jfrogStatus" style="font-size:11px;color:var(--text-dim);margin-left:4px;width:100%;"></span>
       </div>
     </div>
 

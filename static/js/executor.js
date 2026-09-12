@@ -777,7 +777,7 @@ async function persistTools() {
 
 // ── Config sub-tabs ────────────────────────────────────────────────────────────
 function switchCfgTab(tab) {
-  const panels = { features: 'cfgFeatures', git: 'cfgGit', tools: 'cfgTools', allure: 'cfgAllure', mapping: 'cfgMapping', zephyr: 'cfgZephyr', uitabs: 'cfgUiTabs' };
+  const panels = { features: 'cfgFeatures', git: 'cfgGit', tools: 'cfgTools', allure: 'cfgAllure', jfrog: 'cfgJfrog', mapping: 'cfgMapping', zephyr: 'cfgZephyr', uitabs: 'cfgUiTabs' };
   Object.entries(panels).forEach(([key, id]) => {
     const panel = document.getElementById(id);
     if (panel) panel.style.display = key === tab ? 'flex' : 'none';
@@ -793,6 +793,7 @@ function switchCfgTab(tab) {
   if (tab === 'git')     loadGitCommands();
   if (tab === 'uitabs')  loadUiTabs();
   if (tab === 'allure')  loadAllureConfig();
+  if (tab === 'jfrog')   loadJfrogConfig();
 }
 
 // ── UI Tab kill-switch ────────────────────────────────────────────────────────
@@ -865,6 +866,112 @@ async function saveAllureConfig() {
     if (st) { st.textContent = '✗ Network error'; st.style.color = 'var(--red)'; }
   }
   setTimeout(() => { if (st) st.textContent = ''; }, 3000);
+}
+
+// ── JFrog Artifactory config ──────────────────────────────────────────────────
+
+async function loadJfrogConfig() {
+  const cfg = await fetch('/api/config').then(r => r.json()).catch(() => ({}));
+  const set = (id, val) => { const el = document.getElementById(id); if (el) el.value = val || ''; };
+  set('jf_url',   cfg.jfrog_url   || '');
+  set('jf_repo',  cfg.jfrog_repo  || '');
+  set('jf_email', cfg.jfrog_email || '');
+  set('jf_token', cfg.jfrog_token || '');
+
+  // Auto-detect existing pip.ini and show status — but only pre-fill if
+  // config.json has no values yet (so a saved config is never silently overwritten).
+  const hasConfig = cfg.jfrog_url || cfg.jfrog_repo || cfg.jfrog_email;
+  if (!hasConfig) {
+    const pip = await fetch('/api/config/jfrog/read-pip-ini').then(r => r.json()).catch(() => null);
+    if (pip?.found && pip?.parsed) {
+      set('jf_url',   pip.jfrog_url   || '');
+      set('jf_repo',  pip.jfrog_repo  || '');
+      set('jf_email', pip.jfrog_email || '');
+      set('jf_token', pip.jfrog_token || '');
+      const st = document.getElementById('jfrogStatus');
+      if (st) { st.textContent = `↑ Loaded from ${pip.path}`; st.style.color = 'var(--teal)'; }
+      setTimeout(() => { const s = document.getElementById('jfrogStatus'); if (s) s.textContent = ''; }, 4000);
+    }
+  }
+}
+
+async function jfrogLoadFromFile() {
+  const st = document.getElementById('jfrogStatus');
+  const pip = await fetch('/api/config/jfrog/read-pip-ini').then(r => r.json()).catch(() => null);
+  if (!pip) {
+    if (st) { st.textContent = '✗ Network error'; st.style.color = 'var(--red)'; }
+  } else if (!pip.found) {
+    if (st) { st.textContent = `⚠ pip.ini not found at ${pip.path}`; st.style.color = 'var(--yellow)'; }
+  } else if (!pip.parsed) {
+    if (st) { st.textContent = `⚠ pip.ini found but no parseable index-url at ${pip.path}`; st.style.color = 'var(--yellow)'; }
+  } else {
+    const set = (id, val) => { const el = document.getElementById(id); if (el) el.value = val || ''; };
+    set('jf_url',   pip.jfrog_url   || '');
+    set('jf_repo',  pip.jfrog_repo  || '');
+    set('jf_email', pip.jfrog_email || '');
+    set('jf_token', pip.jfrog_token || '');
+    if (st) { st.textContent = `✓ Loaded from ${pip.path} — edit the token and click Generate`; st.style.color = 'var(--green)'; }
+  }
+  setTimeout(() => { const s = document.getElementById('jfrogStatus'); if (s) s.textContent = ''; }, 6000);
+}
+
+function _jfrogBody() {
+  return {
+    jfrog_url:   document.getElementById('jf_url')?.value.trim()   || '',
+    jfrog_repo:  document.getElementById('jf_repo')?.value.trim()  || '',
+    jfrog_email: document.getElementById('jf_email')?.value.trim() || '',
+    jfrog_token: document.getElementById('jf_token')?.value.trim() || '',
+  };
+}
+
+async function jfrogPreview() {
+  const body = _jfrogBody();
+  const res  = await fetch('/api/config/jfrog/preview', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
+  }).then(r => r.json()).catch(() => ({ content: '# Error fetching preview' }));
+  const pre = document.getElementById('jf_preview');
+  if (pre) pre.textContent = res.content || '# (empty)';
+}
+
+async function saveJfrogConfig() {
+  const body = _jfrogBody();
+  const st   = document.getElementById('jfrogStatus');
+  try {
+    const res  = await fetch('/api/config/jfrog', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
+    });
+    const data = await res.json();
+    if (st) { st.textContent = data.ok ? '✓ Saved' : '✗ ' + (data.error || 'Error'); st.style.color = data.ok ? 'var(--green)' : 'var(--red)'; }
+  } catch (e) {
+    if (st) { st.textContent = '✗ Network error'; st.style.color = 'var(--red)'; }
+  }
+  setTimeout(() => { if (st) st.textContent = ''; }, 3000);
+}
+
+async function jfrogGenerate() {
+  const body = _jfrogBody();
+  const st   = document.getElementById('jfrogStatus');
+  if (!body.jfrog_url || !body.jfrog_repo || !body.jfrog_email || !body.jfrog_token) {
+    if (st) { st.textContent = '⚠ Fill all fields first'; st.style.color = 'var(--yellow)'; }
+    setTimeout(() => { if (st) st.textContent = ''; }, 3000);
+    return;
+  }
+  try {
+    const res  = await fetch('/api/config/jfrog/generate', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
+    });
+    const data = await res.json();
+    if (data.ok) {
+      const pre = document.getElementById('jf_preview');
+      if (pre) pre.textContent = data.content || '';
+      if (st) { st.textContent = `✓ Written → ${data.path}`; st.style.color = 'var(--green)'; }
+    } else {
+      if (st) { st.textContent = '✗ ' + (data.error || 'Failed'); st.style.color = 'var(--red)'; }
+    }
+  } catch (e) {
+    if (st) { st.textContent = '✗ Network error'; st.style.color = 'var(--red)'; }
+  }
+  setTimeout(() => { if (st) st.textContent = ''; }, 6000);
 }
 
 function toggleConfigSection(bodyId, arrowId) {
