@@ -207,27 +207,53 @@ def read_jfrog_pip_ini():
     if not index_url:
         return jsonify({"found": True, "path": str(pip_ini_path), "index_url": "", "parsed": False})
 
-    # Parse:  https://email:token@hostname/artifactory/api/pypi/repo/simple
+    # Try several URL patterns in order of specificity.
+    # Pattern 1: https://email:token@host/artifactory/api/pypi/repo/simple[/]
     m = re.match(
-        r'https?://([^:@]+):([^@]+)@([^/]+)/artifactory/api/pypi/([^/]+)/simple',
+        r'https?://([^:@]+):([^@]+)@([^/]+)/artifactory/api/pypi/([^/]+)/simple/?',
         index_url,
     )
-    if not m:
+    if m:
+        email, token, hostname, repo = m.groups()
         return jsonify({
-            "found": True, "path": str(pip_ini_path),
-            "index_url": index_url, "parsed": False,
+            "found": True, "path": str(pip_ini_path), "index_url": index_url,
+            "parsed": True,
+            "jfrog_url": hostname, "jfrog_repo": repo,
+            "jfrog_email": email, "jfrog_token": token,
         })
 
-    email, token, hostname, repo = m.groups()
+    # Pattern 2: https://email:token@host/artifactory/api/pypi/repo  (no /simple)
+    m = re.match(
+        r'https?://([^:@]+):([^@]+)@([^/]+)/artifactory/api/pypi/([^/]+)/?',
+        index_url,
+    )
+    if m:
+        email, token, hostname, repo = m.groups()
+        return jsonify({
+            "found": True, "path": str(pip_ini_path), "index_url": index_url,
+            "parsed": True,
+            "jfrog_url": hostname, "jfrog_repo": repo,
+            "jfrog_email": email, "jfrog_token": token,
+        })
+
+    # Pattern 3: any https://user:token@host/... — extract what we can
+    m = re.match(r'https?://([^:@]+):([^@]+)@([^/]+)(.*)', index_url)
+    if m:
+        email, token, hostname, path_rest = m.groups()
+        # Try to guess repo from last non-empty path segment
+        segments = [s for s in path_rest.rstrip('/').split('/') if s and s != 'simple']
+        repo = segments[-1] if segments else ""
+        return jsonify({
+            "found": True, "path": str(pip_ini_path), "index_url": index_url,
+            "parsed": True,
+            "jfrog_url": hostname, "jfrog_repo": repo,
+            "jfrog_email": email, "jfrog_token": token,
+        })
+
     return jsonify({
-        "found":      True,
-        "path":       str(pip_ini_path),
-        "index_url":  index_url,
-        "parsed":     True,
-        "jfrog_url":  hostname,
-        "jfrog_repo": repo,
-        "jfrog_email": email,
-        "jfrog_token": token,
+        "found": True, "path": str(pip_ini_path),
+        "index_url": index_url, "parsed": False,
+        "hint": "URL does not contain credentials (user:token@host). Edit fields manually.",
     })
 
 
@@ -342,23 +368,6 @@ def preview_jfrog_pip_ini():
         f"index-url = {index_url}\n"
     )
     return jsonify({"content": content})
-
-
-@bp.route("/api/config/atlassian", methods=["POST"])
-def save_atlassian_config():
-    """Save Atlassian OAuth app credentials (client_id + client_secret)."""
-    body    = request.json or {}
-    allowed = {"atlassian_client_id", "atlassian_client_secret", "atlassian_cloud_id"}
-    reader  = ConfigReader()
-    cfg     = reader.load()
-    for key in allowed:
-        if key in body:
-            cfg[key] = body[key]
-    try:
-        reader.save(cfg)
-    except OSError as exc:
-        return jsonify({"error": str(exc)}), 500
-    return jsonify({"ok": True})
 
 
 @bp.route("/api/config/pinned-repos", methods=["POST"])

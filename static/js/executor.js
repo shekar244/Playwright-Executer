@@ -777,7 +777,7 @@ async function persistTools() {
 
 // ── Config sub-tabs ────────────────────────────────────────────────────────────
 function switchCfgTab(tab) {
-  const panels = { features: 'cfgFeatures', git: 'cfgGit', tools: 'cfgTools', allure: 'cfgAllure', jfrog: 'cfgJfrog', atlassian: 'cfgAtlassian', mapping: 'cfgMapping', zephyr: 'cfgZephyr', uitabs: 'cfgUiTabs' };
+  const panels = { features: 'cfgFeatures', git: 'cfgGit', tools: 'cfgTools', allure: 'cfgAllure', jfrog: 'cfgJfrog', mapping: 'cfgMapping', zephyr: 'cfgZephyr', uitabs: 'cfgUiTabs' };
   Object.entries(panels).forEach(([key, id]) => {
     const panel = document.getElementById(id);
     if (panel) panel.style.display = key === tab ? 'flex' : 'none';
@@ -794,177 +794,6 @@ function switchCfgTab(tab) {
   if (tab === 'uitabs')    loadUiTabs();
   if (tab === 'allure')    loadAllureConfig();
   if (tab === 'jfrog')     loadJfrogConfig();
-  if (tab === 'atlassian') loadAtlassianConfig();
-}
-
-// ── Atlassian OAuth ───────────────────────────────────────────────────────────
-
-async function loadAtlassianConfig() {
-  const cfg = await fetch('/api/config').then(r => r.json()).catch(() => ({}));
-  const id  = document.getElementById('at_client_id');
-  const sec = document.getElementById('at_client_secret');
-  const cid = document.getElementById('at_cloud_id');
-  if (id)  id.value  = cfg.atlassian_client_id  || '';
-  if (sec) sec.value = cfg.atlassian_client_secret ? '••••••••••••••••' : '';
-  if (cid) cid.value = cfg.atlassian_cloud_id   || '';
-  _atlassianRefreshStatus();
-}
-
-async function _atlassianRefreshStatus() {
-  const dot  = document.getElementById('atlassianStatusDot');
-  const txt  = document.getElementById('atlassianStatusText');
-  const disc = document.getElementById('atlassianDisconnectBtn');
-  const sitesBtn = document.getElementById('atlassianSitesBtn');
-  const rovoBtn  = document.getElementById('atlassianRovoBtn');
-  if (!dot) return;
-
-  try {
-    const s = await fetch('/api/atlassian/status').then(r => r.json());
-    if (s.connected) {
-      dot.style.background  = '#3fb950';
-      txt.textContent       = `Connected as ${s.display_name || s.email || 'Atlassian user'}`;
-      txt.style.color       = '#3fb950';
-      if (disc)      disc.style.display      = 'inline-block';
-      if (sitesBtn)  sitesBtn.style.display  = 'inline-block';
-      if (rovoBtn)   rovoBtn.style.display   = 'inline-block';
-      // Auto-load sites to populate Cloud ID
-      _atlassianAutoFillCloudId();
-    } else {
-      dot.style.background = '#6e7681';
-      txt.textContent      = s.error === 'not_connected' ? 'Not connected' : `Disconnected (${s.error})`;
-      txt.style.color      = 'var(--text-dim)';
-      if (disc)      disc.style.display      = 'none';
-      if (sitesBtn)  sitesBtn.style.display  = 'none';
-      if (rovoBtn)   rovoBtn.style.display   = 'none';
-    }
-  } catch (e) {
-    if (txt) { txt.textContent = 'Status check failed'; txt.style.color = '#f85149'; }
-  }
-}
-
-async function atlassianSaveCredentials() {
-  const client_id     = document.getElementById('at_client_id')?.value.trim()     || '';
-  const client_secret = document.getElementById('at_client_secret')?.value.trim() || '';
-  const cloud_id      = document.getElementById('at_cloud_id')?.value.trim()      || '';
-  const statusEl      = document.getElementById('atlassianSaveStatus');
-
-  const body = { atlassian_client_id: client_id, atlassian_cloud_id: cloud_id };
-  // Only send secret if it's not the masked placeholder
-  if (client_secret && !client_secret.includes('•')) {
-    body.atlassian_client_secret = client_secret;
-  }
-
-  try {
-    const r = await fetch('/api/config/atlassian', {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(body),
-    });
-    const d = await r.json();
-    if (statusEl) {
-      statusEl.textContent = d.ok ? '✓ Saved' : ('✗ ' + (d.error || 'Failed'));
-      statusEl.style.color = d.ok ? '#3fb950' : '#f85149';
-      setTimeout(() => { statusEl.textContent = ''; }, 3000);
-    }
-  } catch (e) {
-    if (statusEl) { statusEl.textContent = '✗ ' + e; statusEl.style.color = '#f85149'; }
-  }
-}
-
-function atlassianConnect() {
-  // Save credentials first, then open OAuth flow
-  atlassianSaveCredentials().then(() => {
-    window.location.href = '/auth/atlassian';
-  });
-}
-
-async function atlassianDisconnect() {
-  if (!confirm('Disconnect from Atlassian? You can reconnect anytime.')) return;
-  await fetch('/auth/atlassian/disconnect', { method: 'POST' });
-  _atlassianRefreshStatus();
-  const sitesDiv = document.getElementById('atlassianSitesList');
-  if (sitesDiv) sitesDiv.style.display = 'none';
-}
-
-async function _atlassianAutoFillCloudId() {
-  const cfg    = await fetch('/api/config').then(r => r.json()).catch(() => ({}));
-  if (cfg.atlassian_cloud_id) {
-    const el = document.getElementById('at_cloud_id');
-    if (el) el.value = cfg.atlassian_cloud_id;
-    return;
-  }
-  // Fetch sites and auto-save first one
-  const data = await fetch('/api/atlassian/sites').then(r => r.json()).catch(() => ({}));
-  if (data.sites && data.sites.length) {
-    const first = data.sites[0];
-    const el    = document.getElementById('at_cloud_id');
-    if (el) el.value = first.id;
-    await fetch('/api/config/atlassian', {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ atlassian_cloud_id: first.id }),
-    });
-  }
-}
-
-async function atlassianProbeSites() {
-  const sitesDiv   = document.getElementById('atlassianSitesList');
-  const sitesTable = document.getElementById('atlassianSitesTable');
-  if (!sitesDiv) return;
-
-  sitesTable.innerHTML = '<span style="color:var(--text-dim);font-size:11px;">Loading…</span>';
-  sitesDiv.style.display = 'block';
-
-  const data = await fetch('/api/atlassian/sites').then(r => r.json()).catch(e => ({ error: String(e) }));
-  if (data.error) {
-    sitesTable.innerHTML = `<span style="color:#f85149;">${escHtml(data.error)}</span>`;
-    return;
-  }
-  const sites = data.sites || [];
-  if (!sites.length) {
-    sitesTable.innerHTML = '<span style="color:var(--text-dim);">No accessible sites found.</span>';
-    return;
-  }
-  sitesTable.innerHTML = sites.map(s => `
-    <div style="display:flex;align-items:center;gap:10px;padding:6px 10px;border:1px solid var(--border);border-radius:var(--radius);background:var(--bg);">
-      <span style="font-weight:600;color:var(--text);">${escHtml(s.name)}</span>
-      <code style="font-size:10px;color:var(--text-dim);">${escHtml(s.id)}</code>
-      <button type="button" class="btn btn-sm" style="margin-left:auto;padding:2px 10px;font-size:10px;" onclick="atlassianUseSite('${escHtml(s.id)}','${escHtml(s.name)}')">Use this site</button>
-    </div>`).join('');
-}
-
-async function atlassianUseSite(cloudId, name) {
-  const el = document.getElementById('at_cloud_id');
-  if (el) el.value = cloudId;
-  await fetch('/api/config/atlassian', {
-    method: 'POST', headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ atlassian_cloud_id: cloudId }),
-  });
-  const statusEl = document.getElementById('atlassianSaveStatus');
-  if (statusEl) { statusEl.textContent = `✓ Using ${name}`; statusEl.style.color = '#3fb950'; setTimeout(() => { statusEl.textContent = ''; }, 3000); }
-}
-
-async function atlassianProbeRovo() {
-  const resultDiv = document.getElementById('atlassianRovoResult');
-  if (!resultDiv) return;
-  resultDiv.style.display = 'block';
-  resultDiv.innerHTML     = '<span style="color:var(--text-dim);">Probing Rovo API endpoints…</span>';
-
-  const data = await fetch('/api/atlassian/rovo/probe').then(r => r.json()).catch(e => ({ error: String(e) }));
-  if (data.error) {
-    resultDiv.innerHTML = `<span style="color:#f85149;">Error: ${escHtml(data.error)}</span>`;
-    return;
-  }
-
-  if (data.rovo_api_found) {
-    resultDiv.style.borderColor = '#3fb950';
-    resultDiv.innerHTML = `<strong style="color:#3fb950;">✓ Rovo API is available!</strong><br>
-      <span style="color:var(--text-dim);">Endpoints found: ${data.available.map(r => escHtml(r.url)).join(', ')}</span>`;
-  } else {
-    resultDiv.style.borderColor = '#e3b341';
-    const rows = (data.probed || []).map(r => `<div>${escHtml(r.url)} → <span style="color:${r.status===404?'#6e7681':'#f85149'}">${r.status}</span></div>`).join('');
-    resultDiv.innerHTML = `<strong style="color:#e3b341;">Rovo API not available on this account/plan.</strong><br>
-      <div style="margin-top:6px;color:var(--text-dim);">${rows}</div>
-      <div style="margin-top:8px;color:var(--text-dim);">Jira REST API is still connected — use the Studio tab to search linked tickets.</div>`;
-  }
 }
 
 // ── UI Tab kill-switch ────────────────────────────────────────────────────────
@@ -1074,7 +903,9 @@ async function jfrogLoadFromFile() {
   } else if (!pip.found) {
     if (st) { st.textContent = `⚠ pip.ini not found at ${pip.path}`; st.style.color = 'var(--yellow)'; }
   } else if (!pip.parsed) {
-    if (st) { st.textContent = `⚠ pip.ini found but no parseable index-url at ${pip.path}`; st.style.color = 'var(--yellow)'; }
+    const hint = pip.hint || 'URL format not recognised — fill in the fields manually.';
+    const raw  = pip.index_url ? ` (found: ${pip.index_url.slice(0, 60)}…)` : '';
+    if (st) { st.textContent = `⚠ ${hint}${raw}`; st.style.color = 'var(--yellow)'; }
   } else {
     const set = (id, val) => { const el = document.getElementById(id); if (el) el.value = val || ''; };
     set('jf_url',   pip.jfrog_url   || '');

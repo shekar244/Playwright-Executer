@@ -64,6 +64,21 @@
   .studio-file-item.status-failed  { border-left-color: #f85149; background: rgba(248,81,73,0.07); color: #f85149; }
   .studio-file-item.status-broken  { border-left-color: #e3b341; background: rgba(227,179,65,0.07); color: #e3b341; }
   .studio-file-item.status-skipped { border-left-color: #6e7681; color: #6e7681; }
+  .studio-folder-header {
+    padding: 5px 14px 3px;
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--text-dim);
+    background: rgba(255,255,255,0.02);
+    border-top: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-top: 2px;
+  }
+  .studio-folder-header:first-child { border-top: none; margin-top: 0; }
   .studio-status-dot {
     width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0;
     background: #6e7681;
@@ -225,23 +240,10 @@
         <button class="studio-launch-btn" onclick="studioRefresh()" title="Refresh results" style="padding:2px 8px;font-size:10px;">↻ Refresh</button>
       </div>
 
-      <!-- Atlassian connection status + Jira search -->
-      <div class="studio-launch-row" id="studioAtlassianRow">
-        <span id="studioAtlassianDot" style="width:8px;height:8px;border-radius:50%;background:#6e7681;flex-shrink:0;"></span>
-        <span id="studioAtlassianLabel" style="font-size:11px;color:var(--text-dim);">Checking Atlassian…</span>
-        <button type="button" class="studio-launch-btn" id="studioConnectBtn" onclick="switchTab('tools');switchCfgTab('atlassian')" style="display:none;margin-left:auto;">🔗 Connect</button>
-        <button type="button" class="studio-launch-btn" onclick="studioLaunchRovo()" style="margin-left:auto;">Open in Edge</button>
-      </div>
-
-      <!-- Jira search (shown when authenticated) -->
-      <div id="studioJiraSearch" style="display:none;padding:6px 10px;border-bottom:1px solid var(--border);gap:6px;flex-direction:column;">
-        <div style="display:flex;gap:6px;align-items:center;">
-          <input type="text" id="studioJiraQuery" placeholder="Search Jira: test name or keyword…"
-                 style="flex:1;font-size:11px;padding:4px 8px;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius);color:var(--text);"
-                 onkeydown="if(event.key==='Enter')studioJiraSearch()" />
-          <button type="button" class="studio-launch-btn" onclick="studioJiraSearch()">Search</button>
-        </div>
-        <div id="studioJiraResults" style="font-size:11px;color:var(--text-dim);max-height:160px;overflow-y:auto;"></div>
+      <!-- Edge launcher -->
+      <div class="studio-launch-row">
+        <button type="button" class="studio-launch-btn" onclick="studioLaunchRovo()">Open in Edge</button>
+        <span class="studio-launch-label">Opens your Jira + studio side-by-side</span>
       </div>
 
       <div class="studio-file-list" id="studio-file-list">
@@ -293,69 +295,7 @@ let _studioActiveFile  = null;   // {path, relpath, name}
 let _studioActiveError = null;   // error dict from API
 let _studioFileMap     = {};     // path → file info object (avoids JSON-in-onclick quoting issues)
 
-let _studioAtlassianConnected = false;
-let _studioCloudId = '';
-
-async function _studioCheckAtlassian() {
-  const dot     = document.getElementById('studioAtlassianDot');
-  const label   = document.getElementById('studioAtlassianLabel');
-  const connBtn = document.getElementById('studioConnectBtn');
-  const jiraDiv = document.getElementById('studioJiraSearch');
-  try {
-    const s = await fetch('/api/atlassian/status').then(r => r.json());
-    _studioAtlassianConnected = s.connected;
-    if (s.connected) {
-      if (dot)   dot.style.background = '#3fb950';
-      if (label) { label.textContent = `Jira: ${s.display_name || s.email || 'connected'}`; label.style.color = '#3fb950'; }
-      if (connBtn) connBtn.style.display = 'none';
-      if (jiraDiv) jiraDiv.style.display = 'flex';
-      // Load cloud id from config
-      const cfg = await fetch('/api/config').then(r => r.json()).catch(() => ({}));
-      _studioCloudId = cfg.atlassian_cloud_id || '';
-    } else {
-      if (dot)   dot.style.background = '#6e7681';
-      if (label) { label.textContent = 'Atlassian not connected'; label.style.color = 'var(--text-dim)'; }
-      if (connBtn) connBtn.style.display = 'inline-block';
-      if (jiraDiv) jiraDiv.style.display = 'none';
-    }
-  } catch (e) {
-    if (label) label.textContent = 'Atlassian status unavailable';
-  }
-}
-
-async function studioJiraSearch() {
-  const query    = document.getElementById('studioJiraQuery')?.value.trim() || '';
-  const resultsEl = document.getElementById('studioJiraResults');
-  if (!resultsEl) return;
-  if (!query) { resultsEl.textContent = 'Enter a search term.'; return; }
-  if (!_studioCloudId) { resultsEl.textContent = 'Set Cloud ID in Config → 🔗 Atlassian first.'; return; }
-
-  resultsEl.textContent = 'Searching…';
-  const jql  = `text ~ "${query.replace(/"/g, '')}" ORDER BY updated DESC`;
-  const data = await fetch(`/api/atlassian/jira/search?cloudId=${encodeURIComponent(_studioCloudId)}&jql=${encodeURIComponent(jql)}&maxResults=8`)
-    .then(r => r.json()).catch(e => ({ error: String(e) }));
-
-  if (data.error) { resultsEl.innerHTML = `<span style="color:#f85149;">${escHtml(data.error)}</span>`; return; }
-
-  const issues = data.issues || [];
-  if (!issues.length) { resultsEl.textContent = 'No Jira issues found.'; return; }
-
-  resultsEl.innerHTML = issues.map(i => {
-    const f      = i.fields || {};
-    const key    = i.key;
-    const title  = f.summary || '(no title)';
-    const status = f.status?.name || '';
-    const jiraBase = (window._atlassianJiraBase || '').replace(/\/$/, '');
-    return `<div style="padding:4px 0;border-bottom:1px solid var(--border);display:flex;align-items:flex-start;gap:8px;">
-      <span style="font-weight:700;color:var(--accent);white-space:nowrap;">${escHtml(key)}</span>
-      <span style="color:var(--text);flex:1;">${escHtml(title)}</span>
-      <span style="color:var(--text-dim);font-size:10px;white-space:nowrap;">${escHtml(status)}</span>
-    </div>`;
-  }).join('');
-}
-
 async function studioRefresh() {
-  _studioCheckAtlassian();  // parallel — don't await
   const list = document.getElementById('studio-file-list');
   list.innerHTML = '<div style="padding:20px 14px;font-size:11px;color:var(--text-dim);">Loading…</div>';
   let data;
@@ -377,13 +317,29 @@ function _studioRenderSidebar(files) {
     list.innerHTML = '<div style="padding:14px;font-size:11px;color:var(--text-dim);">No test files found under tests/ directory.</div>';
     return;
   }
-  list.innerHTML = files.map(f => {
-    const st     = f.status || 'unknown';
-    const dot    = `<span class="studio-status-dot ${st}"></span>`;
-    const active = (_studioActiveFile && _studioActiveFile.path === f.path) ? ' active-file' : '';
-    // Use data-path attribute — avoids JSON/quote conflicts in onclick
-    return `<div class="studio-file-item status-${st}${active}" data-path="${escHtml(f.path)}" onclick="studioSelectByPath(this.dataset.path)">${dot}${escHtml(f.name)}</div>`;
-  }).join('');
+
+  // Group by folder
+  const groups = {};
+  files.forEach(f => {
+    const parts  = (f.relpath || f.name).replace(/\\/g, '/').split('/');
+    const folder = parts.length > 1 ? parts.slice(0, -1).join('/') : 'tests';
+    if (!groups[folder]) groups[folder] = [];
+    groups[folder].push(f);
+  });
+
+  let html = '';
+  Object.keys(groups).sort().forEach(folder => {
+    const failCount = groups[folder].filter(f => f.status === 'failed' || f.status === 'broken').length;
+    const badge = failCount ? `<span style="margin-left:auto;font-size:9px;padding:1px 5px;border-radius:8px;background:rgba(248,81,73,0.2);color:#f85149;">${failCount}</span>` : '';
+    html += `<div class="studio-folder-header">${escHtml(folder)}${badge}</div>`;
+    groups[folder].forEach(f => {
+      const st     = f.status || 'unknown';
+      const dot    = `<span class="studio-status-dot ${st}"></span>`;
+      const active = (_studioActiveFile && _studioActiveFile.path === f.path) ? ' active-file' : '';
+      html += `<div class="studio-file-item status-${st}${active}" data-path="${escHtml(f.path)}" onclick="studioSelectByPath(this.dataset.path)">${dot}${escHtml(f.name)}</div>`;
+    });
+  });
+  list.innerHTML = html;
 }
 
 function studioSelectByPath(absPath) {

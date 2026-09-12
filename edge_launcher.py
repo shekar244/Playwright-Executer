@@ -1,10 +1,9 @@
 """
-Edge Launcher — AI Studio dual-tab workspace
-=============================================
-Opens two new tabs in Microsoft Edge (works even if Edge is already running):
+Edge Launcher -- AI Studio dual-tab workspace
 
-  Tab 1 → Atlassian Rovo chat  ({jira_url}/rovo)
-  Tab 2 → Amplify QEA AI Studio  (http://amplify-qea:7777)
+Opens two new tabs in Microsoft Edge (works even if Edge is already running):
+  Tab 1 -> Atlassian Rovo chat  ({jira_url}/rovo)
+  Tab 2 -> Amplify QEA AI Studio  (http://amplify-qea:7777)
 
 No Playwright required. Uses the OS native launcher so Edge's existing
 SSO session and profile are reused automatically.
@@ -20,9 +19,7 @@ import subprocess
 import sys
 from pathlib import Path
 
-
-AMPLIFY_URL  = "http://amplify-qea:7777"
-STUDIO_HASH  = "/#studio"   # fragment that triggers the Studio tab (not strictly needed)
+AMPLIFY_URL = "http://amplify-qea:7777"
 
 
 def _load_jira_url() -> str:
@@ -38,29 +35,40 @@ def _load_jira_url() -> str:
 
 
 def _open_in_edge(url: str) -> None:
-    """Open a URL as a new tab in Microsoft Edge on any platform."""
+    """Open a URL as a new tab in running Edge. Uses subprocess.run so the
+    launcher process exits cleanly without leaving zombie Popen objects."""
     system = platform.system()
     try:
         if system == "Darwin":
-            subprocess.Popen(
+            # `open` hands off to Edge quickly then exits; 8s is generous
+            subprocess.run(
                 ["open", "-a", "Microsoft Edge", url],
-                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                timeout=8,
+                check=False,
             )
         elif system == "Windows":
-            subprocess.Popen(
+            subprocess.run(
                 ["cmd", "/c", "start", "msedge", url],
-                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
-                shell=False,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                timeout=8,
+                check=False,
             )
         else:
-            # Linux
-            subprocess.Popen(
+            subprocess.run(
                 ["microsoft-edge", url],
-                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                timeout=8,
+                check=False,
             )
     except FileNotFoundError as exc:
-        print(f"ERROR: Could not open Edge — {exc}")
+        print(f"ERROR: Could not open Edge -- {exc}")
         raise
+    except subprocess.TimeoutExpired:
+        pass  # Edge launched; `open` just held the pipe briefly
 
 
 def main(studio_only: bool = False, rovo_only: bool = False) -> None:
@@ -77,13 +85,13 @@ def main(studio_only: bool = False, rovo_only: bool = False) -> None:
         _open_in_edge(studio_url)
 
     if not studio_only and not rovo_url:
-        print("WARNING: jira_url is not configured in Amplify QEA Config → Rovo tab skipped.")
-        print("         Set it in Config → Test Management → Jira URL, then retry.")
+        print("WARNING: jira_url not configured -- Rovo tab skipped.")
+        print("Set it in Config -> Test Management -> Jira URL, then retry.")
 
 
 if __name__ == "__main__":
     args = sys.argv[1:]
     main(
         studio_only="--studio-only" in args,
-        rovo_only="--rovo-only"   in args,
+        rovo_only="--rovo-only" in args,
     )

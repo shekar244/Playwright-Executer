@@ -477,16 +477,7 @@ async function init() {
   if (typeof checkVenvStatus === 'function') checkVenvStatus();
   if (cfg.venv_path) { const el = document.getElementById('venvPathInput'); if (el) el.value = cfg.venv_path; }
 
-  // Handle OAuth redirect back: ?tab=tools&cfg=atlassian
-  const urlParams = new URLSearchParams(window.location.search);
-  const deepTab   = urlParams.get('tab');
-  const deepCfg   = urlParams.get('cfg');
-  if (deepTab) {
-    switchTab(deepTab);
-    if (deepCfg && typeof switchCfgTab === 'function') switchCfgTab(deepCfg);
-    // Clean URL without reload
-    window.history.replaceState({}, '', '/');
-  }
+
 }
 
 init();
