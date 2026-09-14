@@ -82,8 +82,7 @@
         </div>
         <div class="checkboxes">
           <label class="checkbox-label"><input type="checkbox" id="headed" checked /> Headed</label>
-          <label class="checkbox-label"><input type="checkbox" id="verbose" /> Verbose (-v)</label>
-          <label class="checkbox-label"><input type="checkbox" id="auto_open" /> Auto-open Report</label>
+          <label class="checkbox-label"><input type="checkbox" id="verbose" checked /> Show Log (-s)</label>
         </div>
         <div class="field"><label>Extra Args</label>
           <input type="text" id="extra" placeholder="e.g. --timeout=60000" />
@@ -363,10 +362,6 @@
               <button type="button" class="btn btn-sm" onclick="clearVenvLog()" title="Clear install log">✕</button>
             </div>
           </div>
-          <div id="venv-log"
-               style="display:none;max-height:200px;overflow-y:auto;background:var(--log-bg);border:1px solid var(--border);
-                      border-radius:var(--radius);padding:8px 10px;font-family:'JetBrains Mono',monospace;font-size:11px;
-                      line-height:1.55;white-space:pre-wrap;word-break:break-all;"></div>
         </div>
       </div>
 
@@ -406,15 +401,10 @@
         </div>
         <div class="section-content" style="gap:10px;">
           <div class="hint">
-            Amplify tries three methods to get a fresh token (in order):<br>
+            Amplify tries two methods to get a fresh token (in order):<br>
             <strong>1.</strong> Uses the <em>saved token</em> to mint a replacement — works while still valid (best, no password).<br>
-            <strong>2.</strong> Basic auth with your SSO password — only works if your Artifactory allows it (most SSO setups block this).<br>
-            <strong>3.</strong> Reads from JFrog CLI (<code>jf</code>) if installed and logged in.<br><br>
+            <strong>2.</strong> Reads from JFrog CLI (<code>jf</code>) if installed and logged in.<br><br>
             <strong>If token already expired:</strong> go to Artifactory UI → avatar → Edit Profile → Generate Identity Token → paste it into the Token field above → Generate pip.ini.
-          </div>
-          <div class="field">
-            <label>SSO Password <span style="font-weight:400;color:var(--text-dim);">(optional — used once, never saved; leave blank to use saved token)</span></label>
-            <input type="password" id="jf_password" placeholder="Leave blank to use saved token automatically" autocomplete="off" />
           </div>
           <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
             <button type="button" class="btn btn-run" onclick="jfrogRotateToken()" style="padding:6px 18px;font-size:12px;">🔑 Fetch New Token &amp; Update pip.ini</button>

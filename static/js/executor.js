@@ -337,7 +337,6 @@ async function refreshConfigAndInit() {
     const sel = document.getElementById('browser');
     if (sel) sel.value = cfg.default_browser;
   }
-  if (cfg.auto_open_report !== undefined) { const a = document.getElementById('auto_open'); if (a) a.checked = !!cfg.auto_open_report; }
   if (cfg.markers?.length) populateMarkers(cfg.markers);
   renderExtraOptions(cfg.extra_options || []);
   applyUiTabs(cfg.ui_tabs || {});
@@ -418,21 +417,13 @@ async function venvInstallReqs() {
   const repo    = document.getElementById('repo').value.trim();
   const reqFile = document.getElementById('venvReqFile')?.dataset.full || '';
   const btn     = document.getElementById('venvInstallBtn');
-  const venvLog = document.getElementById('venv-log');
+  const featLog = document.getElementById('features-log');
 
-  // Route SSE output to the dedicated venv log — leave the test Output Log untouched
-  _runContext  = 'venv';
-  _activeLogEl = venvLog;
-  if (venvLog) { venvLog.innerHTML = ''; venvLog.style.display = ''; }
+  // Route SSE output to the right-side Feature Output panel
+  _runContext  = 'features';
+  _activeLogEl = featLog;
+  if (featLog) featLog.innerHTML = '';
   if (btn) { btn.disabled = true; btn.textContent = '⟳ Installing…'; }
-
-  // Expand the Venv section so the log is visible
-  const venvBody  = document.getElementById('venvBody');
-  const venvArrow = document.getElementById('venvArrow');
-  if (venvBody && venvBody.style.display === 'none') {
-    venvBody.style.display = '';
-    if (venvArrow) venvArrow.textContent = '▼ Collapse';
-  }
 
   const res = await fetch('/api/venv/install', {
     method: 'POST',
@@ -441,16 +432,15 @@ async function venvInstallReqs() {
   });
   const d = await res.json().catch(() => ({}));
   if (!res.ok) {
-    // Show error in venv log; release context so next test run goes to #log
-    if (venvLog) {
+    if (featLog) {
       const span = document.createElement('span');
       span.className = 'log-line log-failed';
       span.textContent = '✗  ' + (d.error || 'pip install failed');
-      venvLog.appendChild(span);
+      featLog.appendChild(span);
     }
     _runContext = 'executor'; _activeLogEl = null;
   }
-  // On success: SSE stream will write lines to #venv-log via _activeLogEl;
+  // On success: SSE stream writes to features-log via _activeLogEl;
   // the SSE 'status' event releases _activeLogEl and resets _runContext.
   if (btn) { btn.disabled = false; btn.textContent = '▶ pip install -r requirements.txt'; }
 }
@@ -1009,12 +999,10 @@ async function jfrogRotateToken() {
   const detail = document.getElementById('jfrogRotateDetail');
   const btn    = document.querySelector('[onclick="jfrogRotateToken()"]');
 
-  const url      = document.getElementById('jf_url')?.value.trim()      || '';
-  const email    = document.getElementById('jf_email')?.value.trim()     || '';
-  const password = document.getElementById('jf_password')?.value         || '';
-  const repo     = document.getElementById('jf_repo')?.value.trim()      || '';
+  const url   = document.getElementById('jf_url')?.value.trim()  || '';
+  const email = document.getElementById('jf_email')?.value.trim() || '';
+  const repo  = document.getElementById('jf_repo')?.value.trim()  || '';
 
-  // Password is optional — the server will try the saved token first (SSO-safe)
   if (!url || !email) {
     if (st) { st.textContent = '⚠ URL and email are required'; st.style.color = 'var(--yellow)'; }
     return;
@@ -1028,7 +1016,7 @@ async function jfrogRotateToken() {
     const res  = await fetch('/api/config/jfrog/rotate-token', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ jfrog_url: url, jfrog_email: email, jfrog_password: password, jfrog_repo: repo }),
+      body: JSON.stringify({ jfrog_url: url, jfrog_email: email, jfrog_repo: repo }),
     });
     const data = await res.json();
 
@@ -1036,10 +1024,6 @@ async function jfrogRotateToken() {
       // Fill token field with new token
       const tokenEl = document.getElementById('jf_token');
       if (tokenEl) tokenEl.value = data.token || '';
-
-      // Clear password field immediately
-      const pwEl = document.getElementById('jf_password');
-      if (pwEl) pwEl.value = '';
 
       // Update preview
       await jfrogPreview();

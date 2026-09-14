@@ -28,6 +28,7 @@ def venv_env_overrides(python_path: str) -> dict:
     env["VIRTUAL_ENV"] = str(venv_root)
     env.pop("PYTHONHOME", None)          # activation always unsets this
     env["PYTHONUNBUFFERED"] = "1"        # ensure streaming output
+    env["PYTHONIOENCODING"] = "utf-8"   # prevent pipe encoding stalls on Windows
     # Prepend venv's bin/Scripts to PATH so `python`, `pip`, etc. resolve correctly
     bin_dir = str(p.parent)
     env["PATH"] = bin_dir + os.pathsep + env.get("PATH", "")
@@ -113,9 +114,9 @@ class CommandBuilder:
         if k_filter:
             cmd.extend(["-k", k_filter])
 
-        # ── Verbosity ─────────────────────────────────────────────────────────
+        # ── Show log / output capture ─────────────────────────────────────────
         if verbose:
-            cmd.append("-v")
+            cmd.append("-s")   # disable output capture so logs stream in real-time
 
         # ── Config-defined extra options (dropdowns / checkboxes) ─────────────
         if extra_flags:

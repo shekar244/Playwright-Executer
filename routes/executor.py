@@ -936,11 +936,12 @@ def stream():
                 yield buffered
             while True:
                 try:
-                    msg = q.get(timeout=3)
+                    msg = q.get(timeout=1)
                     yield msg
                 except queue.Empty:
-                    # Short heartbeat keeps the TCP connection alive and forces
-                    # Windows' TCP stack to flush buffered SSE data immediately.
+                    # Heartbeat keeps the TCP connection alive. 1-second timeout
+                    # means at most 1 s of stall before the socket is nudged,
+                    # which is important on Windows where the SSE buffers longer.
                     yield ": heartbeat\n\n"
         finally:
             if q in state._output_queues:
@@ -950,10 +951,11 @@ def stream():
         generate(),
         mimetype="text/event-stream",
         headers={
-            "Cache-Control":      "no-cache",
-            "X-Accel-Buffering":  "no",        # disable nginx/proxy buffering
-            "Connection":         "keep-alive", # keep socket open between events
-            "Transfer-Encoding":  "chunked",    # each yield is sent as a chunk immediately
+            "Cache-Control":     "no-cache",
+            "X-Accel-Buffering": "no",   # disable nginx/proxy buffering
+            # Transfer-Encoding and Connection are managed by Werkzeug automatically.
+            # Setting them manually can cause double-chunking on Windows, where the
+            # browser's EventSource parser is stricter and stalls on malformed chunks.
         },
     )
 

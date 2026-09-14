@@ -69,7 +69,8 @@ class TestRunner:
         try:
             env = os.environ.copy()
             env.update(self.env_overrides)
-            env["PYTHONUNBUFFERED"] = "1"   # unbuffer Python subprocess output
+            env["PYTHONUNBUFFERED"] = "1"       # unbuffer Python subprocess output
+            env["PYTHONIOENCODING"] = "utf-8"   # prevent encoding-related pipe stalls on Windows
 
             popen_kwargs: dict = {
                 "args":   self.cmd,
@@ -94,11 +95,14 @@ class TestRunner:
             assert self._process.stdout is not None
             if sys.platform == "win32":
                 # On Windows, readline() on a pipe can stall waiting for the OS
-                # buffer to fill.  Reading small chunks and splitting on \n gives
-                # lower latency — each pytest progress line arrives as it is written.
+                # buffer to fill.  Reading chunks (bufsize=0 means each read()
+                # makes a single ReadFile() call and returns whatever is in the
+                # pipe immediately — up to the requested size) and splitting on
+                # \n gives low latency.  4096 reduces system-call overhead vs
+                # the old 128 while keeping the same real-time behaviour.
                 buf = b""
                 while True:
-                    chunk = self._process.stdout.read(128)
+                    chunk = self._process.stdout.read(4096)
                     if not chunk:
                         break
                     buf += chunk
