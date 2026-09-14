@@ -870,13 +870,36 @@ async function saveAllureConfig() {
 
 // ── JFrog Artifactory config ──────────────────────────────────────────────────
 
+function jfrogUnlockRepo() {
+  const el  = document.getElementById('jf_repo');
+  const btn = document.getElementById('jf_repo_edit_btn');
+  if (!el) return;
+  el.readOnly = false;
+  el.style.opacity = '1';
+  el.style.cursor  = 'text';
+  el.focus();
+  if (btn) btn.style.display = 'none';
+}
+
+function _jfrogLockRepo(val) {
+  const el  = document.getElementById('jf_repo');
+  const btn = document.getElementById('jf_repo_edit_btn');
+  if (!el) return;
+  el.value    = val || 'pypi-remote';
+  el.readOnly = true;
+  el.style.opacity = '0.7';
+  el.style.cursor  = 'default';
+  if (btn) btn.style.display = '';
+}
+
 async function loadJfrogConfig() {
   const cfg = await fetch('/api/config').then(r => r.json()).catch(() => ({}));
   const set = (id, val) => { const el = document.getElementById(id); if (el) el.value = val || ''; };
   set('jf_url',   cfg.jfrog_url   || '');
-  set('jf_repo',  cfg.jfrog_repo  || '');
   set('jf_email', cfg.jfrog_email || '');
   set('jf_token', cfg.jfrog_token || '');
+  // Repo: default to pypi-remote, lock the field
+  _jfrogLockRepo(cfg.jfrog_repo || 'pypi-remote');
 
   // Auto-detect existing pip.ini and show status — but only pre-fill if
   // config.json has no values yet (so a saved config is never silently overwritten).
@@ -909,12 +932,17 @@ async function jfrogLoadFromFile() {
   } else {
     const set = (id, val) => { const el = document.getElementById(id); if (el) el.value = val || ''; };
     set('jf_url',   pip.jfrog_url   || '');
-    set('jf_repo',  pip.jfrog_repo  || '');
     set('jf_email', pip.jfrog_email || '');
     set('jf_token', pip.jfrog_token || '');
-    if (st) { st.textContent = `✓ Loaded from ${pip.path} — edit the token and click Generate`; st.style.color = 'var(--green)'; }
+    _jfrogLockRepo(pip.jfrog_repo || 'pypi-remote');
+    // Show the raw pip.ini content unmasked in the preview pane
+    if (pip.index_url) {
+      const pre = document.getElementById('jf_preview');
+      if (pre) pre.textContent = `[global]\nindex-url = ${pip.index_url}`;
+    }
+    if (st) { st.textContent = `✓ Loaded from ${pip.path}`; st.style.color = 'var(--green)'; }
   }
-  setTimeout(() => { const s = document.getElementById('jfrogStatus'); if (s) s.textContent = ''; }, 6000);
+  setTimeout(() => { const s = document.getElementById('jfrogStatus'); if (s) s.textContent = ''; }, 8000);
 }
 
 function _jfrogBody() {
@@ -986,8 +1014,9 @@ async function jfrogRotateToken() {
   const password = document.getElementById('jf_password')?.value         || '';
   const repo     = document.getElementById('jf_repo')?.value.trim()      || '';
 
-  if (!url || !email || !password) {
-    if (st) { st.textContent = '⚠ URL, email and password are required'; st.style.color = 'var(--yellow)'; }
+  // Password is optional — the server will try the saved token first (SSO-safe)
+  if (!url || !email) {
+    if (st) { st.textContent = '⚠ URL and email are required'; st.style.color = 'var(--yellow)'; }
     return;
   }
 
@@ -1026,9 +1055,9 @@ async function jfrogRotateToken() {
         detail.textContent   = pipMsg;
       }
     } else {
-      const errMsg = data.error || 'Unknown error';
-      const triedMsg = (data.tried || []).map(([ep, s]) => `  ${ep}: ${s}`).join('\n');
-      if (st) { st.textContent = '✗ ' + errMsg; st.style.color = 'var(--red)'; }
+      const errMsg   = data.error || 'Unknown error';
+      const triedMsg = (data.tried || []).map(t => `  ${t[0]}: ${t[1]}`).join('\n');
+      if (st) { st.textContent = '✗ Failed — see details below'; st.style.color = 'var(--red)'; }
       if (detail) {
         detail.style.display = 'block';
         detail.style.color   = 'var(--red)';

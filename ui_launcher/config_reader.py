@@ -39,6 +39,10 @@ _DEFAULTS: dict = {
     "config_override_path": "",
     "venv_path": "",          # relative to repo root (e.g. ".venv", "venv") or absolute
     "pinned_repos": [],       # list of pinned repo paths for quick-access
+    "jfrog_url":   "",
+    "jfrog_repo":  "pypi-remote",
+    "jfrog_email": "",
+    "jfrog_token": "",
 }
 
 # Tool-level bootstrap config — always exists in the tool directory.

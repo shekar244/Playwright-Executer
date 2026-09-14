@@ -3,13 +3,13 @@
   "browsers": [
     "chromium",
     "firefox",
+    "msedge",
     "webkit"
   ],
   "default_browser": "chromium",
   "markers": [],
   "report_paths": [
-    "allure/reports/latest/index.html",
-    "allure/reports/html/index.html"
+    "allure/results"
   ],
   "default_workers": 1,
   "auto_open_report": false,
@@ -29,6 +29,12 @@
         "prod"
       ]
     }
+  ],
+  "config_override_path": "",
+  "venv_path": "",
+  "pinned_repos": [
+    "/Users/admin/Documents/GitHub/p13n-marketing-experiences-qa-automation",
+    "/Users/admin/Documents/GitHub/qa-automation-coresystems-p13nservices-qaautomation-e2e"
   ],
   "zephyr": {
     "jira_url": "",
@@ -80,6 +86,6 @@
     "cfg_git": true,
     "cfg_tools": true,
     "cfg_mapping": true,
-    "cfg_zephyr": true
+    "cfg_zephyr": false
   }
 }

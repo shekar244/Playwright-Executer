@@ -261,96 +261,158 @@ def read_jfrog_pip_ini():
 @bp.route("/api/config/jfrog/rotate-token", methods=["POST"])
 def jfrog_rotate_token():
     """
-    Use username + password to generate a fresh Artifactory access token via
-    the Artifactory REST API, save it to config, and write pip.ini.
+    Generate a fresh Artifactory access token and update pip.ini.
 
-    The password is used once for the API call and never stored.
+    Auth strategy (tried in order):
+      1. Bearer <existing_token>  — uses saved token to mint a replacement (SSO-safe)
+      2. Basic <email:password>   — plain auth, works only if SSO password login enabled
+      3. Basic <email:api_key>    — treats the "password" field as an existing API key
 
-    Tries two endpoints in order:
-      1. POST /access/api/v1/tokens          (JFrog Platform ≥ 7.x)
-      2. POST /artifactory/api/security/token (legacy / self-hosted)
+    The password/api_key is never stored.
     """
     import base64, re, urllib.error, urllib.parse, urllib.request
 
     from ui_launcher.command_builder import resolve_python
 
-    body = request.json or {}
-    cfg  = ConfigReader().load()
+    body_data = request.json or {}
+    cfg       = ConfigReader().load()
 
-    # Resolve fields: body overrides saved config
-    url      = (body.get("jfrog_url")   or cfg.get("jfrog_url",   "")).strip().rstrip("/")
-    repo     = (body.get("jfrog_repo")  or cfg.get("jfrog_repo",  "")).strip()
-    email    = (body.get("jfrog_email") or cfg.get("jfrog_email", "")).strip()
-    password = (body.get("jfrog_password") or "").strip()
+    url           = (body_data.get("jfrog_url")      or cfg.get("jfrog_url",   "")).strip().rstrip("/")
+    repo          = (body_data.get("jfrog_repo")     or cfg.get("jfrog_repo",  "")).strip()
+    email         = (body_data.get("jfrog_email")    or cfg.get("jfrog_email", "")).strip()
+    password      = (body_data.get("jfrog_password") or "").strip()   # never stored
+    saved_token   = cfg.get("jfrog_token", "").strip()
 
     if not url:
         return jsonify({"error": "Artifactory URL is required"}), 400
     if not email:
         return jsonify({"error": "Email / username is required"}), 400
-    if not password:
-        return jsonify({"error": "Password is required to generate a token"}), 400
 
     if not url.startswith(("http://", "https://")):
         url = "https://" + url
     hostname = re.sub(r"^https?://", "", url)
 
-    creds_b64 = base64.b64encode(f"{email}:{password}".encode()).decode()
-    auth_header = f"Basic {creds_b64}"
+    tried  = []
+    token  = None
 
-    token = None
-    tried = []
-
-    # ── Attempt 1: JFrog Platform Access Token API (≥ 7.x) ───────────────────
-    try:
-        payload = json.dumps({
-            "username":   email,
-            "scope":      "applied-permissions/user",
-            "expires_in": 0,          # use platform default (matches company policy)
-        }).encode("utf-8")
-        req = urllib.request.Request(
-            f"{url}/access/api/v1/tokens",
-            data=payload, method="POST",
-        )
-        req.add_header("Authorization", auth_header)
-        req.add_header("Content-Type", "application/json")
-        with urllib.request.urlopen(req, timeout=15) as resp:
-            data = json.loads(resp.read())
-        token = data.get("access_token") or data.get("token")
-        tried.append(("access/api/v1/tokens", 200))
-    except urllib.error.HTTPError as e:
-        tried.append(("access/api/v1/tokens", e.code))
-    except Exception as exc:
-        tried.append(("access/api/v1/tokens", str(exc)))
-
-    # ── Attempt 2: Legacy security token API ─────────────────────────────────
-    if not token:
+    def _post_token(auth_hdr: str, label: str) -> str | None:
+        """Try both token endpoints with the given auth header. Return token or None."""
+        # Attempt A: JFrog Platform ≥ 7.x Access Token API
+        result = None
         try:
-            form_data = urllib.parse.urlencode({
+            payload = json.dumps({
                 "username":   email,
-                "scope":      "member-of-groups:*",
-                "expires_in": "0",
+                "scope":      "applied-permissions/user",
+                "expires_in": 0,
+            }).encode("utf-8")
+            req = urllib.request.Request(f"{url}/access/api/v1/tokens", data=payload, method="POST")
+            req.add_header("Authorization", auth_hdr)
+            req.add_header("Content-Type", "application/json")
+            with urllib.request.urlopen(req, timeout=15) as r:
+                d = json.loads(r.read())
+            result = d.get("access_token") or d.get("token")
+            tried.append((f"{label} → access/api/v1/tokens", "200 OK"))
+        except urllib.error.HTTPError as e:
+            err_body = e.read().decode("utf-8", errors="replace")[:300]
+            tried.append((f"{label} → access/api/v1/tokens", f"{e.code}: {err_body}"))
+        except Exception as exc:
+            tried.append((f"{label} → access/api/v1/tokens", str(exc)))
+
+        if result:
+            return result
+
+        # Attempt B: Legacy security token API
+        try:
+            form = urllib.parse.urlencode({
+                "username": email, "scope": "member-of-groups:*", "expires_in": "0",
             }).encode("utf-8")
             req2 = urllib.request.Request(
-                f"{url}/artifactory/api/security/token",
-                data=form_data, method="POST",
-            )
-            req2.add_header("Authorization", auth_header)
+                f"{url}/artifactory/api/security/token", data=form, method="POST")
+            req2.add_header("Authorization", auth_hdr)
             req2.add_header("Content-Type", "application/x-www-form-urlencoded")
-            with urllib.request.urlopen(req2, timeout=15) as resp2:
-                data2 = json.loads(resp2.read())
-            token = data2.get("access_token") or data2.get("token")
-            tried.append(("artifactory/api/security/token", 200))
+            with urllib.request.urlopen(req2, timeout=15) as r2:
+                d2 = json.loads(r2.read())
+            result = d2.get("access_token") or d2.get("token")
+            tried.append((f"{label} → artifactory/api/security/token", "200 OK"))
         except urllib.error.HTTPError as e:
-            body2 = e.read().decode("utf-8", errors="replace")
-            tried.append(("artifactory/api/security/token", f"{e.code}: {body2[:200]}"))
+            err_body = e.read().decode("utf-8", errors="replace")[:300]
+            tried.append((f"{label} → artifactory/api/security/token", f"{e.code}: {err_body}"))
         except Exception as exc:
-            tried.append(("artifactory/api/security/token", str(exc)))
+            tried.append((f"{label} → artifactory/api/security/token", str(exc)))
+
+        return result
+
+    # ── Strategy 1: Bearer with saved token (SSO-compatible, no password needed) ──
+    if saved_token:
+        token = _post_token(f"Bearer {saved_token}", "existing-token")
+
+    # ── Strategy 2: Basic auth with password (works only if SSO not enforced) ─
+    if not token and password:
+        b64 = base64.b64encode(f"{email}:{password}".encode()).decode()
+        token = _post_token(f"Basic {b64}", "basic-auth")
+
+    # ── Strategy 3: JFrog CLI stored session token ────────────────────────────
+    if not token:
+        import subprocess as _sp
+        cli_token = None
+        cli_tried = []
+        # Try `jf config show` — outputs JSON with access_token
+        for cli_cmd in (["jf", "config", "show"], ["jfrog", "config", "show"]):
+            try:
+                result = _sp.run(cli_cmd, capture_output=True, text=True, timeout=10)
+                if result.returncode == 0 and result.stdout:
+                    # Output is a table or JSON; try JSON parse
+                    import re as _re
+                    match = _re.search(r'"accessToken"\s*:\s*"([^"]+)"', result.stdout)
+                    if not match:
+                        match = _re.search(r'accessToken\s+([^\s]+)', result.stdout)
+                    if match:
+                        cli_token = match.group(1).strip()
+                        cli_tried.append((cli_cmd[0], "found token"))
+                        break
+                cli_tried.append((cli_cmd[0], f"rc={result.returncode}"))
+            except FileNotFoundError:
+                cli_tried.append((cli_cmd[0], "not installed"))
+            except Exception as exc:
+                cli_tried.append((cli_cmd[0], str(exc)))
+
+        # Also try reading ~/.jfrog/jfrog-cli.conf* directly
+        if not cli_token:
+            import glob as _glob
+            home = Path.home()
+            for conf_path in sorted(_glob.glob(str(home / ".jfrog" / "jfrog-cli.conf*")), reverse=True):
+                try:
+                    conf = json.loads(Path(conf_path).read_text(encoding="utf-8"))
+                    # Search for accessToken in servers list
+                    for srv in conf.get("artifactory", []) + conf.get("servers", []):
+                        t = srv.get("accessToken") or srv.get("access_token") or srv.get("apiKey")
+                        if t and hostname in (srv.get("url", "") + srv.get("artifactoryUrl", "")):
+                            cli_token = t
+                            cli_tried.append((conf_path, "found matching server token"))
+                            break
+                    if cli_token:
+                        break
+                except Exception as exc:
+                    cli_tried.append((conf_path, str(exc)))
+
+        tried.extend(cli_tried)
+        if cli_token:
+            token = _post_token(f"Bearer {cli_token}", "jfrog-cli-token")
 
     if not token:
-        return jsonify({
-            "error": "Could not generate token from Artifactory. Check URL, email and password.",
-            "tried": tried,
-        }), 400
+        got_401 = any("401" in str(r) for _, r in tried)
+        if got_401:
+            error_msg = (
+                "401 Unauthorized — SSO-only authentication is enforced on this Artifactory instance. "
+                "Direct password login is blocked. Options:\n"
+                "1. BEFORE expiry: click 'Rotate' while the current token is still valid (uses it to mint a fresh one).\n"
+                "2. AFTER expiry: go to Artifactory UI → top-right avatar → Edit Profile → "
+                "Generate an Identity Token → paste it into the Token field above → click Generate pip.ini.\n"
+                "3. If JFrog CLI (jf) is installed and logged in, it will be tried automatically."
+            )
+        else:
+            error_msg = "Could not generate token. Check the URL and try again."
+        return jsonify({"error": error_msg, "tried": tried}), 400
 
     # ── Save token to config ──────────────────────────────────────────────────
     cfg["jfrog_token"] = token

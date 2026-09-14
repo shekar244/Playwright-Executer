@@ -107,26 +107,6 @@
       </div>
     </div>
 
-    <div class="section-block">
-      <div class="section-title" onclick="toggleConfigSection('reportsBody','reportsArrow')" style="cursor:pointer;user-select:none;">
-        <span class="stitle-icon">📋</span>Reports
-        <span id="reportsArrow" style="margin-left:auto;font-size:10px;color:var(--text-dim);">▶ Expand</span>
-      </div>
-      <div id="reportsBody" class="section-content" style="display:none;">
-        <div class="report-box">
-          <div class="report-label">📄 Individual Run</div>
-          <div class="report-path" id="reportIndividualPath">No report found</div>
-          <button class="btn btn-sm" id="openIndividualBtn" onclick="openReport('individual')" disabled>Open Latest</button>
-        </div>
-        <div class="report-box">
-          <div class="report-label">📚 Consolidated</div>
-          <div class="report-path" id="reportConsolidatedPath">No report found</div>
-          <button class="btn btn-sm" id="openConsolidatedBtn" onclick="openReport('consolidated')" disabled>Open Latest</button>
-        </div>
-        <button class="btn btn-sm" onclick="refreshReport()">↻ Refresh Reports</button>
-      </div>
-    </div>
-
     <!-- Config file status (collapsed by default) -->
     <div class="section-block">
       <div class="section-title" onclick="toggleConfigSection('cfgFileBody','cfgFileArrow')" style="cursor:pointer;user-select:none;">
@@ -146,41 +126,6 @@
           <button class="btn btn-sm" onclick="refreshConfigAndInit()" title="Reload config and re-initialise tool options">⟳ Refresh</button>
         </div>
         <div id="cfgOverrideInfo" style="display:none;font-size:10px;color:var(--yellow);">⚠ Config override active</div>
-      </div>
-    </div>
-
-    <!-- Python Venv (collapsed by default) -->
-    <div class="section-block">
-      <div class="section-title" onclick="toggleConfigSection('venvBody','venvArrow')" style="cursor:pointer;user-select:none;">
-        <span class="stitle-icon">🐍</span>Python Venv
-        <span id="venvArrow" style="margin-left:auto;font-size:10px;color:var(--text-dim);">▶ Expand</span>
-      </div>
-      <div id="venvBody" class="section-content" style="gap:8px;display:none;">
-        <div class="field">
-          <label>Venv Path <span style="font-weight:400;color:var(--text-dim);">(relative to repo or absolute)</span></label>
-          <div class="field-row">
-            <input type="text" id="venvPathInput" placeholder=".venv  or  venv  or  /abs/path/.venv" />
-            <button class="btn btn-sm" onclick="saveVenvPath()">Save</button>
-          </div>
-          <div class="hint">Leave blank to auto-detect .venv / venv / env inside the repo.</div>
-        </div>
-        <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
-          <span id="venvStatusBadge" style="font-size:10px;font-weight:700;padding:2px 8px;border-radius:20px;background:rgba(128,128,153,0.15);color:var(--text-dim);border:1px solid var(--border);">unknown</span>
-          <span id="venvPythonPath" style="font-size:10px;color:var(--text-dim);font-family:'JetBrains Mono',monospace;overflow:hidden;text-overflow:ellipsis;flex:1;" title="">—</span>
-          <button class="btn btn-sm" onclick="checkVenvStatus()">⟳ Check</button>
-        </div>
-        <div id="venvReqSection" style="display:none;flex-direction:column;gap:6px;">
-          <div style="font-size:10px;color:var(--text-dim);">Requirements file: <span id="venvReqFile" style="color:var(--text-muted);font-family:'JetBrains Mono',monospace;"></span></div>
-          <div style="display:flex;gap:6px;align-items:center;">
-            <button class="btn btn-sm" id="venvInstallBtn" onclick="venvInstallReqs()" style="color:var(--green);border-color:var(--green);flex:1;">▶ pip install -r requirements.txt</button>
-            <button class="btn btn-sm" onclick="clearVenvLog()" title="Clear install log">✕</button>
-          </div>
-        </div>
-        <!-- Dedicated pip install log — separate from the test Output Log -->
-        <div id="venv-log"
-             style="display:none;max-height:200px;overflow-y:auto;background:var(--log-bg);border:1px solid var(--border);
-                    border-radius:var(--radius);padding:8px 10px;font-family:'JetBrains Mono',monospace;font-size:11px;
-                    line-height:1.55;white-space:pre-wrap;word-break:break-all;"></div>
       </div>
     </div>
 
@@ -391,6 +336,40 @@
     <!-- Panel: JFrog Artifactory -->
     <div id="cfgJfrog" style="display:none;flex-direction:column;gap:14px;">
 
+      <!-- Python Venv — determines where pip.ini is written -->
+      <div class="section-block">
+        <div class="section-title" onclick="toggleConfigSection('venvBody','venvArrow')" style="cursor:pointer;user-select:none;">
+          <span class="stitle-icon">🐍</span>Python Venv
+          <span id="venvArrow" style="margin-left:auto;font-size:10px;color:var(--text-dim);">▶ Expand</span>
+        </div>
+        <div id="venvBody" class="section-content" style="gap:8px;display:none;">
+          <div class="field">
+            <label>Venv Path <span style="font-weight:400;color:var(--text-dim);">(relative to repo or absolute)</span></label>
+            <div class="field-row">
+              <input type="text" id="venvPathInput" placeholder=".venv  or  venv  or  /abs/path/.venv" />
+              <button type="button" class="btn btn-sm" onclick="saveVenvPath()">Save</button>
+            </div>
+            <div class="hint">Leave blank to auto-detect .venv / venv / env inside the repo.</div>
+          </div>
+          <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+            <span id="venvStatusBadge" style="font-size:10px;font-weight:700;padding:2px 8px;border-radius:20px;background:rgba(128,128,153,0.15);color:var(--text-dim);border:1px solid var(--border);">unknown</span>
+            <span id="venvPythonPath" style="font-size:10px;color:var(--text-dim);font-family:'JetBrains Mono',monospace;overflow:hidden;text-overflow:ellipsis;flex:1;" title="">—</span>
+            <button type="button" class="btn btn-sm" onclick="checkVenvStatus()">⟳ Check</button>
+          </div>
+          <div id="venvReqSection" style="display:none;flex-direction:column;gap:6px;">
+            <div style="font-size:10px;color:var(--text-dim);">Requirements file: <span id="venvReqFile" style="color:var(--text-muted);font-family:'JetBrains Mono',monospace;"></span></div>
+            <div style="display:flex;gap:6px;align-items:center;">
+              <button type="button" class="btn btn-sm" id="venvInstallBtn" onclick="venvInstallReqs()" style="color:var(--green);border-color:var(--green);flex:1;">▶ pip install -r requirements.txt</button>
+              <button type="button" class="btn btn-sm" onclick="clearVenvLog()" title="Clear install log">✕</button>
+            </div>
+          </div>
+          <div id="venv-log"
+               style="display:none;max-height:200px;overflow-y:auto;background:var(--log-bg);border:1px solid var(--border);
+                      border-radius:var(--radius);padding:8px 10px;font-family:'JetBrains Mono',monospace;font-size:11px;
+                      line-height:1.55;white-space:pre-wrap;word-break:break-all;"></div>
+        </div>
+      </div>
+
       <div class="section-block" style="border-radius:var(--radius-lg);overflow:hidden;border-color:rgba(137,180,250,0.25);">
         <div class="section-title" style="background:rgba(137,180,250,0.08);">
           <span class="stitle-icon">🔗</span>Artifactory Connection
@@ -402,8 +381,12 @@
             <input type="text" id="jf_url" placeholder="e.g. company.jfrog.io  or  https://company.jfrog.io" style="font-family:'JetBrains Mono',monospace;font-size:11px;" />
           </div>
           <div class="field">
-            <label>PyPI Repository name</label>
-            <input type="text" id="jf_repo" placeholder="e.g. pypi-virtual  or  pypi-local" style="font-family:'JetBrains Mono',monospace;font-size:11px;" />
+            <label>PyPI Repository name
+              <button type="button" id="jf_repo_edit_btn" onclick="jfrogUnlockRepo()" style="margin-left:8px;padding:1px 8px;font-size:10px;border:1px solid var(--border);border-radius:4px;background:transparent;color:var(--text-dim);cursor:pointer;" title="Unlock to edit">✏️ Edit</button>
+            </label>
+            <input type="text" id="jf_repo" value="pypi-remote" readonly
+                   style="font-family:'JetBrains Mono',monospace;font-size:11px;opacity:0.7;cursor:default;"
+                   title="Default: pypi-remote. Click Edit to change." />
           </div>
           <div class="field">
             <label>Email / Username</label>
@@ -422,10 +405,16 @@
           <span class="stitle-icon">🔄</span>Monthly Token Rotation
         </div>
         <div class="section-content" style="gap:10px;">
-          <div class="hint">Token expiring? Enter your SSO password once — Amplify calls the Artifactory API to generate a fresh token, fills it above, and regenerates <code>pip.ini</code> automatically. Your password is never stored.</div>
+          <div class="hint">
+            Amplify tries three methods to get a fresh token (in order):<br>
+            <strong>1.</strong> Uses the <em>saved token</em> to mint a replacement — works while still valid (best, no password).<br>
+            <strong>2.</strong> Basic auth with your SSO password — only works if your Artifactory allows it (most SSO setups block this).<br>
+            <strong>3.</strong> Reads from JFrog CLI (<code>jf</code>) if installed and logged in.<br><br>
+            <strong>If token already expired:</strong> go to Artifactory UI → avatar → Edit Profile → Generate Identity Token → paste it into the Token field above → Generate pip.ini.
+          </div>
           <div class="field">
-            <label>SSO Password <span style="font-weight:400;color:var(--text-dim);">(used once, never saved)</span></label>
-            <input type="password" id="jf_password" placeholder="Your Artifactory / SSO password" autocomplete="off" />
+            <label>SSO Password <span style="font-weight:400;color:var(--text-dim);">(optional — used once, never saved; leave blank to use saved token)</span></label>
+            <input type="password" id="jf_password" placeholder="Leave blank to use saved token automatically" autocomplete="off" />
           </div>
           <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
             <button type="button" class="btn btn-run" onclick="jfrogRotateToken()" style="padding:6px 18px;font-size:12px;">🔑 Fetch New Token &amp; Update pip.ini</button>
