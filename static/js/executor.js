@@ -888,51 +888,35 @@ async function loadJfrogConfig() {
   set('jf_url',   cfg.jfrog_url   || '');
   set('jf_email', cfg.jfrog_email || '');
   set('jf_token', cfg.jfrog_token || '');
-  // Repo: default to pypi-remote, lock the field
   _jfrogLockRepo(cfg.jfrog_repo || 'pypi-remote');
-
-  // Auto-detect existing pip.ini and show status — but only pre-fill if
-  // config.json has no values yet (so a saved config is never silently overwritten).
-  const hasConfig = cfg.jfrog_url || cfg.jfrog_repo || cfg.jfrog_email;
-  if (!hasConfig) {
-    const pip = await fetch('/api/config/jfrog/read-pip-ini').then(r => r.json()).catch(() => null);
-    if (pip?.found && pip?.parsed) {
-      set('jf_url',   pip.jfrog_url   || '');
-      set('jf_repo',  pip.jfrog_repo  || '');
-      set('jf_email', pip.jfrog_email || '');
-      set('jf_token', pip.jfrog_token || '');
-      const st = document.getElementById('jfrogStatus');
-      if (st) { st.textContent = `↑ Loaded from ${pip.path}`; st.style.color = 'var(--teal)'; }
-      setTimeout(() => { const s = document.getElementById('jfrogStatus'); if (s) s.textContent = ''; }, 4000);
-    }
-  }
 }
 
-async function jfrogLoadFromFile() {
+async function jfrogShowPipIni() {
+  const featLog = document.getElementById('features-log');
+  if (featLog) featLog.innerHTML = '';
+  const data = await fetch('/api/config/jfrog/pip-ini-content').then(r => r.json()).catch(() => ({}));
   const st = document.getElementById('jfrogStatus');
-  const pip = await fetch('/api/config/jfrog/read-pip-ini').then(r => r.json()).catch(() => null);
-  if (!pip) {
-    if (st) { st.textContent = '✗ Network error'; st.style.color = 'var(--red)'; }
-  } else if (!pip.found) {
-    if (st) { st.textContent = `⚠ pip.ini not found at ${pip.path}`; st.style.color = 'var(--yellow)'; }
-  } else if (!pip.parsed) {
-    const hint = pip.hint || 'URL format not recognised — fill in the fields manually.';
-    const raw  = pip.index_url ? ` (found: ${pip.index_url.slice(0, 60)}…)` : '';
-    if (st) { st.textContent = `⚠ ${hint}${raw}`; st.style.color = 'var(--yellow)'; }
+  if (!featLog) return;
+  if (data.error || !data.found) {
+    const span = document.createElement('span');
+    span.className = 'log-line log-failed';
+    span.textContent = data.error || `pip.ini not found at: ${data.path || '(unknown)'}`;
+    featLog.appendChild(span);
+    if (st) { st.textContent = '⚠ pip.ini not found'; st.style.color = 'var(--yellow)'; }
   } else {
-    const set = (id, val) => { const el = document.getElementById(id); if (el) el.value = val || ''; };
-    set('jf_url',   pip.jfrog_url   || '');
-    set('jf_email', pip.jfrog_email || '');
-    set('jf_token', pip.jfrog_token || '');
-    _jfrogLockRepo(pip.jfrog_repo || 'pypi-remote');
-    // Show the raw pip.ini content unmasked in the preview pane
-    if (pip.index_url) {
-      const pre = document.getElementById('jf_preview');
-      if (pre) pre.textContent = `[global]\nindex-url = ${pip.index_url}`;
-    }
-    if (st) { st.textContent = `✓ Loaded from ${pip.path}`; st.style.color = 'var(--green)'; }
+    const header = document.createElement('span');
+    header.className = 'log-line log-cmd';
+    header.textContent = `# ${data.path}`;
+    featLog.appendChild(header);
+    (data.content || '').split('\n').forEach(line => {
+      const span = document.createElement('span');
+      span.className = 'log-line log-default';
+      span.textContent = line;
+      featLog.appendChild(span);
+    });
+    if (st) { st.textContent = `✓ ${data.path}`; st.style.color = 'var(--green)'; }
   }
-  setTimeout(() => { const s = document.getElementById('jfrogStatus'); if (s) s.textContent = ''; }, 8000);
+  setTimeout(() => { const s = document.getElementById('jfrogStatus'); if (s) s.textContent = ''; }, 4000);
 }
 
 function _jfrogBody() {
@@ -942,15 +926,6 @@ function _jfrogBody() {
     jfrog_email: document.getElementById('jf_email')?.value.trim() || '',
     jfrog_token: document.getElementById('jf_token')?.value.trim() || '',
   };
-}
-
-async function jfrogPreview() {
-  const body = _jfrogBody();
-  const res  = await fetch('/api/config/jfrog/preview', {
-    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
-  }).then(r => r.json()).catch(() => ({ content: '# Error fetching preview' }));
-  const pre = document.getElementById('jf_preview');
-  if (pre) pre.textContent = res.content || '# (empty)';
 }
 
 async function saveJfrogConfig() {
@@ -994,66 +969,6 @@ async function jfrogGenerate() {
   setTimeout(() => { if (st) st.textContent = ''; }, 6000);
 }
 
-async function jfrogRotateToken() {
-  const st     = document.getElementById('jfrogRotateStatus');
-  const detail = document.getElementById('jfrogRotateDetail');
-  const btn    = document.querySelector('[onclick="jfrogRotateToken()"]');
-
-  const url   = document.getElementById('jf_url')?.value.trim()  || '';
-  const email = document.getElementById('jf_email')?.value.trim() || '';
-  const repo  = document.getElementById('jf_repo')?.value.trim()  || '';
-
-  if (!url || !email) {
-    if (st) { st.textContent = '⚠ URL and email are required'; st.style.color = 'var(--yellow)'; }
-    return;
-  }
-
-  if (btn) btn.disabled = true;
-  if (st)  { st.textContent = 'Contacting Artifactory…'; st.style.color = 'var(--text-dim)'; }
-  if (detail) detail.style.display = 'none';
-
-  try {
-    const res  = await fetch('/api/config/jfrog/rotate-token', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ jfrog_url: url, jfrog_email: email, jfrog_repo: repo }),
-    });
-    const data = await res.json();
-
-    if (data.ok) {
-      // Fill token field with new token
-      const tokenEl = document.getElementById('jf_token');
-      if (tokenEl) tokenEl.value = data.token || '';
-
-      // Update preview
-      await jfrogPreview();
-
-      const pipMsg = data.pip_written
-        ? `pip.ini written → ${data.pip_path}`
-        : `pip.ini not written: ${data.pip_error || 'unknown'}`;
-
-      if (st) { st.textContent = '✓ Token rotated successfully'; st.style.color = 'var(--green)'; }
-      if (detail) {
-        detail.style.display = 'block';
-        detail.style.color   = 'var(--green)';
-        detail.textContent   = pipMsg;
-      }
-    } else {
-      const errMsg   = data.error || 'Unknown error';
-      const triedMsg = (data.tried || []).map(t => `  ${t[0]}: ${t[1]}`).join('\n');
-      if (st) { st.textContent = '✗ Failed — see details below'; st.style.color = 'var(--red)'; }
-      if (detail) {
-        detail.style.display = 'block';
-        detail.style.color   = 'var(--red)';
-        detail.textContent   = triedMsg || errMsg;
-      }
-    }
-  } catch (e) {
-    if (st) { st.textContent = '✗ Network error: ' + e; st.style.color = 'var(--red)'; }
-  }
-
-  if (btn) btn.disabled = false;
-}
 
 function toggleConfigSection(bodyId, arrowId) {
   const body  = document.getElementById(bodyId);

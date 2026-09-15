@@ -1173,11 +1173,10 @@ def venv_install():
         import platform as _plat
         pip_flags = _read_pip_ini_flags(python)
 
-        if _plat.system() == "Windows":
-            pip_exe = str(Path(python).parent / "pip.exe")
-            base = [pip_exe] if Path(pip_exe).exists() else [python, "-m", "pip"]
-        else:
-            base = [python, "-m", "pip"]
+        # Always use `python -u -m pip` so the -u flag forces unbuffered output
+        # on Windows — pip.exe does not honour PYTHONUNBUFFERED and its output
+        # arrives all at once at the end when stdout is a pipe.
+        base = [python, "-u", "-m", "pip"]
 
         cmd = base + ["install", "--isolated"] + pip_flags + ["-r", req]
         display = " ".join(cmd)
