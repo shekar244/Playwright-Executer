@@ -1,0 +1,43 @@
+# ── Git ───────────────────────────────────────────────────────────────────────
+.git
+.gitignore
+
+# ── Python cache ──────────────────────────────────────────────────────────────
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.Python
+
+# ── Virtual environments (local dev only) ─────────────────────────────────────
+venv/
+.venv/
+env/
+.env/
+
+# ── Local secrets & config overrides ─────────────────────────────────────────
+.env
+*.env
+config.json
+
+# ── macOS junk ────────────────────────────────────────────────────────────────
+.DS_Store
+**/.DS_Store
+
+# ── Editor / IDE ──────────────────────────────────────────────────────────────
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# ── Docs & local launchers (not needed in container) ─────────────────────────
+docs/
+README.md
+launch-ui.sh
+launch-ui.bat
+edge_launcher.py
+
+# ── Test artifacts (keep image lean) ─────────────────────────────────────────
+allure/
+allure-results/
+.pytest_cache/

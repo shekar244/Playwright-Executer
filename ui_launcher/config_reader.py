@@ -95,7 +95,12 @@ class ConfigReader:
         if repo:
             repo_cfg_path = Path(repo) / "config.json"
             if repo_cfg_path.exists():
+                tool_repo_root = config.get("repo_root", "")  # preserve before merge
                 config.update(_read_json(repo_cfg_path))
+                # repo_root is a tool-level concept — never let a repo-level config
+                # blank it out (its default is "" which would lose the selection on refresh)
+                if not config.get("repo_root"):
+                    config["repo_root"] = tool_repo_root
                 config["_active_config_path"]   = str(repo_cfg_path)
                 config["_active_config_source"]  = "repo"
                 config["_tool_config_path"]      = str(TOOL_CONFIG_FILE)

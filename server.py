@@ -46,11 +46,12 @@ def static_files(path):
     return send_from_directory("static", path)
 
 
-# ── Hostname setup ─────────────────────────────────────────────────────────────
+# ── Hostname / port setup ──────────────────────────────────────────────────────
 
-HOSTNAME = "amplify-qea"
-PORT     = 7777
-APP_URL  = f"http://{HOSTNAME}:{PORT}"
+HOSTNAME   = "amplify-qea"
+PORT       = int(os.environ.get("PORT", 7777))          # 8080 in container, 7777 locally
+_CONTAINER = os.environ.get("CONTAINER", "0") == "1"    # set to "1" in Dockerfile
+APP_URL    = f"http://{HOSTNAME}:{PORT}"
 
 
 def _ensure_hosts_entry() -> bool:
@@ -82,10 +83,16 @@ def _ensure_hosts_entry() -> bool:
 # ── Entry point ────────────────────────────────────────────────────────────────
 
 if __name__ == "__main__":
-    ok  = _ensure_hosts_entry()
-    url = APP_URL if ok else f"http://localhost:{PORT}"
+    if _CONTAINER:
+        # Running inside Docker / OpenShift — skip hosts entry and browser launch
+        print(f"\n  Amplify QEA — container mode")
+        print(f"  Listening on 0.0.0.0:{PORT}\n")
+    else:
+        # Running locally — open browser as usual
+        ok  = _ensure_hosts_entry()
+        url = APP_URL if ok else f"http://localhost:{PORT}"
+        print(f"\n  Playwright Test Executor")
+        print(f"  Open: {url}\n")
+        threading.Timer(1.5, lambda: webbrowser.open(url)).start()
 
-    print(f"\n  Playwright Test Executor")
-    print(f"  Open: {url}\n")
-    threading.Timer(1.5, lambda: webbrowser.open(url)).start()
     app.run(host="0.0.0.0", port=PORT, debug=False, threaded=True)
