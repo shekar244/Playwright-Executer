@@ -38,7 +38,12 @@ COPY . .
 ENV PORT=8080
 ENV CONTAINER=1
 
+# Jira Insights (Streamlit side-car) — started on demand from the Jira Insights tab.
+# On OpenShift expose 8501 with its own route and set INSIGHTS_PUBLIC_URL to it.
+ENV INSIGHTS_PORT=8501
+
 EXPOSE 8080
+EXPOSE 8501
 
 # ── Health check ──────────────────────────────────────────────────────────────
 HEALTHCHECK --interval=30s --timeout=10s --start-period=15s --retries=3 \

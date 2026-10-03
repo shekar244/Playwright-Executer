@@ -1,0 +1,29 @@
+# Streamlit settings for Jira Insights (jira_insights/app.py).
+# Streamlit reads .streamlit/config.toml from the working directory — the
+# launcher (jira_insights/launcher.py) starts the app from the tool root.
+
+[server]
+headless = true
+port = 8501                   # overridden by INSIGHTS_PORT via the launcher
+# The app is embedded in the Amplify QEA UI with an <iframe> served from a
+# different port (or route), so cross-origin requests and the XSRF cookie
+# would otherwise block widgets such as the file uploader.
+enableCORS = false
+enableXsrfProtection = false
+maxUploadSize = 200           # MB — large Jira CSV / Excel exports
+
+[browser]
+gatherUsageStats = false
+
+[client]
+toolbarMode = "minimal"
+
+# Matches the Amplify QEA dark palette (templates/base.html :root variables).
+[theme]
+base = "dark"
+primaryColor = "#7ea8ff"
+backgroundColor = "#0e0e18"
+secondaryBackgroundColor = "#181828"
+textColor = "#dde3f8"
+borderColor = "#2a2a42"
+font = "Inter, system-ui, -apple-system, Segoe UI, sans-serif"

@@ -787,12 +787,12 @@ function switchCfgTab(tab) {
 }
 
 // ── UI Tab kill-switch ────────────────────────────────────────────────────────
-const _UI_TAB_KEYS = ['dashboard', 'zephyr', 'cfg_git', 'cfg_tools', 'cfg_mapping', 'cfg_zephyr'];
+const _UI_TAB_KEYS = ['dashboard', 'zephyr', 'insights', 'cfg_git', 'cfg_tools', 'cfg_mapping', 'cfg_zephyr'];
 
 async function loadUiTabs() {
   const cfg  = await fetch('/api/config').then(r => r.json()).catch(() => ({}));
   const tabs = cfg.ui_tabs || {};
-  const defaults = { dashboard: true, zephyr: true, cfg_git: true, cfg_tools: true, cfg_mapping: true, cfg_zephyr: true };
+  const defaults = { dashboard: true, zephyr: true, insights: true, cfg_git: true, cfg_tools: true, cfg_mapping: true, cfg_zephyr: true };
   _UI_TAB_KEYS.forEach(key => {
     const el = document.getElementById('uitab_' + key);
     if (el) el.checked = key in tabs ? !!tabs[key] : !!defaults[key];

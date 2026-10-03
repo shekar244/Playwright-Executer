@@ -35,9 +35,12 @@ docs/
 README.md
 launch-ui.sh
 launch-ui.bat
-edge_launcher.py
 
 # ── Test artifacts (keep image lean) ─────────────────────────────────────────
 allure/
 allure-results/
 .pytest_cache/
+tests/
+
+# ── Jira Insights local workspace (pulled Jira data) ──────────────────────────
+jira_insights/workspace/

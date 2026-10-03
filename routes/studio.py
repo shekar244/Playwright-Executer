@@ -3,7 +3,6 @@ Blueprint: AI Studio routes
   GET  /studio/data          — allure-results parse + test file listing
   GET  /studio/file          — raw file content (?path=relative)
   POST /studio/save          — overwrite test file + trigger background re-run
-  POST /studio/launch-rovo   — spawn edge_launcher.py in background
 """
 from __future__ import annotations
 
@@ -209,32 +208,3 @@ def studio_save():
                         "rerun_warning": f"Could not start re-run: {exc}"})
 
     return jsonify({"ok": True, "saved": True, "rerun": True, "cmd": " ".join(cmd)})
-
-
-@bp.route("/studio/launch-rovo", methods=["POST"])
-def studio_launch_rovo():
-    """Open Rovo + Studio URLs in the running Edge instance."""
-    launcher = Path(__file__).parent.parent / "edge_launcher.py"
-    if not launcher.exists():
-        return jsonify({"error": "edge_launcher.py not found — check repo root"}), 404
-
-    cfg      = _cfg()
-    jira_url = cfg.get("jira_url", "").strip().rstrip("/")
-    warnings = []
-    if not jira_url:
-        warnings.append("jira_url not configured — Rovo tab will be skipped. Set it in Config → Test Management.")
-
-    try:
-        result = subprocess.run(
-            [sys.executable, str(launcher)],
-            capture_output=True, text=True, timeout=10,
-        )
-        if result.returncode != 0:
-            err = (result.stderr or result.stdout or "unknown error").strip()
-            return jsonify({"error": err, "warnings": warnings}), 500
-    except subprocess.TimeoutExpired:
-        pass  # Normal — launcher opens URLs and exits; timeout just means it's still running
-    except OSError as exc:
-        return jsonify({"error": str(exc)}), 500
-
-    return jsonify({"ok": True, "warnings": warnings})

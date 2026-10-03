@@ -9,6 +9,12 @@ openpyxl>=3.1.0       # Excel read/write for File Manager
 pyyaml>=6.0           # YAML read/write for File Manager
 gunicorn>=21.0.0      # Production WSGI server (used in Docker/OpenShift)
 
+# Jira Insights tab (jira_insights/ — Streamlit side-car app)
+streamlit>=1.45,<1.57 # App shell; PyGWalker's Streamlit bridge needs the Tornado server (<1.57)
+pygwalker>=0.4.9      # Drag-and-drop chart explorer
+plotly>=5.24.0        # Pivot report charts
+pandas>=2.2.0         # Jira issue frames + pivots (pyarrow comes with streamlit)
+
 # Standard-library modules used (no install needed):
 #   base64, csv, datetime, hashlib, hmac, io, json, os, pathlib,
 #   queue, subprocess, sys, threading, time, tkinter, urllib
@@ -18,3 +24,6 @@ gunicorn>=21.0.0      # Production WSGI server (used in Docker/OpenShift)
 #   pytest-playwright
 #   allure-pytest
 #   pytest-xdist
+#
+# Optional — to run this tool's own unit tests (tests/):
+#   pytest

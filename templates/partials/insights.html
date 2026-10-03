@@ -1,0 +1,38 @@
+<!-- ══════════════════════════════════════════════════════════════
+     Jira Insights Tab  (#page-insights)
+     Embeds the Streamlit reporting app (jira_insights/app.py), which runs
+     side-by-side with Flask on its own port (INSIGHTS_PORT, default 8501).
+     Started on first visit; the iframe stays loaded across tab switches.
+     ══════════════════════════════════════════════════════════════ -->
+<style>
+  #page-insights { display:none; flex:1; min-height:0; flex-direction:column; background:var(--bg); }
+  #page-insights.active { display:flex; }
+  .insights-bar { display:flex; align-items:center; gap:10px; padding:8px 16px; border-bottom:1px solid var(--border); background:var(--surface); flex-shrink:0; }
+  .insights-bar .insights-actions { margin-left:auto; display:flex; gap:6px; }
+  .insights-frame { flex:1; width:100%; border:0; background:var(--bg); display:none; }
+  .insights-empty { flex:1; justify-content:center; }
+  .insights-log { max-width:760px; max-height:220px; overflow:auto; text-align:left; background:var(--log-bg); border:1px solid var(--border); border-radius:var(--radius); padding:10px 12px; font-family:'JetBrains Mono',monospace; font-size:11px; color:var(--text-muted); white-space:pre-wrap; display:none; }
+</style>
+
+<div id="page-insights">
+  <div class="insights-bar">
+    <span class="connect-dot" id="insightsDot"></span>
+    <span class="log-title">Jira Insights</span>
+    <span class="hint" id="insightsStatus">Not started</span>
+    <div class="insights-actions">
+      <button type="button" class="btn-sm" onclick="insightsReload()" title="Reload the embedded app">↺ Reload</button>
+      <button type="button" class="btn-sm" onclick="insightsOpenNewTab()" title="Open Jira Insights in a new browser tab">↗ New tab</button>
+      <button type="button" class="btn-sm" id="insightsStopBtn" onclick="insightsStop()" title="Stop the Streamlit process">■ Stop</button>
+    </div>
+  </div>
+
+  <div class="empty-state insights-empty" id="insightsEmpty">
+    <div class="empty-state-icon">📈</div>
+    <div id="insightsEmptyMsg">Pull Jira issues with JQL and build pivot reports and charts — no code per chart.</div>
+    <pre class="insights-log" id="insightsLog"></pre>
+    <button type="button" class="btn btn-accent" id="insightsStartBtn" onclick="insightsStart()">▶ Start Jira Insights</button>
+    <div class="hint">Uses the Jira URL and API token from Config → Zephyr.</div>
+  </div>
+
+  <iframe id="insightsFrame" class="insights-frame" title="Jira Insights"></iframe>
+</div>

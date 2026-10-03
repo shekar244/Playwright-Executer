@@ -204,15 +204,6 @@
     color: #3fb950;
     display: none;
   }
-  .studio-launch-row {
-    padding: 8px 14px;
-    border-bottom: 1px solid var(--border);
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    flex-shrink: 0;
-    background: rgba(255,255,255,0.015);
-  }
   .studio-launch-btn {
     background: transparent;
     border: 1px solid var(--border);
@@ -227,7 +218,6 @@
     gap: 5px;
   }
   .studio-launch-btn:hover { border-color: var(--accent); color: var(--accent); }
-  .studio-launch-label { font-size: 11px; color: var(--text-dim); }
 </style>
 
 <div id="page-studio">
@@ -238,12 +228,6 @@
       <div class="studio-sidebar-header">
         Test Files
         <button class="studio-launch-btn" onclick="studioRefresh()" title="Refresh results" style="padding:2px 8px;font-size:10px;">↻ Refresh</button>
-      </div>
-
-      <!-- Edge launcher -->
-      <div class="studio-launch-row">
-        <button type="button" class="studio-launch-btn" onclick="studioLaunchRovo()">Open in Edge</button>
-        <span class="studio-launch-label">Opens your Jira + studio side-by-side</span>
       </div>
 
       <div class="studio-file-list" id="studio-file-list">
@@ -436,16 +420,5 @@ async function studioApplyFix() {
     status.style.color = '#f85149';
   }
   btn.disabled = false;
-}
-
-async function studioLaunchRovo() {
-  try {
-    const r = await fetch('/studio/launch-rovo', { method: 'POST' });
-    const d = await r.json();
-    if (d.error) alert('Could not open Edge: ' + d.error);
-    // warnings (e.g. missing jira_url) are silent — Edge still opens Studio tab
-  } catch (e) {
-    alert('Launch error: ' + e);
-  }
 }
 </script>

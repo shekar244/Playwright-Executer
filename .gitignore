@@ -14,10 +14,26 @@ venv/
 .venv/
 env/
 
+# Secrets — never commit
+.env
+.env.*
+*.env
+.streamlit/secrets.toml
+
+# Test / coverage artifacts
+.pytest_cache/
+.coverage
+.coverage.*
+htmlcov/
+allure/
+allure-results/
+
 # IDE
 .vscode/
 .idea/
 *.code-workspace
+*.swp
+*.swo
 
 # OS
 .DS_Store
@@ -37,3 +53,6 @@ last_run.json
 .firecrawl/
 report_history.json
 config.json
+
+# Jira Insights workspace (pulled Jira data, saved reports, explorer specs)
+jira_insights/workspace/

@@ -280,6 +280,7 @@
   <button type="button" class="tab-btn" id="navbtn-zephyr" onclick="switchTab('zephyr')"><span class="tab-icon">🔷</span>Test Management</button>
   <button type="button" class="tab-btn" id="navbtn-filemanager" onclick="switchTab('filemanager')"><span class="tab-icon">🗂️</span>File Manager</button>
   <button type="button" class="tab-btn" id="navbtn-studio" onclick="switchTab('studio')"><span class="tab-icon">🔬</span>AI Studio</button>
+  <button type="button" class="tab-btn" id="navbtn-insights" onclick="switchTab('insights')"><span class="tab-icon">📈</span>Jira Insights</button>
   <button type="button" class="tab-btn" id="navbtn-tools" onclick="switchTab('tools')"><span class="tab-icon">⚙️</span>Config</button>
 </nav>
 
@@ -288,6 +289,7 @@
 {% include 'partials/testmanagement.html' %}
 {% include 'partials/filemanager.html' %}
 {% include 'partials/studio.html' %}
+{% include 'partials/insights.html' %}
 
 <!-- Status bar -->
 <div class="statusbar">
@@ -365,7 +367,7 @@ function setRunning(running) {
 }
 
 function switchTab(tab) {
-  const pages = ['executor','tools','dashboard','zephyr','filemanager','studio'];
+  const pages = ['executor','tools','dashboard','zephyr','filemanager','studio','insights'];
   pages.forEach(p => {
     const el = document.getElementById('page-' + p);
     if (el) {
@@ -383,6 +385,7 @@ function switchTab(tab) {
   if (tab === 'zephyr')      { loadZephyrConfig(); _updateZephyrContextBanners(); loadZephyrStatuses(); }
   if (tab === 'filemanager') initFileManager();
   if (tab === 'studio')      studioRefresh();
+  if (tab === 'insights')    loadInsights();
 }
 
 // ── Status polling fallback (Windows SSE reliability) ─────────────────────────
@@ -471,6 +474,7 @@ document.getElementById('log').addEventListener('scroll', function() {
 const UI_TAB_MAP = {
   dashboard:    { nav: 'navbtn-dashboard' },
   zephyr:       { nav: 'navbtn-zephyr' },
+  insights:     { nav: 'navbtn-insights' },
   cfg_git:      { cfg: 'ctab-git' },
   cfg_tools:    { cfg: 'ctab-tools' },
   cfg_mapping:  { cfg: 'ctab-mapping' },
@@ -478,7 +482,7 @@ const UI_TAB_MAP = {
 };
 
 function applyUiTabs(tabs) {
-  const defaults = { dashboard: true, zephyr: true, cfg_git: true, cfg_tools: true, cfg_mapping: true, cfg_zephyr: true };
+  const defaults = { dashboard: true, zephyr: true, insights: true, cfg_git: true, cfg_tools: true, cfg_mapping: true, cfg_zephyr: true };
   const t = Object.assign({}, defaults, tabs || {});
   Object.entries(UI_TAB_MAP).forEach(([key, ids]) => {
     const visible = !!t[key];
@@ -519,5 +523,6 @@ init();
 <script src="/static/js/executor.js"></script>
 <script src="/static/js/dashboard.js"></script>
 <script src="/static/js/testmanagement.js"></script>
+<script src="/static/js/insights.js"></script>
 </body>
 </html>

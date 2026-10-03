@@ -17,19 +17,32 @@ Amplify-QEA/
 │   ├── config.py                    ← Blueprint: /api/config/* endpoints
 │   ├── dashboard.py                 ← Blueprint: /api/dashboard + /api/report
 │   ├── zephyr.py                    ← Blueprint: all /api/zephyr/* and /api/jira/*
-│   └── filemanager.py               ← Blueprint: /api/fm/browse, read, save
+│   ├── filemanager.py               ← Blueprint: /api/fm/browse, read, save
+│   └── insights.py                  ← Blueprint: /api/insights/* (start/stop the Streamlit side-car)
+├── jira_insights/                   ← Jira Insights Streamlit app (embedded via <iframe>)
+│   ├── app.py                       ← Streamlit entry: sidebar data source + view switcher
+│   ├── launcher.py                  ← side-car process start/stop/health (used by routes/insights.py)
+│   ├── jira_client.py               ← JQL search (Cloud /search/jql + Server/DC /search)
+│   ├── transform.py                 ← issues / CSV export → flat DataFrame + derived columns
+│   ├── pivot.py                     ← ReportSpec + pivot engine (pure pandas)
+│   ├── charts.py                    ← Plotly figure factory + validated palette
+│   ├── store.py                     ← workspace persistence (datasets, reports, explorer specs)
+│   └── ui/                          ← Streamlit views (dashboard, builder, explorer, data)
+├── .streamlit/config.toml           ← Streamlit server + theme settings for Jira Insights
 ├── templates/
 │   ├── base.html                    ← HTML shell: <head>, CSS, nav, shared JS, {% include %} calls
 │   └── partials/
 │       ├── executor.html            ← Executor page + Config page HTML
 │       ├── dashboard.html           ← Reports Dashboard page HTML
 │       ├── testmanagement.html      ← Test Management (Zephyr) page HTML
+│       ├── insights.html            ← Jira Insights page (iframe host)
 │       └── filemanager.html         ← File Manager page HTML + inline JS
 ├── static/
 │   └── js/
 │       ├── executor.js              ← Executor + Config JS
 │       ├── dashboard.js             ← Dashboard charts + history table JS
-│       └── testmanagement.js        ← Zephyr / Test Management JS
+│       ├── testmanagement.js        ← Zephyr / Test Management JS
+│       └── insights.js              ← Jira Insights start/embed JS
 ├── ui_launcher/
 │   ├── command_builder.py           ← builds pytest command; venv Python resolution
 │   ├── config_reader.py             ← three-level config resolution chain
