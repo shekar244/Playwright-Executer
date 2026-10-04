@@ -38,7 +38,8 @@ def _query(params: dict) -> str:
     """The ZQL for a saved selection (drill-down datasets saved before ZQL get theirs rebuilt)."""
     if params.get("query"):
         return params["query"]
-    return drilldown_zql(params.get("project", {}).get("key", ""), params.get("version", {}).get("name", ""),
+    proj = params.get("project", {})
+    return drilldown_zql(proj.get("name", "") or proj.get("key", ""), params.get("version", {}).get("name", ""),
                          [c.get("name", "") for c in params.get("cycles", [])])
 
 
@@ -96,7 +97,8 @@ def _load_versions(settings: JiraSettings, key: str) -> None:
     except JiraError as exc:
         _error(exc, "Jira")
         return
-    ss.zs_project_obj = {"id": str(project.get("id", "")), "key": project.get("key", key)}
+    ss.zs_project_obj = {"id": str(project.get("id", "")), "key": project.get("key", key),
+                         "name": project.get("name", "") or project.get("key", key)}
     ss.zs_versions = [{"id": "-1", "name": "Unscheduled"}] + [{"id": str(v["id"]), "name": v.get("name", v["id"])}
                                                               for v in versions]
     ss.zs_cycles_cache = {}
@@ -131,7 +133,7 @@ def _by_cycle(store: Store, settings: JiraSettings, name: str) -> None:
         return
     picked = st.multiselect("Cycles", list(cycles), key=f"zs_cycles_{version_id}",
                             format_func=lambda i: cycles[i]["name"], placeholder="All cycles in this version")
-    query = drilldown_zql(project["key"], by_id[version_id]["name"], [cycles[i]["name"] for i in picked])
+    query = drilldown_zql(project["name"], by_id[version_id]["name"], [cycles[i]["name"] for i in picked])
     st.caption("Fetched with this ZQL search:")
     st.code(query, language="sql", wrap_lines=True)
     limit = st.number_input("Max test runs", min_value=50, max_value=100000, value=20000, step=1000, key="zs_max_c")
