@@ -11,7 +11,7 @@ from pathlib import Path
 import pandas as pd
 import streamlit as st
 
-from ..charts import DEFAULT_THEME, PLOTLY_CONFIG, build_figure, natural_height
+from ..charts import DEFAULT_THEME, PLOTLY_CONFIG, build_figure, effective_overrides, natural_height
 from ..pivot import (SINGLE_VALUE, PivotResult, ReportSpec, apply_filters, build_pivot, category_rank,
                      distinct_values)
 from ..store import Store, slugify
@@ -158,7 +158,9 @@ def show_report(prepared: PreparedReport, ds: Dataset, *, key: str, table: str |
                                 min_height=height + 56 if height else 0), unsafe_allow_html=True)
         return
     order = category_rank(ds.df, _color_dimension(spec), ds.multi_cols)
-    fig = build_figure(result, spec, order, theme=st.session_state.get("ji_theme", DEFAULT_THEME), height=height)
+    overrides = effective_overrides(spec, result, st.session_state.get("ji_category_colors"))
+    fig = build_figure(result, spec, order, theme=st.session_state.get("ji_theme", DEFAULT_THEME), height=height,
+                       overrides=overrides)
     config = {**PLOTLY_CONFIG,
               "toImageButtonOptions": {**PLOTLY_CONFIG["toImageButtonOptions"], "filename": slugify(spec.title)}}
     st.plotly_chart(fig, key=key, theme=None, config=config)

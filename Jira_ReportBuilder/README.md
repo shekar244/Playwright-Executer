@@ -133,6 +133,9 @@ Results use the status colours (Passed green, Failed red, Blocked orange, In pro
    - Numbers are never reused, and a copy gets a new one.
    - Clicking ✎ on a card, or picking a report in the list, opens the saved report with all its settings (name, chart, fields, filters, dial bands).
    - Unsaved edits are kept if you switch views and come back.
+   - **🎨 Colours.** *Auto* uses the theme palette; results keep their status colours. *Manual* gives a colour picker for every category in the chart (one picker for single-colour charts), saved with the report.
+   - **Use for every <field> chart** saves those colours as the field's default, e.g. Issue Type: Bug → red. Every Auto report colouring by that field then uses them, and **Clear <field> defaults** removes them.
+   - Dials use their colour bands, heatmaps the theme ramp, and Number tiles their accent.
    - **Gauge** (a filled arc) and **Meter** (a needle over fixed colour bands) draw one dial for the slice, or one per category under *… per* (up to 8).
    - **Counts as complete / success when…** (e.g. `Status = Done` or `Result = Passed`) turns the dial into completion, 0–100%.
    - Without it, the dial shows the measure on a **minimum…maximum** range, e.g. average rating on a 1–5 scale.

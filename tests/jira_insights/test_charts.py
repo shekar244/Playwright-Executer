@@ -188,3 +188,39 @@ def test_single_completion_meter_runs_0_to_100():
     needle = next(t for t in fig.data if t.type == "scatterpolar" and t.mode == "lines")
     assert needle.theta[0] == 135                                                 # 75 % complete
     assert fig.layout.polar.angularaxis.ticktext[-1] == "100.0"
+
+
+def test_manual_colours_replace_the_automatic_ones(df):
+    from jira_insights.charts import colorable, effective_overrides
+    spec = ReportSpec(chart="Column", rows="Issue Type", color_mode="manual", colors={"Bug": "#ff0000"})
+    result = build_pivot(df, spec)
+    assert set(colorable(result, spec)) == {"Bug", "Story", "Task"}
+    fig = build_figure(result, spec, overrides=effective_overrides(spec, result, {}))
+    fills = dict(zip(fig.data[0].x, fig.data[0].marker.color))
+    assert fills["Bug"] == "#ff0000" and fills["Story"] == PALETTE[1]           # others stay automatic
+
+
+def test_one_colour_charts_offer_a_single_picker(df):
+    from jira_insights.charts import SINGLE_COLOR, colorable, effective_overrides
+    spec = ReportSpec(chart="Line", rows="Created", color_mode="manual", colors={SINGLE_COLOR: "#123456"})
+    result = build_pivot(df, spec)
+    assert colorable(result, spec) == {SINGLE_COLOR: PALETTE[0]}
+    fig = build_figure(result, spec, overrides=effective_overrides(spec, result, {}))
+    assert fig.data[0].line.color == "#123456"
+
+
+def test_field_defaults_apply_in_auto_mode_and_manual_wins(df):
+    from jira_insights.charts import effective_overrides
+    defaults = {"Status": {"Open": "#00aa00", "Done": "#aa0000"}, "Issue Type": {"Bug": "#0000ff"}}
+    auto = ReportSpec(chart="Stacked column", rows="Issue Type", series="Status")
+    result = build_pivot(df, auto)
+    assert effective_overrides(auto, result, defaults) == {"Open": "#00aa00", "Done": "#aa0000"}
+    fig = build_figure(result, auto, overrides=effective_overrides(auto, result, defaults))
+    assert {t.name: t.marker.color for t in fig.data}["Open"] == "#00aa00"
+    manual = ReportSpec(**{**auto.to_dict(), "color_mode": "manual", "colors": {"Open": "#ffffff", "x": "red;"}})
+    assert effective_overrides(manual, result, defaults) == {"Open": "#ffffff", "Done": "#aa0000"}  # bad value dropped
+
+
+def test_reports_saved_before_colours_default_to_auto():
+    old = ReportSpec.from_dict({"chart": "Column", "rows": "Status"})
+    assert old.color_mode == "auto" and old.colors == {}

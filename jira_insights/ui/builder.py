@@ -12,6 +12,7 @@ import streamlit as st
 from ..pivot import (AGGREGATIONS, CHART_TYPES, DATE_GRAINS, DIALS, SINGLE_VALUE, ReportSpec, clean_bands,
                      distinct_values)
 from ..store import Store
+from . import colors
 from .common import Dataset, filter_editor, load_filters, render_report
 from .style import accent_for, card_title
 
@@ -52,6 +53,7 @@ def _load_state(spec: ReportSpec, ds: Dataset, marker: tuple) -> None:
     ss.rb_gcut1, ss.rb_gcut2 = bands[0], bands[1]
     ss.rb_gcut3 = bands[2] if len(bands) == 3 else min(100.0, bands[1] + (100.0 - bands[1]) / 2)
     ss.rb_ghigher = bool(spec.higher_is_better)
+    colors.load_state(spec)
     load_filters("rb_g", spec.gauge_where, ds)
     for stale in [k for k in ss if str(k).startswith(("rb_f_", "rb_fd_"))]:
         del ss[stale]
@@ -236,7 +238,7 @@ def render(store: Store, ds: Dataset) -> None:
             source = ReportSpec.from_dict(draft) if draft else \
                 (reports[pick] if pick != NEW else _default_spec(ds))
             _load_state(source, ds, marker)
-        spec = _controls(ds)
+        spec = colors.render(store, _controls(ds), ds)
         if pick != NEW:
             spec.number = reports[pick].number
         ss.rb_current, ss.rb_draft = pick, spec.to_dict()

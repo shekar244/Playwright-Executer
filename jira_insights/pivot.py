@@ -75,6 +75,8 @@ class ReportSpec:
     cumulative: bool = False        # running total along the rows
     show_labels: bool = False
     color_by_category: bool = True  # single-series bars: one palette colour per category
+    color_mode: str = "auto"         # auto = theme palette (+ field defaults) · manual = `colors`
+    colors: dict = field(default_factory=dict)   # category → #rrggbb ("*" = every mark on one-colour charts)
     # Gauge / Meter: with `gauge_where` the value is the % of the slice matching it (completion,
     # pass rate) on a 0–100 dial; otherwise the plain aggregate on a gauge_min…gauge_max dial.
     gauge_where: dict = field(default_factory=dict)

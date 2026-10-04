@@ -12,6 +12,8 @@ unfiltered dataset, so filtering never repaints the surviving series.
 """
 from __future__ import annotations
 
+import re
+
 import plotly.graph_objects as go
 
 from .chart_theme import (  # noqa: F401 — re-exported for callers and tests
@@ -22,6 +24,9 @@ from .dials import _gauges, _gauge_values, _meters, band_colors, dial_range, gau
 from .pivot import DIALS, OTHER, PivotResult, ReportSpec
 
 _BAR_CHARTS = ("Column", "Stacked column", "Bar", "Stacked bar")
+MANUAL_COLOR_CHARTS = (*_BAR_CHARTS, "Line", "Area", "Donut", "Treemap")
+SINGLE_COLOR = "*"                       # key for "every mark" on one-colour charts
+_HEX = re.compile(r"^#[0-9a-fA-F]{6}$")
 
 
 # ── Colour helpers ────────────────────────────────────────────────────────────
@@ -260,12 +265,66 @@ def natural_height(result: PivotResult, spec: ReportSpec) -> int:
     return 360
 
 
+# ── Colour choice: automatic, field defaults, manual ──────────────────────────
+
+def resolve_colors(result: PivotResult, spec: ReportSpec, color_order=(), theme: Theme | None = None) -> dict:
+    """The automatic colours: status colours for results, otherwise the theme palette per category
+    ({} = one colour for every mark)."""
+    theme = theme or THEMES[DEFAULT_THEME]
+    statuses = status_color_map(result.series_order or ([] if result.row_is_date else result.row_order))
+    if statuses and (result.series_order or spec.chart in ("Donut", "Treemap") or
+                     (spec.color_by_category and spec.chart in _BAR_CHARTS)):
+        return statuses
+    if result.series_order:
+        return color_map(result.series_order, color_order, theme.palette)
+    if spec.chart in ("Donut", "Treemap") or (
+            spec.color_by_category and spec.chart in _BAR_CHARTS and not result.row_is_date
+            and len(result.row_order) <= len(theme.palette)):
+        return color_map(result.row_order, color_order, theme.palette)
+    return {}
+
+
+def color_field(spec: ReportSpec, result: PivotResult) -> str:
+    """The field whose values carry the colours ("" when the chart is a single colour)."""
+    if result.series_order:
+        return spec.series
+    colored = spec.chart in ("Donut", "Treemap") or (spec.color_by_category and spec.chart in _BAR_CHARTS)
+    return spec.rows if colored and not result.row_is_date else ""
+
+
+def colorable(result: PivotResult, spec: ReportSpec, color_order=(), theme: str = DEFAULT_THEME) -> dict:
+    """What the 🎨 Colours panel offers: category → automatic colour, or {"*": colour} for one-colour charts."""
+    if spec.chart not in MANUAL_COLOR_CHARTS or result.empty:
+        return {}
+    t = THEMES.get(theme, THEMES[DEFAULT_THEME])
+    return resolve_colors(result, spec, color_order, t) or {SINGLE_COLOR: t.palette[0]}
+
+
+def effective_overrides(spec: ReportSpec, result: PivotResult, field_defaults: dict | None) -> dict:
+    """Colours that replace the automatic ones: the field's saved defaults, then the report's manual picks."""
+    field = color_field(spec, result)
+    chosen = dict((field_defaults or {}).get(field, {})) if field else {}
+    if spec.color_mode == "manual":
+        chosen.update(spec.colors or {})
+    return {str(k): v for k, v in chosen.items() if isinstance(v, str) and _HEX.match(v)}
+
+
+def apply_overrides(colors: dict, spec: ReportSpec, overrides: dict | None) -> dict:
+    if not overrides:
+        return colors
+    if not colors:                                   # one-colour chart: "*" paints every mark
+        return {spec.value_label: overrides[SINGLE_COLOR]} if SINGLE_COLOR in overrides else colors
+    return {k: overrides.get(str(k), v) for k, v in colors.items()}
+
+
 def build_figure(result: PivotResult, spec: ReportSpec, color_order: list | tuple = (),
-                 theme: str = DEFAULT_THEME, height: int | None = None) -> go.Figure:
+                 theme: str = DEFAULT_THEME, height: int | None = None,
+                 overrides: dict | None = None) -> go.Figure:
     """Chart for every type except Number, which the UI renders as a stat tile.
 
     `height` overrides the natural height — the dashboard passes the tallest
-    chart in a row so cards line up; the focus view passes a taller size."""
+    chart in a row so cards line up; the focus view passes a taller size.
+    `overrides` (category → #rrggbb) replaces automatic colours — see effective_overrides."""
     if spec.chart == "Number":
         raise ValueError("Number reports render as stat tiles, not figures")
     if spec.chart == "Gauge":
@@ -273,26 +332,16 @@ def build_figure(result: PivotResult, spec: ReportSpec, color_order: list | tupl
     elif spec.chart == "Meter":
         fig = _meters(result, spec)
     else:
-        fig = _empty() if result.empty else _chart(result, spec, color_order, THEMES.get(theme, THEMES[DEFAULT_THEME]))
+        fig = _empty() if result.empty else _chart(result, spec, color_order,
+                                                    THEMES.get(theme, THEMES[DEFAULT_THEME]), overrides)
     # Set explicitly — Streamlit repaints a paper colour that only comes from the template.
     fig.update_layout(paper_bgcolor=SURFACE, plot_bgcolor=SURFACE,
                       height=max(height or 0, natural_height(result, spec)))
     return fig
 
 
-def _chart(result: PivotResult, spec: ReportSpec, color_order, theme: Theme) -> go.Figure:
-    statuses = status_color_map(result.series_order or ([] if result.row_is_date else result.row_order))
-    if statuses and (result.series_order or spec.chart in ("Donut", "Treemap") or
-                     (spec.color_by_category and spec.chart in _BAR_CHARTS)):
-        colors = statuses
-    elif result.series_order:
-        colors = color_map(result.series_order, color_order, theme.palette)
-    elif spec.chart in ("Donut", "Treemap") or (
-            spec.color_by_category and spec.chart in _BAR_CHARTS and not result.row_is_date
-            and len(result.row_order) <= len(theme.palette)):
-        colors = color_map(result.row_order, color_order, theme.palette)
-    else:
-        colors = {}                      # one series → one colour for every mark (slot 1)
+def _chart(result: PivotResult, spec: ReportSpec, color_order, theme: Theme, overrides: dict | None = None) -> go.Figure:
+    colors = apply_overrides(resolve_colors(result, spec, color_order, theme), spec, overrides)
 
     if spec.chart in _BAR_CHARTS:
         fig = _bars(result, spec, colors, theme)

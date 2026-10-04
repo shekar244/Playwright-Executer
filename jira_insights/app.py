@@ -35,6 +35,7 @@ st.set_page_config(page_title="Jira Insights", page_icon="📈", layout="wide",
 inject_css()
 
 store = Store(workspace_dir())
+st.session_state["ji_category_colors"] = store.get_setting("category_colors", {}) or {}   # 🎨 field defaults
 ds = data_source.render_sidebar(store)
 
 if ds is None:
