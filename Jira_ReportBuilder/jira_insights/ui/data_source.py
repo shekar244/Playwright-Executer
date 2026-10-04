@@ -14,7 +14,7 @@ from ..jira_client import JiraClient, JiraError
 from ..settings import load_connection, load_jira_settings
 from ..store import Store
 from ..transform import frame_from_export, issues_to_frame
-from . import connection
+from . import connection, zephyr_source
 from .common import Dataset, load_dataset
 from .style import brand, swatches
 
@@ -24,7 +24,10 @@ _JQL_HINT = "project = ABC AND issuetype in (Bug, Story) AND created >= -90d ORD
 
 def _describe(meta: dict) -> str:
     when = meta.get("fetched_at", "")[:16].replace("T", " ")
-    origin = "JQL" if meta.get("source") == "jql" else f"upload · {meta.get('file_name', '')}"
+    source = meta.get("source")
+    if source == "zephyr":
+        return f"{meta.get('rows', 0):,} test runs · Zephyr · {when} UTC"
+    origin = "JQL" if source == "jql" else f"upload · {meta.get('file_name', '')}"
     return f"{meta.get('rows', 0):,} issues · {origin} · {when} UTC"
 
 
@@ -108,17 +111,28 @@ def render_sidebar(store: Store) -> Dataset | None:
             st.caption(_describe(meta))
             if meta.get("jql"):
                 st.code(meta["jql"], language="sql", wrap_lines=True)
+            zephyr = meta.get("zephyr") or {}
+            if zephyr.get("mode") == "zql":
+                st.code(zephyr.get("query", ""), language="sql", wrap_lines=True)
+            elif zephyr:
+                st.caption(f"🧪 {zephyr_source.describe(zephyr)}")
+            refreshable = (meta.get("source") == "jql" and settings.configured) or \
+                          (meta.get("source") == "zephyr" and settings.zephyr_configured)
             c1, c2 = st.columns(2)
-            if c1.button("↻ Refresh", width="stretch", disabled=meta.get("source") != "jql" or not settings.configured,
+            if c1.button("↻ Refresh", width="stretch", disabled=not refreshable,
                          help="Re-run the JQL and replace this dataset"):
-                _pull(store, meta["name"], meta["jql"], meta.get("max_issues", 2000), meta.get("fields", "*navigable"))
+                if meta.get("source") == "zephyr":
+                    zephyr_source.refresh(store, meta, settings)
+                else:
+                    _pull(store, meta["name"], meta["jql"], meta.get("max_issues", 2000),
+                          meta.get("fields", "*navigable"))
             if c2.button("🗑 Delete", width="stretch", help="Delete this dataset and its explorer charts"):
                 store.delete_dataset(slug)
                 ss.pop("ds_slug", None)
                 st.rerun()
             df, meta = load_dataset(str(store.root), slug, meta.get("fetched_at", ""))
             current = Dataset(slug, meta, df)
-            missing = [c for c in CORE_COLUMNS if c not in df.columns]
+            missing = [] if meta.get("source") == "zephyr" else [c for c in CORE_COLUMNS if c not in df.columns]
             if missing:
                 st.warning(f"Missing typical Jira columns: {', '.join(missing)}. "
                            "Reports that use them are hidden.", icon="⚠️")
@@ -137,6 +151,8 @@ def render_sidebar(store: Store) -> Dataset | None:
                         _pull(store, name.strip(), jql.strip(), max_issues, fields.strip())
                     else:
                         st.error("Name and JQL are required.")
+
+        zephyr_source.render(store, settings)
 
         with st.expander("⬆️ Upload Jira export (CSV / Excel)", expanded=not datasets and not settings.configured):
             with st.form("upload_form", border=False, clear_on_submit=True):

@@ -14,6 +14,7 @@ streamlit>=1.45,<1.57 # App shell; PyGWalker's Streamlit bridge needs the Tornad
 pygwalker>=0.4.9      # Drag-and-drop chart explorer
 plotly>=5.24.0        # Pivot report charts
 pandas>=2.2.0         # Jira issue frames + pivots (pyarrow comes with streamlit)
+streamlit-sortables>=0.3.1  # Drag-and-drop dashboard layout / tile order (✥ Arrange, ✎ Edit tiles)
 
 # Standard-library modules used (no install needed):
 #   base64, csv, datetime, hashlib, hmac, io, json, os, pathlib,

@@ -14,8 +14,8 @@ from streamlit_sortables import sort_items
 
 from .. import kpi, layout
 from ..store import Store
-from .builder import CHART_ICONS
 from . import tiles
+from .builder import CHART_ICONS
 from .common import Dataset, filter_bar, prepare_report, show_report
 from .style import SORTABLE_CSS, accent_for, card_title, stat_tiles_html
 
@@ -23,9 +23,11 @@ _LAYOUT_KEY = "dashboard_layout"
 _NEW_ROW = "＋ Drop here to start a new row"
 _FOCUS_HEIGHT = 620
 
+
 def _kpi_strip(store: Store, ds: Dataset, df) -> None:
     tiles = [t for t in store.list_kpis() if kpi.is_available(t, ds.df)]
-    cells = [(t.icon, t.label, *kpi.evaluate(t, df, len(ds.df), ds.multi_cols), t.accent) for t in tiles]
+    unit = "test runs" if ds.meta.get("source") == "zephyr" else "issues"
+    cells = [(t.icon, t.label, *kpi.evaluate(t, df, len(ds.df), ds.multi_cols, unit=unit), t.accent) for t in tiles]
     if cells:
         st.markdown(stat_tiles_html(cells), unsafe_allow_html=True)
 
@@ -47,7 +49,7 @@ def _focus_on(report_id: str | None) -> None:
 def _card_header(report, accent: str) -> None:
     head, expand, edit = st.columns([8, 1, 1], vertical_alignment="center")
     with head:
-        card_title(report.name, accent)
+        card_title(report.name, accent, report.code)
     if expand.button("⛶", key=f"focus-{report.id}", help="Open this report full screen", type="tertiary"):
         _focus_on(report.id)
     if edit.button("✎", key=f"edit-{report.id}", help="Edit in Report Builder", type="tertiary"):
@@ -75,7 +77,7 @@ def _focus(report, ds: Dataset, df) -> None:
     with st.container(key="card-focus"):
         head, edit = st.columns([14, 1], vertical_alignment="center")
         with head:
-            card_title(report.name, accent)
+            card_title(report.name, accent, report.code)
         if edit.button("✎", key=f"focus-edit-{report.id}", help="Edit in Report Builder", type="tertiary"):
             open_in_builder(report.id)
         show_report(prepare_report(report, ds, df), ds, key=f"focus-{report.id}", table="full",

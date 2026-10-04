@@ -138,3 +138,26 @@ def test_category_rank_and_distinct_values(df):
 def test_status_category_series_stack_in_workflow_order(df):
     r = build_pivot(df, ReportSpec(rows="Priority", series="Status Category"), MULTI)
     assert r.series_order == ["To Do", "In Progress", "Done"]
+
+
+def test_gauge_percent_per_row_and_overall():
+    runs = pd.DataFrame({"Cycle": ["C1", "C1", "C1", "C2", "C2"], "Result": ["Passed", "Failed", "Passed", "Passed", "Not run"],
+                         "Executed": ["Yes", "Yes", "Yes", "Yes", "No"]})
+    spec = ReportSpec(chart="Gauge", rows="Cycle", filters={"Executed": ["Yes"]}, gauge_where={"Result": ["Passed"]})
+    r = build_pivot(runs, spec)
+    assert dict(zip(r.long["Cycle"], r.long["Value"].round(1))) == {"C1": 66.7, "C2": 100.0}
+    assert round(r.total, 1) == 75.0 and spec.value_label == "% of issues"
+    assert spec.required_columns() == {"Cycle", "Executed", "Result"}
+
+
+def test_gauge_without_condition_is_a_plain_aggregate(df):
+    r = build_pivot(df, ReportSpec(chart="Gauge", value="Story Points", agg="Sum"), MULTI)
+    assert r.total == 17 and r.empty
+
+
+
+def test_old_gauge_thresholds_convert_to_bands():
+    old = ReportSpec.from_dict({"chart": "Gauge", "gauge_warn": 70, "gauge_good": 90})
+    assert old.gauge_bands == [70.0, 90.0]
+    assert ReportSpec.from_dict({"chart": "Meter", "gauge_bands": [90, "20", 60, 75]}).gauge_bands == [20.0, 60.0, 75.0]
+    assert ReportSpec.from_dict({"gauge_bands": ["x"]}).gauge_bands == [50.0, 80.0]

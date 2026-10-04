@@ -12,7 +12,8 @@ import pandas as pd
 import streamlit as st
 
 from ..charts import DEFAULT_THEME, PLOTLY_CONFIG, build_figure, natural_height
-from ..pivot import PivotResult, ReportSpec, apply_filters, build_pivot, category_rank, distinct_values
+from ..pivot import (SINGLE_VALUE, PivotResult, ReportSpec, apply_filters, build_pivot, category_rank,
+                     distinct_values)
 from ..store import Store, slugify
 from .style import number_html
 
@@ -138,7 +139,7 @@ def prepare_report(spec: ReportSpec, ds: Dataset, df: pd.DataFrame | None = None
     missing = sorted(spec.required_columns() - set(ds.df.columns))
     if missing:
         return PreparedReport(spec, note=f"This dataset has no {', '.join(missing)} column — pick another field.")
-    if spec.chart != "Number" and not spec.rows:
+    if spec.chart not in SINGLE_VALUE and not spec.rows:
         return PreparedReport(spec, note="Choose a field for Rows · X-axis.")
     return PreparedReport(spec, build_pivot(ds.df if df is None else df, spec, ds.multi_cols))
 
@@ -159,7 +160,7 @@ def show_report(prepared: PreparedReport, ds: Dataset, *, key: str, table: str |
     order = category_rank(ds.df, _color_dimension(spec), ds.multi_cols)
     fig = build_figure(result, spec, order, theme=st.session_state.get("ji_theme", DEFAULT_THEME), height=height)
     config = {**PLOTLY_CONFIG,
-              "toImageButtonOptions": {**PLOTLY_CONFIG["toImageButtonOptions"], "filename": slugify(spec.name)}}
+              "toImageButtonOptions": {**PLOTLY_CONFIG["toImageButtonOptions"], "filename": slugify(spec.title)}}
     st.plotly_chart(fig, key=key, theme=None, config=config)
 
     if table is None or result.empty:
@@ -170,9 +171,51 @@ def show_report(prepared: PreparedReport, ds: Dataset, *, key: str, table: str |
             st.dataframe(view, width="stretch")
     else:
         st.dataframe(view, width="stretch")
-        download_buttons(view, spec.name, key=f"{key}-dl", index=True)
+        download_buttons(view, spec.title, key=f"{key}-dl", index=True)
 
 
 def render_report(spec: ReportSpec, ds: Dataset, *, key: str, df: pd.DataFrame | None = None,
                   table: str | None = None, accent: str = "#7ea8ff", height: int | None = None) -> None:
     show_report(prepare_report(spec, ds, df), ds, key=key, table=table, accent=accent, height=height)
+
+
+# ── Generic filter editor (values · contains · last N days) ───────────────────
+
+def load_filters(prefix: str, filters: dict, ds: Dataset) -> None:
+    """Write a filters dict into the widget state used by filter_editor(prefix)."""
+    ss = st.session_state
+    for stale in [k for k in ss if str(k).startswith((f"{prefix}_fv_", f"{prefix}_fc_", f"{prefix}_fd_"))]:
+        del ss[stale]
+    ss[f"{prefix}_cols"] = [c for c in (filters or {}) if c in ds.df.columns]
+    for col, wanted in (filters or {}).items():
+        if isinstance(wanted, dict) and wanted.get("last_days"):
+            ss[f"{prefix}_fd_{col}"] = int(wanted["last_days"])
+        elif isinstance(wanted, dict) and wanted.get("contains"):
+            ss[f"{prefix}_fc_{col}"] = str(wanted["contains"])
+        elif isinstance(wanted, list):
+            ss[f"{prefix}_fv_{col}"] = [str(v) for v in wanted]
+
+
+def filter_editor(ds: Dataset, prefix: str, label: str, placeholder: str = "Choose fields…") -> dict:
+    ss = st.session_state
+    cols = st.multiselect(label, [c for c in ds.df.columns if c not in ID_COLUMNS],
+                          key=f"{prefix}_cols", placeholder=placeholder)
+    filters: dict = {}
+    for col in cols:
+        if col in ds.date_cols:
+            ss.setdefault(f"{prefix}_fd_{col}", 30)
+            filters[col] = {"last_days": int(st.number_input(f"{col} · last N days", 1, 3650, step=1,
+                                                             key=f"{prefix}_fd_{col}"))}
+            continue
+        v, t = st.columns([3, 2])
+        options = distinct_values(ds.df, col, ds.multi_cols)
+        options += [x for x in ss.get(f"{prefix}_fv_{col}", []) if x not in options]
+        values = v.multiselect(col, options, key=f"{prefix}_fv_{col}", placeholder="Any value")
+        contains = t.text_input("…or contains", key=f"{prefix}_fc_{col}", placeholder="e.g. pass",
+                                help="Case-insensitive text match; | for alternatives. Overrides the values list.")
+        if contains.strip():
+            filters[col] = {"contains": contains.strip()}
+        elif values:
+            filters[col] = list(values)
+    return filters
+

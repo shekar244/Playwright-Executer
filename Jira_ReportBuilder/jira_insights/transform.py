@@ -166,7 +166,7 @@ def _looks_like_dates(s: pd.Series) -> bool:
     return len(sample) > 0 and sample.str.match(_DATE_LIKE).mean() >= 0.9
 
 
-def _normalise_types(df: pd.DataFrame) -> pd.DataFrame:
+def normalise_types(df: pd.DataFrame) -> pd.DataFrame:
     for col in df.columns:
         s = df[col]
         if pd.api.types.is_bool_dtype(s) or pd.api.types.is_numeric_dtype(s) \
@@ -191,7 +191,7 @@ def _normalise_types(df: pd.DataFrame) -> pd.DataFrame:
 def finalize(df: pd.DataFrame, now: pd.Timestamp | None = None) -> pd.DataFrame:
     if df.empty:
         return df
-    df = _normalise_types(df.copy())
+    df = normalise_types(df.copy())
     now = now if now is not None else pd.Timestamp.now(tz="UTC").tz_convert(None)
 
     resolved = df["Resolved"] if "Resolved" in df.columns else pd.Series(pd.NaT, index=df.index)

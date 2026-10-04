@@ -6,6 +6,7 @@ and round-trips through JSON, so a report built in the UI can be saved and
 re-rendered on the dashboard against any dataset that has its columns.
 
 Filters:  {"Issue Type": ["Bug", "Story"]}          categorical — any of
+          {"Issue Type": {"contains": "bug|defect"}} text — case-insensitive regex
           {"Created": {"last_days": 90}}            date — relative window
           {"Created": {"from": "2026-01-01", "to": "2026-03-31"}}
 """
@@ -13,7 +14,7 @@ from __future__ import annotations
 
 import re
 import uuid
-from dataclasses import asdict, dataclass, field, fields as dc_fields
+from dataclasses import asdict, dataclass, field, fields as dc_fields, replace
 
 import pandas as pd
 
@@ -25,21 +26,36 @@ AGGREGATIONS = {
 }
 DATE_GRAINS = {"Day": "D", "Week": "W", "Month": "M", "Quarter": "Q", "Year": "Y"}
 CHART_TYPES = ("Column", "Stacked column", "Bar", "Stacked bar", "Line", "Area",
-               "Donut", "Heatmap", "Treemap", "Number")
+               "Donut", "Heatmap", "Treemap", "Gauge", "Meter", "Number")
+DIALS = ("Gauge", "Meter")                 # arc gauge · needle meter with colour bands
+SINGLE_VALUE = ("Number", *DIALS)          # rows optional: one value, or one dial per category
 
 OTHER      = "Other"
 NONE_LABEL = "(none)"
 MAX_SERIES = 8    # size of the categorical palette — the tail folds into "Other"
 MAX_SLICES = 6    # donut readability limit
+MAX_GAUGES = 8    # gauges side by side before it stops reading as a glance
 
 # Semantic orders used when sorting by label (instead of alphabetical).
 _KNOWN_ORDERS = [
     ["Blocker", "Highest", "Critical", "High", "Major", "Medium", "Minor", "Low", "Lowest", "Trivial"],
     ["To Do", "In Progress", "Done"],
     ["Open", "Closed"],
+    ["Passed", "Failed", "Blocked", "In progress", "Not run", "Other"],
+    ["Pass", "Fail", "WIP", "Blocked", "Unexecuted"],
+    ["Yes", "No"],
 ]
 
 _VAL = "__value__"
+
+
+def clean_bands(cuts) -> list[float]:
+    """2 or 3 ascending cut points within 0–100 (falls back to 50 / 80)."""
+    try:
+        values = sorted(min(100.0, max(0.0, float(c))) for c in (cuts or []))
+    except (TypeError, ValueError):
+        values = []
+    return values[:3] if len(values) >= 2 else [50.0, 80.0]
 
 
 @dataclass
@@ -59,15 +75,37 @@ class ReportSpec:
     cumulative: bool = False        # running total along the rows
     show_labels: bool = False
     color_by_category: bool = True  # single-series bars: one palette colour per category
+    # Gauge / Meter: with `gauge_where` the value is the % of the slice matching it (completion,
+    # pass rate) on a 0–100 dial; otherwise the plain aggregate on a gauge_min…gauge_max dial.
+    gauge_where: dict = field(default_factory=dict)
+    gauge_min: float = 0.0
+    gauge_max: float = 0.0           # 0 = automatic
+    gauge_bands: list = field(default_factory=lambda: [50.0, 80.0])   # cut points, % of the dial:
+    #   2 cuts → red · amber · green;  3 cuts → red · amber · light green · green
+    higher_is_better: bool = True
+    number: int = 0                  # permanent, user-facing report number (R-001…), assigned by the store
     id: str = ""
 
     @classmethod
     def from_dict(cls, data: dict | None) -> "ReportSpec":
+        data = dict(data or {})
+        if "gauge_bands" not in data and ("gauge_warn" in data or "gauge_good" in data):
+            data["gauge_bands"] = [data.get("gauge_warn", 50.0), data.get("gauge_good", 80.0)]   # older reports
         known = {f.name for f in dc_fields(cls)}
-        return cls(**{k: v for k, v in (data or {}).items() if k in known})
+        spec = cls(**{k: v for k, v in data.items() if k in known})
+        spec.gauge_bands = clean_bands(spec.gauge_bands)
+        return spec
 
     def to_dict(self) -> dict:
         return asdict(self)
+
+    @property
+    def code(self) -> str:
+        return f"R-{int(self.number):03d}" if self.number else ""
+
+    @property
+    def title(self) -> str:
+        return f"{self.code} · {self.name}" if self.code else self.name
 
     def with_id(self) -> "ReportSpec":
         if not self.id:
@@ -75,7 +113,12 @@ class ReportSpec:
         return self
 
     def required_columns(self) -> set[str]:
-        return {c for c in (self.rows, self.series, self.value) if c} | set(self.filters)
+        gauge = set(self.gauge_where) if self.chart in DIALS else set()
+        return {c for c in (self.rows, self.series, self.value) if c} | set(self.filters) | gauge
+
+    @property
+    def gauge_percent(self) -> bool:
+        return self.chart in DIALS and bool(self.gauge_where)
 
     @property
     def additive(self) -> bool:
@@ -83,6 +126,8 @@ class ReportSpec:
 
     @property
     def value_label(self) -> str:
+        if self.gauge_percent:
+            return "% of " + (f"{self.agg.lower()} of {self.value}" if self.value else "issues")
         if not self.value:
             return "Issues"
         return f"{self.agg} of {self.value}"
@@ -123,6 +168,9 @@ def apply_filters(df: pd.DataFrame, filters: dict | None, multi_cols=(),
             continue
         s = df[col]
         if isinstance(wanted, dict):
+            if wanted.get("contains"):
+                mask &= _labels(s).str.contains(str(wanted["contains"]), case=False, regex=True, na=False)
+                continue
             if not pd.api.types.is_datetime64_any_dtype(s):
                 continue
             if wanted.get("last_days"):
@@ -234,8 +282,10 @@ def build_pivot(df: pd.DataFrame, spec: ReportSpec, multi_cols=(),
         work[_VAL] = raw if spec.agg == "Distinct count" else pd.to_numeric(raw, errors="coerce")
     total = _overall(work, spec)
 
+    if spec.gauge_percent:
+        return _gauge_percent(df, spec, multi_cols, now)
     rows = spec.rows if spec.chart != "Number" else ""
-    series = spec.series if rows and spec.chart not in ("Donut", "Number") else ""
+    series = spec.series if rows and spec.chart not in ("Donut", *SINGLE_VALUE) else ""
     series = "" if series == rows else series
     dims = [d for d in (rows, series) if d]
     if not dims:
@@ -296,3 +346,19 @@ def build_pivot(df: pd.DataFrame, spec: ReportSpec, multi_cols=(),
     if series and spec.additive and not (spec.normalize or spec.cumulative):
         table["Total"] = table.sum(axis=1)
     return PivotResult(long, table, row_order, series_order, total, row_is_date)
+
+
+def _gauge_percent(df: pd.DataFrame, spec: ReportSpec, multi_cols, now) -> PivotResult:
+    plain = replace(spec, gauge_where={})
+    base = build_pivot(df, plain, multi_cols, now)
+    hits = build_pivot(df, replace(plain, filters={**spec.filters, **spec.gauge_where}), multi_cols, now)
+    total = (hits.total / base.total * 100) if base.total else 0.0
+    if base.empty:
+        return PivotResult(base.long, base.table, [], [], total, base.row_is_date)
+    label = spec.value_label
+    hit_by_row = dict(zip(hits.long[spec.rows], hits.long["Value"])) if not hits.empty else {}
+    long = base.long.copy()
+    long["Value"] = [(hit_by_row.get(r, 0.0) / v * 100) if v else 0.0 for r, v in zip(long[spec.rows], long["Value"])]
+    table = long.set_index(spec.rows).rename(columns={"Value": label})
+    return PivotResult(long, table, base.row_order, [], total, base.row_is_date)
+

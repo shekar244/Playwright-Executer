@@ -74,6 +74,11 @@ _CSS = """
     font-size: 12px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: #c5cdea;
     display: flex; align-items: center; gap: 9px; min-height: 32px;
   }
+  .ji-card-title .ji-code {
+    font: 600 10px 'JetBrains Mono', ui-monospace, monospace; letter-spacing: .02em; text-transform: none;
+    color: #aab4d8; background: rgba(126,168,255,.10); border: 1px solid rgba(126,168,255,.24);
+    border-radius: 6px; padding: 1px 6px;
+  }
   .ji-card-title .ji-dot { width: 9px; height: 9px; border-radius: 50%; flex-shrink: 0;
     background: var(--a); box-shadow: 0 0 10px var(--a); }
 
@@ -172,9 +177,10 @@ def hero(title: str, chips: list[str]) -> None:
                 unsafe_allow_html=True)
 
 
-def card_title(text: str, accent: str = ACCENTS[0]) -> None:
-    st.markdown(f'<div class="ji-card-title" style="--a:{accent}"><span class="ji-dot"></span>'
-                f'{html.escape(text)}</div>', unsafe_allow_html=True)
+def card_title(text: str, accent: str = ACCENTS[0], code: str = "") -> None:
+    badge = f'<span class="ji-code">{html.escape(code)}</span>' if code else ""
+    st.markdown(f'<div class="ji-card-title" style="--a:{safe_color(accent)}"><span class="ji-dot"></span>'
+                f'{badge}{html.escape(text)}</div>', unsafe_allow_html=True)
 
 
 _HEX = re.compile(r"^#[0-9a-fA-F]{6}$")

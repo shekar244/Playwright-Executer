@@ -40,7 +40,12 @@ _ALIASES = {
     "zephyr_secret_key": ("secret_key", "zephyr_secret_key", "zapi_secret_key"),
     "zephyr_account_id": ("account_id", "zephyr_account_id", "atlassian_account_id"),
     "project_key": ("project_key", "project"),
+    "auth_type": ("auth_type", "auth", "jira_auth"),
+    "zephyr_type": ("zephyr_type", "zephyr_deployment", "zephyr"),
 }
+AUTH_TYPES = {"auto": "Auto", "basic": "Basic — email/username + API token", "bearer": "Bearer — personal access token"}
+ZEPHYR_TYPES = {"auto": "Auto", "cloud": "Zephyr Squad Cloud — API keys (JWT)",
+                "server": "Zephyr Squad Server / DC — Jira login"}
 _ENV = {
     "url": "JIRA_URL", "username": "JIRA_USERNAME", "token": "JIRA_API_TOKEN",
     "verify_ssl": "JIRA_VERIFY_SSL", "zephyr_access_key": "ZEPHYR_ACCESS_KEY",
@@ -58,14 +63,31 @@ class JiraSettings:
     zephyr_secret_key: str = ""
     zephyr_account_id: str = ""
     project_key: str = ""
+    auth_type: str = "auto"   # auto | basic | bearer
+    zephyr_type: str = "auto" # auto | cloud | server
 
     @property
     def configured(self) -> bool:
         return bool(self.url and self.token)
 
     @property
-    def zephyr_configured(self) -> bool:
+    def is_cloud(self) -> bool:
+        return ".atlassian.net" in self.url.lower() or ".jira.com" in self.url.lower()
+
+    @property
+    def zephyr_cloud_keys(self) -> bool:
         return bool(self.zephyr_access_key and self.zephyr_secret_key and self.zephyr_account_id)
+
+    @property
+    def zephyr_mode(self) -> str:
+        """cloud: Zephyr Squad Cloud API (keys + JWT); server: ZAPI on the Jira host (Jira login)."""
+        if self.zephyr_type in ("cloud", "server"):
+            return self.zephyr_type
+        return "cloud" if self.zephyr_cloud_keys else "server"
+
+    @property
+    def zephyr_configured(self) -> bool:
+        return self.zephyr_cloud_keys if self.zephyr_mode == "cloud" else self.configured
 
 
 @dataclass(frozen=True)
@@ -109,6 +131,9 @@ def _from_mapping(values: dict) -> JiraSettings:
         kwargs[f.name] = _truthy(raw) if f.name == "verify_ssl" else str(raw).strip()
     if "url" in kwargs:
         kwargs["url"] = kwargs["url"].rstrip("/")
+    for key, allowed in (("auth_type", AUTH_TYPES), ("zephyr_type", ZEPHYR_TYPES)):
+        if key in kwargs:
+            kwargs[key] = kwargs[key].lower() if kwargs[key].lower() in allowed else "auto"
     return JiraSettings(**kwargs)
 
 
@@ -172,7 +197,9 @@ def read_credentials_file(raw_path: str, section: str = "") -> tuple[JiraSetting
     if not any(values.get(k) for k in ("url", "token", "zephyr_access_key")):
         raise ValueError(f"No Jira or Zephyr credentials found in {path.name} — expected keys like "
                          "jira_url, username, api_token (see the example).")
-    return _from_mapping(values), tuple(values), tuple(sections)
+    found = tuple(values)
+    values.setdefault("verify_ssl", False)    # same default as Amplify QEA's Zephyr config
+    return _from_mapping(values), found, tuple(sections)
 
 
 # ── Load / save ───────────────────────────────────────────────────────────────

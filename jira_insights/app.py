@@ -53,8 +53,10 @@ ss.setdefault("view", "Dashboard")
 head, nav = st.columns([1.2, 2], vertical_alignment="center")
 with head:
     meta = ds.meta
-    origin = "⚡ JQL" if meta.get("source") == "jql" else "📄 Upload"
-    hero(meta.get("name", ds.slug), [f"🧾 {meta.get('rows', len(ds.df)):,} issues", origin,
+    source = meta.get("source")
+    origin = {"jql": "⚡ JQL", "zephyr": "🧪 Zephyr"}.get(source, "📄 Upload")
+    unit = "test runs" if source == "zephyr" else "issues"
+    hero(meta.get("name", ds.slug), [f"🧾 {meta.get('rows', len(ds.df)):,} {unit}", origin,
                                      f"🕒 {meta.get('fetched_at', '')[:16].replace('T', ' ')} UTC"])
 view = nav.segmented_control("View", list(VIEWS), key="view", required=True,
                              format_func=lambda v: f"{VIEWS[v]} {v}", label_visibility="collapsed")

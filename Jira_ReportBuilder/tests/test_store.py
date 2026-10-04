@@ -73,3 +73,37 @@ def test_delete_report(store):
     target = store.list_reports()[1]
     store.delete_report(target.id)
     assert target.id not in {r.id for r in store.list_reports()}
+
+
+def test_reports_get_unique_numbers_that_are_never_reused(store):
+    seeded = store.list_reports()
+    assert [r.number for r in seeded] == list(range(1, len(STARTER_REPORTS) + 1))
+    assert seeded[0].code == "R-001" and seeded[0].title == f"R-001 · {seeded[0].name}"
+
+    added = store.save_report(ReportSpec(name="Mine", rows="Status"))
+    assert added.number == len(STARTER_REPORTS) + 1
+    store.delete_report(added.id)
+    again = store.save_report(ReportSpec(name="Another", rows="Status"))
+    assert again.number == added.number + 1                      # deleted numbers are not reused
+
+
+def test_edits_keep_their_number_and_copies_get_a_new_one(store):
+    first = store.list_reports()[0]
+    edited = ReportSpec.from_dict({**first.to_dict(), "name": "Renamed", "number": 0})
+    assert store.save_report(edited).number == first.number      # builder edits keep the number
+    copy = ReportSpec.from_dict({**first.to_dict(), "id": "", "name": "Copy"})
+    assert store.save_report(copy).number not in {r.number for r in store.list_reports() if r.id != copy.id}
+
+
+def test_reports_saved_before_numbering_are_numbered_once(store):
+    import json
+    raw = [ReportSpec(name=n, rows="Status", id=f"id{n}").to_dict() for n in ("a", "b")]
+    for r in raw:
+        r.pop("number")
+    (store.root / "reports.json").write_text(json.dumps(raw))
+    assert [r.number for r in store.list_reports()] == [1, 2]
+    assert [r["number"] for r in json.loads((store.root / "reports.json").read_text())] == [1, 2]
+    dup = json.loads((store.root / "reports.json").read_text())
+    dup[1]["number"] = 1                                          # duplicate numbers get repaired
+    (store.root / "reports.json").write_text(json.dumps(dup))
+    assert sorted(r.number for r in store.list_reports()) == [1, 3]

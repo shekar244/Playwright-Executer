@@ -12,75 +12,16 @@ unfiltered dataset, so filtering never repaints the surviving series.
 """
 from __future__ import annotations
 
-from dataclasses import dataclass
-
 import plotly.graph_objects as go
 
-from .pivot import OTHER, PivotResult, ReportSpec
-
-SURFACE   = "#181828"   # card surface (host --surface)
-INK       = "#dde3f8"
-INK_MUTED = "#8e98bc"
-GRID      = "#2a2a42"
-AXIS      = "#3a3a58"
-HOVER_BG  = "#1f1f34"
-OTHER_COLOR = "#6e6e8c"
-
-
-@dataclass(frozen=True)
-class Theme:
-    name: str
-    palette: tuple      # categorical slots, fixed order
-    sequential: tuple   # magnitude ramp, dark → light so "near zero" recedes into the surface
-
-
-# Every palette is validated on #181828 (adjacent pairs, dark mode): lightness
-# band, chroma floor, CVD ΔE ≥ 8, normal-vision ΔE ≥ 15, every slot ≥ 3:1.
-THEMES = {
-    # Vivid OKLCH hues at the top of the dark lightness band — CVD ΔE ≥ 10.4.
-    "Aurora": Theme("Aurora",
-                    ("#3789fd", "#ea630c", "#0baa92", "#c28914",
-                     "#f41f94", "#0ca62f", "#904fff", "#f7103b"),
-                    # analogous blue → violet → magenta, monotonic lightness
-                    ("#13236e", "#3a3493", "#6445b6", "#9255d5", "#bc72dd", "#e48fe6", "#ffb6e9")),
-    # The calmer reference palette — CVD ΔE ≥ 8.4.
-    "Classic": Theme("Classic",
-                     ("#3987e5", "#d95926", "#199e70", "#c98500",
-                      "#d55181", "#008300", "#9085e9", "#e66767"),
-                     ("#0d366b", "#184f95", "#256abf", "#3987e5", "#6da7ec", "#9ec5f4", "#cde2fb")),
-}
-DEFAULT_THEME = "Aurora"
-
-PLOTLY_CONFIG = {
-    "displaylogo": False,
-    "modeBarButtonsToRemove": ["lasso2d", "select2d", "autoScale2d"],
-    "toImageButtonOptions": {"format": "png", "scale": 2},
-}
+from .chart_theme import (  # noqa: F401 — re-exported for callers and tests
+    AXIS, CRITICAL, DATE_HOVER, DATE_TICKS, DEFAULT_THEME, GAUGE_TRACK, GOOD, GRID, HOVER_BG, INK, INK_MUTED,
+    LIGHT_GOOD, OTHER_COLOR, PLOTLY_CONFIG, SERIOUS, STATUS_COLORS, SURFACE, TEMPLATE, THEMES, WARNING, Theme,
+    row_label, value_format)
+from .dials import _gauges, _gauge_values, _meters, band_colors, dial_range, gauge_color  # noqa: F401
+from .pivot import DIALS, OTHER, PivotResult, ReportSpec
 
 _BAR_CHARTS = ("Column", "Stacked column", "Bar", "Stacked bar")
-_DATE_TICKS = {"Day": "%b %d", "Week": "%b %d", "Month": "%b %Y", "Quarter": "%b %Y", "Year": "%Y"}
-_DATE_HOVER = {"Day": "%d %b %Y", "Week": "Week of %d %b %Y", "Month": "%B %Y",
-               "Quarter": "Quarter from %b %Y", "Year": "%Y"}
-
-
-def _template() -> go.layout.Template:
-    axis = dict(gridcolor=GRID, gridwidth=1, griddash="solid", linecolor=AXIS, linewidth=1,
-                zerolinecolor=AXIS, zerolinewidth=1, tickfont=dict(color=INK_MUTED, size=11),
-                title=dict(font=dict(color=INK_MUTED, size=11)), automargin=True)
-    return go.layout.Template(layout=dict(
-        font=dict(family="Inter, system-ui, -apple-system, Segoe UI, sans-serif", size=12, color=INK),
-        paper_bgcolor=SURFACE, plot_bgcolor=SURFACE, colorway=list(THEMES[DEFAULT_THEME].palette),
-        margin=dict(l=8, r=16, t=36, b=8),
-        legend=dict(orientation="h", x=0, xanchor="left", y=1.02, yanchor="bottom",
-                    font=dict(color=INK_MUTED, size=11), title=dict(text="")),
-        hoverlabel=dict(bgcolor=HOVER_BG, bordercolor="#4a4a72", font=dict(color=INK, size=12)),
-        xaxis=dict(axis, showgrid=False), yaxis=dict(axis, showgrid=True, separatethousands=True),
-        bargap=0.38, bargroupgap=0.1, barcornerradius=4,
-        uniformtext=dict(minsize=9, mode="hide"),
-    ))
-
-
-TEMPLATE = _template()
 
 
 # ── Colour helpers ────────────────────────────────────────────────────────────
@@ -103,6 +44,14 @@ def color_map(visible: list, color_order: list | tuple = (),
     return out
 
 
+def status_color_map(visible: list) -> dict | None:
+    """Execution results/statuses get the status palette; anything else returns None."""
+    keys = [str(v).lower() for v in visible if v != OTHER]
+    if keys and all(k in STATUS_COLORS for k in keys) and not set(keys) <= {"yes", "no"}:
+        return {v: STATUS_COLORS.get(str(v).lower(), OTHER_COLOR) for v in visible}
+    return None
+
+
 def _ink_on(hex_color: str) -> str:
     """White or dark text for a label sitting inside a coloured fill."""
     r, g, b = (int(hex_color[i:i + 2], 16) / 255 for i in (1, 3, 5))
@@ -119,15 +68,6 @@ def _rgba(hex_color: str, alpha: float) -> str:
 def _wash(hex_color: str, top: float) -> dict:
     """Vertical gradient fill: transparent at the baseline, a soft tint at the line."""
     return dict(type="vertical", colorscale=[[0, _rgba(hex_color, 0.0)], [1, _rgba(hex_color, top)]])
-
-
-def _value_format(spec: ReportSpec) -> tuple[str, str]:
-    """(d3 number format, suffix) for values in labels and tooltips."""
-    if spec.normalize and spec.series:
-        return ".1f", "%"
-    if not spec.value or spec.agg in ("Count", "Distinct count"):
-        return ",.0f", ""
-    return ",.1f", ""
 
 
 # ── Figure builders ───────────────────────────────────────────────────────────
@@ -154,8 +94,8 @@ def _series_frames(result: PivotResult, spec: ReportSpec):
 def _category_axis(fig: go.Figure, result: PivotResult, spec: ReportSpec, axis: str) -> None:
     update = fig.update_xaxes if axis == "x" else fig.update_yaxes
     if result.row_is_date:
-        update(type="date", tickformat=_DATE_TICKS.get(spec.date_grain, "%b %Y"),
-               hoverformat=_DATE_HOVER.get(spec.date_grain, "%b %Y"))
+        update(type="date", tickformat=DATE_TICKS.get(spec.date_grain, "%b %Y"),
+               hoverformat=DATE_HOVER.get(spec.date_grain, "%b %Y"))
     else:
         update(type="category", categoryorder="array", categoryarray=result.row_order)
 
@@ -163,7 +103,7 @@ def _category_axis(fig: go.Figure, result: PivotResult, spec: ReportSpec, axis: 
 def _bars(result: PivotResult, spec: ReportSpec, colors: dict, theme: Theme) -> go.Figure:
     horizontal = spec.chart in ("Bar", "Stacked bar")
     stacked = spec.chart.startswith("Stacked") or (spec.normalize and bool(spec.series))
-    fmt, suffix = _value_format(spec)
+    fmt, suffix = value_format(spec)
     multi = bool(result.series_order)
     fig = go.Figure(layout=dict(template=TEMPLATE, barmode="stack" if stacked else "group"))
     for name, frame in _series_frames(result, spec):
@@ -201,7 +141,7 @@ def _bars(result: PivotResult, spec: ReportSpec, colors: dict, theme: Theme) -> 
 
 def _lines(result: PivotResult, spec: ReportSpec, colors: dict, theme: Theme) -> go.Figure:
     area = spec.chart == "Area"
-    fmt, suffix = _value_format(spec)
+    fmt, suffix = value_format(spec)
     multi = bool(result.series_order)
     fig = go.Figure(layout=dict(template=TEMPLATE, hovermode="x unified"))
     for name, frame in _series_frames(result, spec):
@@ -230,7 +170,7 @@ def _lines(result: PivotResult, spec: ReportSpec, colors: dict, theme: Theme) ->
 
 
 def _donut(result: PivotResult, spec: ReportSpec, colors: dict, theme: Theme) -> go.Figure:
-    fmt, _ = _value_format(spec)
+    fmt, _ = value_format(spec)
     labels = [str(r) for r in result.long[spec.rows]]
     fig = go.Figure(layout=dict(template=TEMPLATE))
     fig.add_pie(
@@ -250,14 +190,10 @@ def _donut(result: PivotResult, spec: ReportSpec, colors: dict, theme: Theme) ->
     return fig
 
 
-def _row_label(row, result: PivotResult, spec: ReportSpec) -> str:
-    return row.strftime(_DATE_TICKS.get(spec.date_grain, "%b %Y")) if result.row_is_date else str(row)
-
-
 def _heatmap(result: PivotResult, spec: ReportSpec, theme: Theme) -> go.Figure:
-    fmt, suffix = _value_format(spec)
+    fmt, suffix = value_format(spec)
     table = result.table.drop(columns=["Total"], errors="ignore")
-    rows = [_row_label(r, result, spec) for r in table.index]
+    rows = [row_label(r, result, spec) for r in table.index]
     cols = [str(c) for c in table.columns]
     ramp = theme.sequential
     scale = [[i / (len(ramp) - 1), c] for i, c in enumerate(ramp)]
@@ -274,14 +210,14 @@ def _heatmap(result: PivotResult, spec: ReportSpec, theme: Theme) -> go.Figure:
 
 
 def _treemap(result: PivotResult, spec: ReportSpec, colors: dict, theme: Theme) -> go.Figure:
-    fmt, _ = _value_format(spec)
+    fmt, _ = value_format(spec)
     long = result.long
     row_totals = long.groupby(spec.rows, sort=False)["Value"].sum()
     ids, labels, parents, values, fills = [], [], [], [], []
     many = len(row_totals) > len(theme.palette)
     for row, total in row_totals.items():
         color = theme.palette[0] if many else colors.get(row, theme.palette[0])
-        ids.append(f"r::{row}"); labels.append(_row_label(row, result, spec))
+        ids.append(f"r::{row}"); labels.append(row_label(row, result, spec))
         parents.append(""); values.append(total); fills.append(color)
         if result.series_order:
             for _, rec in long[long[spec.rows] == row].iterrows():
@@ -310,6 +246,11 @@ def _column_gap(result: PivotResult, spec: ReportSpec) -> float:
 
 def natural_height(result: PivotResult, spec: ReportSpec) -> int:
     """Pixel height a chart needs on its own (bars and heatmaps grow with their categories)."""
+    if spec.chart in DIALS:
+        n = len(_gauge_values(result, spec))
+        if spec.chart == "Meter":
+            return {1: 340, 2: 300}.get(n, 250) if n <= 4 else 470
+        return 300 if n <= 4 else 560
     if result.empty:
         return 220
     if spec.chart in ("Bar", "Stacked bar") and not result.row_is_date:
@@ -327,7 +268,12 @@ def build_figure(result: PivotResult, spec: ReportSpec, color_order: list | tupl
     chart in a row so cards line up; the focus view passes a taller size."""
     if spec.chart == "Number":
         raise ValueError("Number reports render as stat tiles, not figures")
-    fig = _empty() if result.empty else _chart(result, spec, color_order, THEMES.get(theme, THEMES[DEFAULT_THEME]))
+    if spec.chart == "Gauge":
+        fig = _gauges(result, spec)
+    elif spec.chart == "Meter":
+        fig = _meters(result, spec)
+    else:
+        fig = _empty() if result.empty else _chart(result, spec, color_order, THEMES.get(theme, THEMES[DEFAULT_THEME]))
     # Set explicitly — Streamlit repaints a paper colour that only comes from the template.
     fig.update_layout(paper_bgcolor=SURFACE, plot_bgcolor=SURFACE,
                       height=max(height or 0, natural_height(result, spec)))
@@ -335,7 +281,11 @@ def build_figure(result: PivotResult, spec: ReportSpec, color_order: list | tupl
 
 
 def _chart(result: PivotResult, spec: ReportSpec, color_order, theme: Theme) -> go.Figure:
-    if result.series_order:
+    statuses = status_color_map(result.series_order or ([] if result.row_is_date else result.row_order))
+    if statuses and (result.series_order or spec.chart in ("Donut", "Treemap") or
+                     (spec.color_by_category and spec.chart in _BAR_CHARTS)):
+        colors = statuses
+    elif result.series_order:
         colors = color_map(result.series_order, color_order, theme.palette)
     elif spec.chart in ("Donut", "Treemap") or (
             spec.color_by_category and spec.chart in _BAR_CHARTS and not result.row_is_date

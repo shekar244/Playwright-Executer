@@ -8,6 +8,7 @@ Everything user-provided (dataset and report names) is HTML-escaped.
 from __future__ import annotations
 
 import html
+import re
 import zlib
 
 import streamlit as st
@@ -56,24 +57,27 @@ _CSS = """
   .ji-swatches { display: flex; gap: 5px; margin: -4px 0 6px; }
   .ji-swatches span { width: 16px; height: 16px; border-radius: 5px; box-shadow: 0 0 8px rgba(0,0,0,.35); }
 
-  /* ── Cards ── */
+  /* ── Cards ──
+     No transform / filter / overflow:hidden on cards: any of them would trap Streamlit's
+     fixed-position fullscreen overlay inside the card. The top accent line is a background. */
   div[class*="st-key-card-"] {
-    position: relative; overflow: hidden; background: #181828;
+    background: linear-gradient(90deg, #7ea8ff, #b898f5 50%, #f07090) top / 100% 2px no-repeat, #181828;
     border: 1px solid rgba(126,168,255,.14); border-radius: 16px; padding: 16px 18px 10px;
     box-shadow: 0 12px 30px -14px rgba(0,0,0,.7), inset 0 1px 0 rgba(255,255,255,.04);
-    transition: transform .18s ease, border-color .18s ease, box-shadow .18s ease;
-  }
-  div[class*="st-key-card-"]::before {
-    content: ''; position: absolute; left: 0; right: 0; top: 0; height: 2px;
-    background: linear-gradient(90deg, #7ea8ff, #b898f5 50%, #f07090); opacity: .9;
+    transition: border-color .18s ease, box-shadow .18s ease;
   }
   div[class*="st-key-card-"]:hover {
-    transform: translateY(-2px); border-color: rgba(126,168,255,.34);
+    border-color: rgba(126,168,255,.34);
     box-shadow: 0 18px 40px -16px rgba(0,0,0,.8), 0 0 30px -8px rgba(126,168,255,.28);
   }
   .ji-card-title {
     font-size: 12px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: #c5cdea;
     display: flex; align-items: center; gap: 9px; min-height: 32px;
+  }
+  .ji-card-title .ji-code {
+    font: 600 10px 'JetBrains Mono', ui-monospace, monospace; letter-spacing: .02em; text-transform: none;
+    color: #aab4d8; background: rgba(126,168,255,.10); border: 1px solid rgba(126,168,255,.24);
+    border-radius: 6px; padding: 1px 6px;
   }
   .ji-card-title .ji-dot { width: 9px; height: 9px; border-radius: 50%; flex-shrink: 0;
     background: var(--a); box-shadow: 0 0 10px var(--a); }
@@ -99,7 +103,7 @@ _CSS = """
   }
   .ji-stat-value { font-size: 30px; margin-top: 9px; }
   .ji-stat-sub, .ji-number-sub { font-size: 11.5px; color: #8e98bc; margin-top: 4px; }
-  .ji-number { text-align: center; padding: 18px 0 16px; }
+  .ji-number { text-align: center; padding: 18px 0 16px; display: flex; flex-direction: column; justify-content: center; }
   .ji-number-value { font-size: 52px; }
 
   /* ── Navigation, pills and buttons ── */
@@ -129,6 +133,25 @@ _CSS = """
 """
 
 
+# Styles injected into the drag-and-drop component (it renders in its own iframe).
+SORTABLE_CSS = """
+body { background: transparent; }
+.sortable-component { background: transparent; border: none; padding: 0; margin: 0;
+  font-family: Inter, system-ui, -apple-system, Segoe UI, sans-serif; }
+.sortable-container { background: #12121f; border: 1px dashed rgba(126,168,255,.32);
+  border-radius: 12px; margin: 0 0 8px; padding: 2px 4px 4px; counter-reset: none; }
+.sortable-container:last-child { border-color: rgba(184,152,245,.45); background: rgba(184,152,245,.06); }
+.sortable-container-header { background: transparent; color: #8e98bc; font-size: 11px; font-weight: 700;
+  letter-spacing: .08em; text-transform: uppercase; padding: 6px 8px 2px; }
+.sortable-container-body { background: transparent; min-height: 46px; }
+.sortable-item, .sortable-item:hover {
+  background: linear-gradient(135deg, rgba(126,168,255,.24), rgba(184,152,245,.20));
+  color: #eef1ff; border: 1px solid rgba(126,168,255,.40); border-radius: 10px;
+  font-size: 13px; font-weight: 600; cursor: grab; box-shadow: 0 4px 14px -6px rgba(126,168,255,.55);
+}
+"""
+
+
 def inject_css() -> None:
     st.markdown(_CSS, unsafe_allow_html=True)
 
@@ -154,22 +177,33 @@ def hero(title: str, chips: list[str]) -> None:
                 unsafe_allow_html=True)
 
 
-def card_title(text: str, accent: str = ACCENTS[0]) -> None:
-    st.markdown(f'<div class="ji-card-title" style="--a:{accent}"><span class="ji-dot"></span>'
-                f'{html.escape(text)}</div>', unsafe_allow_html=True)
+def card_title(text: str, accent: str = ACCENTS[0], code: str = "") -> None:
+    badge = f'<span class="ji-code">{html.escape(code)}</span>' if code else ""
+    st.markdown(f'<div class="ji-card-title" style="--a:{safe_color(accent)}"><span class="ji-dot"></span>'
+                f'{badge}{html.escape(text)}</div>', unsafe_allow_html=True)
+
+
+_HEX = re.compile(r"^#[0-9a-fA-F]{6}$")
+
+
+def safe_color(value: str, fallback: str = ACCENTS[0]) -> str:
+    """Only #rrggbb reaches a style attribute — tile colours are user-editable."""
+    return value if isinstance(value, str) and _HEX.match(value) else fallback
 
 
 def stat_tiles_html(tiles: list[tuple[str, str, str, str, str]]) -> str:
     """tiles: (icon, label, value, caption, accent)."""
     cells = "".join(
-        f'<div class="ji-stat" style="--a:{accent}"><div class="ji-stat-head">'
-        f'<span class="ji-stat-icon">{icon}</span>{html.escape(label)}</div>'
+        f'<div class="ji-stat" style="--a:{safe_color(accent)}"><div class="ji-stat-head">'
+        f'<span class="ji-stat-icon">{html.escape(icon)}</span>{html.escape(label)}</div>'
         f'<div class="ji-stat-value">{html.escape(value)}</div>'
         f'<div class="ji-stat-sub">{html.escape(caption)}</div></div>'
         for icon, label, value, caption, accent in tiles)
     return f'<div class="ji-stats">{cells}</div>'
 
 
-def number_html(value: str, caption: str, accent: str) -> str:
-    return (f'<div class="ji-number" style="--a:{accent}"><div class="ji-number-value">{html.escape(value)}</div>'
+def number_html(value: str, caption: str, accent: str, min_height: int = 0) -> str:
+    """Big gradient number; `min_height` stretches it to line up with charts in the same row."""
+    size = f";min-height:{int(min_height)}px" if min_height else ""
+    return (f'<div class="ji-number" style="--a:{accent}{size}"><div class="ji-number-value">{html.escape(value)}</div>'
             f'<div class="ji-number-sub">{html.escape(caption)}</div></div>')

@@ -41,3 +41,13 @@ def test_cards_never_trap_the_fullscreen_overlay():
     css = re.sub(r"/\*.*?\*/", "", _CSS, flags=re.S)
     card_rules = [block for block in css.split("}") if 'st-key-card-' in block]
     assert card_rules and not any("transform" in r or "overflow: hidden" in r for r in card_rules)
+
+
+
+def test_card_title_shows_the_report_number_escaped(monkeypatch):
+    import streamlit as st
+    from jira_insights.ui.style import card_title
+    seen = []
+    monkeypatch.setattr(st, "markdown", lambda body, **kw: seen.append(body))
+    card_title("Defects <b>", "#7ea8ff", "R-012")
+    assert '<span class="ji-code">R-012</span>' in seen[0] and "Defects &lt;b&gt;" in seen[0]

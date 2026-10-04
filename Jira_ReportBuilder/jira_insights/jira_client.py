@@ -1,13 +1,18 @@
 """
 Minimal Jira REST client for bulk JQL pulls.
 
-  • Jira Cloud            — enhanced search  GET /rest/api/2/search/jql  (nextPageToken)
-  • Jira Server / DC      — classic search   GET /rest/api/2/search      (startAt / total)
+  • Jira Cloud            — enhanced search  GET /rest/api/latest/search/jql  (nextPageToken)
+  • Jira Server / DC      — classic search   GET /rest/api/2/search           (startAt / total)
 
-The enhanced endpoint is tried first; a 404/405/410 falls back to classic.
-Auth is Basic (email + API token) when a username is set, otherwise Bearer
-(Data Center personal access token). HTTP 429 responses are retried,
-honouring Retry-After.
+Same endpoints, order and headers as Amplify QEA's _jira_search_jql: the
+enhanced endpoint first, falling back to classic on 404/405/410 or when the
+response has no "issues". Paging and HTTP 429 retries (Retry-After) are added.
+
+Auth (settings.auth_type):
+  basic   Authorization: Basic base64(username:token)   — Cloud email + API token, DC username + password
+  bearer  Authorization: Bearer token                   — Data Center personal access token (PAT)
+  auto    Basic when a username is set, else Bearer; and on a non-Cloud host a
+          Basic 401 is retried once as Bearer (a DC PAT entered with a username).
 """
 from __future__ import annotations
 
@@ -47,6 +52,10 @@ def _ssl_context(verify: bool) -> ssl.SSLContext:
         return ssl.create_default_context()
 
 
+class _NoIssues(Exception):
+    """The enhanced search answered without an "issues" list — use classic search instead."""
+
+
 class JiraError(RuntimeError):
     def __init__(self, status: int, message: str):
         super().__init__(message)
@@ -82,17 +91,27 @@ class JiraClient:
         self._open     = opener or urllib.request.urlopen
         self._sleep    = sleep
         self._ctx      = _ssl_context(settings.verify_ssl)
+        mode = settings.auth_type if settings.auth_type in ("basic", "bearer") else "auto"
+        self._scheme   = mode if mode != "auto" else ("basic" if settings.username else "bearer")
+        self._can_fall_back = mode == "auto" and self._scheme == "basic" and not settings.is_cloud
+
+    @property
+    def auth_scheme(self) -> str:
+        return self._scheme
 
     # ── HTTP ──────────────────────────────────────────────────────────────────
 
     def _headers(self) -> dict:
         s = self._settings
-        if s.username:
-            creds = base64.b64encode(f"{s.username}:{s.token}".encode()).decode()
-            auth  = f"Basic {creds}"
+        if self._scheme == "basic":
+            auth = "Basic " + base64.b64encode(f"{s.username}:{s.token}".encode()).decode()
         else:
             auth = f"Bearer {s.token}"
-        return {"Authorization": auth, "Accept": "application/json"}
+        return {"Authorization": auth, "Content-Type": "application/json", "Accept": "application/json"}
+
+    def get(self, path: str, params: dict | None = None):
+        """GET a path on the Jira host (REST API, or ZAPI for Zephyr Server) with this client's auth."""
+        return self._get(path, params)
 
     def _get(self, path: str, params: dict | None = None):
         url = self._settings.url + path
@@ -108,6 +127,9 @@ class JiraClient:
                 if e.code == 429 and attempt < self.MAX_RETRIES:
                     self._sleep(_retry_after(e, attempt))
                     continue
+                if e.code == 401 and self._can_fall_back:
+                    self._scheme, self._can_fall_back = "bearer", False     # DC PAT with a username
+                    return self._get(path, params)
                 raise JiraError(e.code, _error_message(e)) from None
             except urllib.error.URLError as e:
                 raise JiraError(0, f"Cannot reach Jira at {self._settings.url}: {e.reason}") from None
@@ -125,6 +147,13 @@ class JiraClient:
             return {}
         return {f["id"]: f.get("name") or f["id"] for f in fields if f.get("id")}
 
+    def project(self, key: str) -> dict:
+        return self._get(f"/rest/api/2/project/{urllib.parse.quote(key.strip())}")
+
+    def versions(self, key: str) -> list[dict]:
+        data = self._get(f"/rest/api/2/project/{urllib.parse.quote(key.strip())}/versions")
+        return data if isinstance(data, list) else []
+
     def search(self, jql: str, fields: str = "*navigable", max_issues: int = 5000,
                on_progress: ProgressFn | None = None) -> list[dict]:
         progress = on_progress or (lambda fetched, total: None)
@@ -133,6 +162,8 @@ class JiraClient:
         except JiraError as e:
             if e.status not in _FALLBACK_CODES:
                 raise
+        except _NoIssues:
+            pass
         return self._search_classic(jql, fields, max_issues, progress)
 
     def _search_enhanced(self, jql: str, fields: str, max_issues: int, progress: ProgressFn) -> list[dict]:
@@ -143,7 +174,9 @@ class JiraClient:
                       "maxResults": min(self.PAGE_SIZE, max_issues - len(issues))}
             if token:
                 params["nextPageToken"] = token
-            page  = self._get("/rest/api/2/search/jql", params)
+            page  = self._get("/rest/api/latest/search/jql", params)
+            if not isinstance(page, dict) or "issues" not in page:
+                raise _NoIssues()           # like Amplify: anything without "issues" → classic search
             batch = page.get("issues") or []
             issues.extend(batch)
             progress(len(issues), None)

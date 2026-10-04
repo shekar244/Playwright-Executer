@@ -122,3 +122,23 @@ def test_environment_variables_override_any_source(isolated, monkeypatch):
     assert conn.settings.url == "https://env.example.com" and conn.settings.zephyr_account_id == "env-account"
     assert conn.settings.token == "abc%123"
     assert conn.overrides == ("JIRA_URL", "ZEPHYR_ACCOUNT_ID")
+
+
+def test_auth_and_zephyr_types_from_file_with_amplify_ssl_default(isolated):
+    ini = isolated / "dc.ini"
+    ini.write_text("[jira]\nurl = https://jira.corp\nusername = svc\ntoken = pat\nauth = BEARER\nzephyr = server\n")
+    s, found, _ = read_credentials_file(str(ini))
+    assert s.auth_type == "bearer" and s.zephyr_type == "server" and s.zephyr_mode == "server"
+    assert s.verify_ssl is False and "verify_ssl" not in found          # Amplify default when unset
+    assert s.zephyr_configured                                          # Server/DC needs only the Jira login
+
+
+def test_unknown_types_fall_back_to_auto_and_zephyr_mode_follows_keys():
+    from dataclasses import replace
+    s = JiraSettings("https://acme.atlassian.net", "qa", "t", auth_type="weird")
+    assert load_jira_settings() is not None
+    from jira_insights.settings import _from_mapping
+    assert _from_mapping({"auth_type": "weird", "zephyr_type": "nope"}).auth_type == "auto"
+    assert s.zephyr_mode == "server" and replace(s, zephyr_access_key="a", zephyr_secret_key="b",
+                                                 zephyr_account_id="c").zephyr_mode == "cloud"
+    assert s.is_cloud and not JiraSettings("https://jira.corp").is_cloud

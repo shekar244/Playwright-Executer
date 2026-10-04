@@ -24,10 +24,16 @@ Amplify-QEA/
 │   ├── launcher.py                  ← side-car process start/stop/health (used by routes/insights.py)
 │   ├── jira_client.py               ← JQL search (Cloud /search/jql + Server/DC /search)
 │   ├── transform.py                 ← issues / CSV export → flat DataFrame + derived columns
-│   ├── pivot.py                     ← ReportSpec + pivot engine (pure pandas)
-│   ├── charts.py                    ← Plotly figure factory + validated palette
-│   ├── store.py                     ← workspace persistence (datasets, reports, explorer specs)
-│   └── ui/                          ← Streamlit views (dashboard, builder, explorer, data)
+│   ├── pivot.py                     ← ReportSpec + pivot engine (pure pandas; Gauge/Meter %, filters)
+│   ├── charts.py                    ← Plotly figure factory (bars, lines, donut, heatmap, treemap)
+│   ├── chart_theme.py               ← colours, validated themes, Plotly template
+│   ├── dials.py                     ← Gauge (arc) + Meter (needle) with configurable colour bands
+│   ├── layout.py                    ← dashboard rows for drag-and-drop arranging
+│   ├── kpi.py                       ← configurable KPI tiles
+│   ├── executions.py                ← Zephyr test runs → flat table
+│   ├── zephyr.py                    ← test-run fetch via routes/zephyr.py (_z_call / _jira_call)
+│   ├── store.py                     ← workspace persistence (datasets, reports, tiles, settings)
+│   └── ui/                          ← Streamlit views (dashboard, tile editor, builder, explorer, data, Zephyr source)
 ├── .streamlit/config.toml           ← Streamlit server + theme settings for Jira Insights
 ├── templates/
 │   ├── base.html                    ← HTML shell: <head>, CSS, nav, shared JS, {% include %} calls

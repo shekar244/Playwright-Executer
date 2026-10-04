@@ -83,7 +83,7 @@ def test_enhanced_search_follows_next_page_token_until_last():
     result = JiraClient(CLOUD, opener=opener).search("project = A", on_progress=lambda n, t: seen.append((n, t)))
 
     assert [i["key"] for i in result] == ["A-1", "A-2", "A-3"]
-    assert opener.path(0) == "/rest/api/2/search/jql"
+    assert opener.path(0) == "/rest/api/latest/search/jql"            # same endpoint as Amplify QEA
     assert opener.params(0)["jql"] == "project = A"
     assert "nextPageToken" not in opener.params(0)
     assert opener.params(1)["nextPageToken"] == "t2"
@@ -146,3 +146,51 @@ def test_field_names_maps_ids_to_display_names():
     opener = FakeOpener([{"id": "customfield_10016", "name": "Story Points"}, {"id": "status", "name": "Status"}])
     assert JiraClient(CLOUD, opener=opener).field_names() == {
         "customfield_10016": "Story Points", "status": "Status"}
+
+
+DC = JiraSettings(url="https://jira.corp.example", username="svc-user", token="A" * 44)
+
+
+def test_headers_match_amplify():
+    opener = FakeOpener({"name": "me"})
+    JiraClient(CLOUD, opener=opener).myself()
+    req = opener.requests[0]
+    assert req.get_header("Content-type") == "application/json"
+    assert req.get_header("Accept") == "application/json"
+
+
+def test_auto_auth_retries_basic_401_as_bearer_on_data_center():
+    opener = FakeOpener(http_error(401), {"name": "svc"}, {"name": "svc"})
+    client = JiraClient(DC, opener=opener)
+    assert client.myself() == {"name": "svc"}
+    assert opener.requests[0].get_header("Authorization").startswith("Basic ")
+    assert opener.requests[1].get_header("Authorization") == "Bearer " + "A" * 44
+    client.myself()                                                    # remembers Bearer
+    assert opener.requests[2].get_header("Authorization").startswith("Bearer ")
+    assert client.auth_scheme == "bearer"
+
+
+def test_no_bearer_retry_on_cloud_or_when_auth_type_is_explicit():
+    with pytest.raises(JiraError):
+        JiraClient(CLOUD, opener=FakeOpener(http_error(401))).myself()
+    from dataclasses import replace
+    with pytest.raises(JiraError):
+        JiraClient(replace(DC, auth_type="basic"), opener=FakeOpener(http_error(401))).myself()
+    opener = FakeOpener({"name": "x"})
+    JiraClient(replace(DC, auth_type="bearer"), opener=opener).myself()
+    assert opener.requests[0].get_header("Authorization").startswith("Bearer ")
+
+
+def test_enhanced_search_without_issues_falls_back_to_classic():
+    opener = FakeOpener({"unexpected": True}, {"issues": issues("S-1"), "total": 1})
+    result = JiraClient(DC, opener=opener).search("x")
+    assert [i["key"] for i in result] == ["S-1"]
+    assert opener.path(1) == "/rest/api/2/search"
+
+
+def test_project_and_versions():
+    opener = FakeOpener({"id": "10001", "key": "ABC"}, [{"id": "1", "name": "R1"}])
+    client = JiraClient(CLOUD, opener=opener)
+    assert client.project("ABC")["id"] == "10001"
+    assert client.versions("ABC") == [{"id": "1", "name": "R1"}]
+    assert opener.path(1) == "/rest/api/2/project/ABC/versions"

@@ -19,7 +19,7 @@ from pathlib import Path
 
 import pandas as pd
 
-from .kpi import KpiSpec, default_tiles
+from .kpi import EXECUTION_TILES, KpiSpec, default_tiles
 from .pivot import ReportSpec
 
 # Seeded into reports.json on first run so the dashboard is useful immediately.
@@ -39,6 +39,26 @@ STARTER_REPORTS = [
     {"name": "Average age of open defects (days)", "chart": "Bar", "rows": "Priority",
      "value": "Age (days)", "agg": "Average", "sort": "Label", "show_labels": True,
      "filters": {"Issue Type": ["Bug", "Defect"], "Open/Closed": ["Open"]}},
+]
+
+
+_EXECUTED, _PASSED = {"Executed": ["Yes"]}, {"Result": ["Passed"]}
+
+# Added once, when the first Zephyr test-run dataset is created. They use test-run columns
+# (Result, Cycle, Executed On…), so they stay hidden on Jira issue datasets.
+EXECUTION_REPORTS = [
+    {"name": "Pass rate (executed tests)", "chart": "Meter", "filters": _EXECUTED, "gauge_where": _PASSED,
+     "gauge_bands": [60.0, 80.0, 90.0]},
+    {"name": "Pass rate by cycle", "chart": "Gauge", "rows": "Cycle", "filters": _EXECUTED,
+     "gauge_where": _PASSED, "gauge_bands": [70.0, 90.0]},
+    {"name": "Execution results", "chart": "Donut", "rows": "Result", "sort": "Label", "show_labels": True},
+    {"name": "Results by cycle", "chart": "Stacked bar", "rows": "Cycle", "series": "Result"},
+    {"name": "Test runs per day", "chart": "Stacked column", "rows": "Executed On", "series": "Result",
+     "date_grain": "Day", "filters": _EXECUTED},
+    {"name": "Failures by component", "chart": "Bar", "rows": "Components", "filters": {"Result": ["Failed"]},
+     "show_labels": True},
+    {"name": "Test runs by tester", "chart": "Stacked bar", "rows": "Executed By", "series": "Result",
+     "filters": _EXECUTED},
 ]
 
 
@@ -107,16 +127,37 @@ class Store:
             raw = json.loads(self._reports_file.read_text(encoding="utf-8"))
         except (OSError, json.JSONDecodeError):
             return []
-        return [ReportSpec.from_dict(r) for r in raw if isinstance(r, dict)]
+        reports = [ReportSpec.from_dict(r) for r in raw if isinstance(r, dict)]
+        if self._number(reports):
+            self._write_reports(reports)              # older reports get their numbers once
+        return reports
+
+    def _number(self, reports: list[ReportSpec]) -> bool:
+        """Give every report a unique number; numbers are never reused, even after a delete."""
+        seq = max([int(self.get_setting("report_seq") or 0)] + [int(r.number or 0) for r in reports])
+        seen: set[int] = set()
+        changed = False
+        for report in reports:
+            if not report.number or report.number in seen:
+                seq += 1
+                report.number = seq
+                changed = True
+            seen.add(report.number)
+        if seq != self.get_setting("report_seq"):
+            self.set_setting("report_seq", seq)
+        return changed
 
     def save_report(self, spec: ReportSpec) -> ReportSpec:
         spec.with_id()
         reports = self.list_reports()
         ids = [r.id for r in reports]
         if spec.id in ids:
+            spec.number = reports[ids.index(spec.id)].number      # an edit keeps its number
             reports[ids.index(spec.id)] = spec
         else:
+            spec.number = 0                                        # new / copied report → next number
             reports.append(spec)
+        self._number(reports)
         self._write_reports(reports)
         return spec
 
@@ -146,6 +187,24 @@ class Store:
 
     def reset_kpis(self) -> None:
         self.save_kpis(default_tiles())
+
+    def seed_execution_starters(self) -> bool:
+        """Add the test-run reports and KPI tiles once (by name — user edits and deletions stick)."""
+        if self.get_setting("execution_starters_seeded"):
+            return False
+        names = {r.name for r in self.list_reports()}
+        for report in EXECUTION_REPORTS:
+            if report["name"] not in names:
+                self.save_report(ReportSpec.from_dict(report))
+        tiles = self.list_kpis()
+        for tile in tiles:      # the issue-count tile predates `requires`; keep it on issue datasets only
+            if tile.label == "Issues" and not tile.requires and not tile.metric.value and not tile.metric.filters:
+                tile.requires = ["Open/Closed"]
+        labels = {t.label for t in tiles}
+        tiles += [KpiSpec.from_dict(t.to_dict()) for t in EXECUTION_TILES if t.label not in labels]
+        self.save_kpis(tiles)
+        self.set_setting("execution_starters_seeded", True)
+        return True
 
     # ── UI settings ───────────────────────────────────────────────────────────
 

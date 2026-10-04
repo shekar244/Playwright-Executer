@@ -13,9 +13,9 @@ from __future__ import annotations
 import streamlit as st
 
 from ..jira_client import JiraClient, JiraError
-from ..settings import (Connection, JiraSettings, read_credentials_file, save_credentials_file,
-                        save_jira_settings, saved_app_settings, with_env)
-from ..zephyr import ZephyrClient
+from ..settings import (AUTH_TYPES, ZEPHYR_TYPES, Connection, JiraSettings, read_credentials_file,
+                        save_credentials_file, save_jira_settings, saved_app_settings, with_env)
+from ..zephyr import zephyr_client
 
 INI_EXAMPLE = """\
 ; Jira / Zephyr credentials for Jira Report Builder.
@@ -29,6 +29,10 @@ secret_key  = your-zephyr-secret-key
 account_id  = 5b10a2844c20165700ede21g
 project_key = ABC
 verify_ssl  = true
+; Optional — auth_type: auto | basic | bearer   (bearer = Jira Data Center personal access token)
+; Optional — zephyr_type: auto | cloud | server (server = Zephyr Squad on Jira Server/DC, uses the Jira login)
+auth_type   = auto
+zephyr_type = auto
 """
 
 _SOURCES = {"app": "Enter here", "file": "Config file"}
@@ -36,19 +40,22 @@ _LABELS = {
     "url": "Jira URL", "username": "username", "token": "API token", "verify_ssl": "verify SSL",
     "zephyr_access_key": "Zephyr access key", "zephyr_secret_key": "Zephyr secret key",
     "zephyr_account_id": "account id", "project_key": "project key",
+    "auth_type": "auth type", "zephyr_type": "Zephyr type",
 }
 
 
 def _run_tests(settings: JiraSettings, jira: bool, zephyr: bool) -> None:
     if jira:
         try:
-            me = JiraClient(settings).myself()
-            st.success(f"Jira: connected as {me.get('displayName') or me.get('name') or 'Jira user'}")
+            client = JiraClient(settings)
+            me = client.myself()
+            st.success(f"Jira: connected as {me.get('displayName') or me.get('name') or 'Jira user'} "
+                       f"({client.auth_scheme.title()} auth)")
         except JiraError as exc:
             st.error(f"Jira{f' ({exc.status})' if exc.status else ''}: {exc}")
     if zephyr:
         try:
-            st.success(ZephyrClient(settings).test())
+            st.success(zephyr_client(settings).test())
         except JiraError as exc:
             st.error(f"Zephyr{f' ({exc.status})' if exc.status else ''}: {exc}")
 
@@ -64,9 +71,17 @@ def _app_form() -> None:
         token = st.text_input("Jira API token", type="password", placeholder=keep if saved.token else "",
                               help="Cloud: id.atlassian.com → Security → API tokens. "
                                    "Data Center: Profile → Personal Access Tokens.")
+        auth = st.selectbox("Auth type", list(AUTH_TYPES), index=list(AUTH_TYPES).index(saved.auth_type),
+                            format_func=AUTH_TYPES.get,
+                            help="Auto: Basic with a username, Bearer without one — and on Jira Server/DC a "
+                                 "rejected Basic login is retried as Bearer (personal access token).")
         verify = st.checkbox("Verify SSL certificates", value=saved.verify_ssl,
                              help="Untick only behind a corporate TLS proxy with a private certificate.")
         st.markdown("**Zephyr Squad** · optional")
+        ztype = st.selectbox("Zephyr type", list(ZEPHYR_TYPES), index=list(ZEPHYR_TYPES).index(saved.zephyr_type),
+                             format_func=ZEPHYR_TYPES.get,
+                             help="Cloud uses the access/secret keys below. Server/DC uses your Jira login — "
+                                  "no keys needed. Auto picks Cloud when keys are filled in.")
         access = st.text_input("Zephyr access key", type="password", placeholder=keep if saved.zephyr_access_key else "")
         secret = st.text_input("Zephyr secret key", type="password", placeholder=keep if saved.zephyr_secret_key else "")
         account = st.text_input("Atlassian account id", value=saved.zephyr_account_id,
@@ -78,9 +93,11 @@ def _app_form() -> None:
         test_zephyr = c2.form_submit_button("Test Zephyr", width="stretch")
     if not (save or test_jira or test_zephyr):
         return
-    candidate = JiraSettings(url, user, token.strip() or saved.token, verify,
-                             access.strip() or saved.zephyr_access_key, secret.strip() or saved.zephyr_secret_key,
-                             account.strip(), project.strip().upper())
+    candidate = JiraSettings(url=url, username=user, token=token.strip() or saved.token, verify_ssl=verify,
+                             zephyr_access_key=access.strip() or saved.zephyr_access_key,
+                             zephyr_secret_key=secret.strip() or saved.zephyr_secret_key,
+                             zephyr_account_id=account.strip(), project_key=project.strip().upper(),
+                             auth_type=auth, zephyr_type=ztype)
     if save:
         save_jira_settings(candidate)
     _run_tests(with_env(candidate), test_jira, test_zephyr)
@@ -118,6 +135,10 @@ def _file_form(conn: Connection) -> None:
         st.warning(problem)
     elif found:
         st.caption("✅ Found " + ", ".join(_LABELS[f] for f in found if f in _LABELS))
+        if settings is not None:
+            st.caption(f"Auth: {AUTH_TYPES[settings.auth_type].split(' —')[0]} · "
+                       f"Zephyr: {'Cloud' if settings.zephyr_mode == 'cloud' else 'Server / DC'} · "
+                       f"SSL verify: {'on' if settings.verify_ssl else 'off'}")
 
     use = st.button("Use this file", type="primary", width="stretch", disabled=settings is None)
     c1, c2 = st.columns(2)
