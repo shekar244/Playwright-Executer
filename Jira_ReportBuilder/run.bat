@@ -13,7 +13,7 @@ if "%PORT%"=="" set PORT=8501
 REM -- Pick the virtual environment ---------------------------------------
 set "VENV="
 if defined VENV_DIR set "VENV=%VENV_DIR%"
-for %%v in (".venv" "venv" "..\.venv" "..\venv") do (
+for %%v in (".venv" "venv") do (
     if not defined VENV if exist "%%~v\Scripts\python.exe" set "VENV=%%~v"
 )
 if not defined VENV set "VENV=venv"

@@ -15,7 +15,7 @@ PORT="${PORT:-8501}"
 # Pick the virtual environment
 VENV="${VENV_DIR:-}"
 if [ -z "$VENV" ]; then
-    for candidate in .venv venv ../.venv ../venv; do
+    for candidate in .venv venv; do
         if [ -x "$candidate/bin/python" ]; then VENV="$candidate"; break; fi
     done
 fi
