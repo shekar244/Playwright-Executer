@@ -3,9 +3,9 @@ Dashboard layout — an ordered list of rows, each row a list of report ids.
 
 Each row splits the page width evenly (one report = full width, four =
 quarter tiles), so moving a report between rows is all it takes to resize
-it. The layout is edited by drag-and-drop on the dashboard and saved in the
-workspace settings; reports missing from a saved layout (e.g. newly saved
-ones) are appended with the default packing.
+it. Every dataset can have its own dashboard (which reports, in what layout);
+a dataset without one shows every compatible report automatically, using the
+shared default layout.
 """
 from __future__ import annotations
 
@@ -34,8 +34,8 @@ def default_layout(reports: list[ReportSpec]) -> list[list[str]]:
     return rows
 
 
-def normalize(saved, reports: list[ReportSpec]) -> list[list[str]]:
-    """Saved rows minus unknown/duplicate ids and empty rows, plus any reports not placed yet."""
+def clean(saved, reports: list[ReportSpec]) -> list[list[str]]:
+    """Saved rows minus unknown / duplicate ids and empty rows (deleted reports simply drop out)."""
     known = {r.id for r in reports}
     seen: set[str] = set()
     rows: list[list[str]] = []
@@ -45,17 +45,51 @@ def normalize(saved, reports: list[ReportSpec]) -> list[list[str]]:
         kept = [i for i in row if isinstance(i, str) and i in known and not (i in seen or seen.add(i))]
         if kept:
             rows.append(kept)
-    return rows + default_layout([r for r in reports if r.id not in seen])
+    return rows
+
+
+def normalize(saved, reports: list[ReportSpec]) -> list[list[str]]:
+    """Automatic dashboards: the saved rows, plus every report not placed yet (default packing)."""
+    rows = clean(saved, reports)
+    placed = {i for row in rows for i in row}
+    return rows + default_layout([r for r in reports if r.id not in placed])
+
+
+def members(rows: list[list[str]]) -> list[str]:
+    return [i for row in rows for i in row]
+
+
+def with_members(rows: list[list[str]], picked: list[str], reports: list[ReportSpec]) -> list[list[str]]:
+    """Keep the picked reports where they are, drop the rest, add new picks as new rows."""
+    keep = set(picked)
+    kept = [k for k in ([i for i in row if i in keep] for row in rows) if k]
+    placed = set(members(kept))
+    by_id = {r.id: r for r in reports}
+    new = [by_id[i] for i in picked if i not in placed and i in by_id]
+    return kept + default_layout(new)
+
+
+# Columns only Zephyr test-run datasets have, and columns only Jira issue datasets have.
+_ZEPHYR_COLUMNS = {"Result", "Executed", "Execution Status", "Execution ID", "Cycle", "Folder",
+                   "Executed By", "Executed On", "Defect Keys", "Defects"}
+_JIRA_COLUMNS = {"Issue Type", "Status", "Status Category", "Open/Closed", "Created", "Updated", "Resolved",
+                 "Age (days)", "Resolution Time (days)", "Story Points", "Sprint", "Reporter", "Resolution"}
+KIND_BADGES = {"zephyr": "🧪", "jira": "🧾", "any": "◻️"}
+
+
+def report_kind(spec: ReportSpec) -> str:
+    """zephyr / jira / any — from the columns the report needs (Priority, Labels … exist in both)."""
+    needs = spec.required_columns()
+    if needs & _ZEPHYR_COLUMNS:
+        return "zephyr"
+    if needs & _JIRA_COLUMNS:
+        return "jira"
+    return "any"
 
 
 def visible_rows(rows: list[list[str]], visible: set[str]) -> list[list[str]]:
     return [kept for kept in ([i for i in row if i in visible] for row in rows) if kept]
 
-
-def merge_hidden(edited: list[list[str]], previous: list[list[str]], visible: set[str]) -> list[list[str]]:
-    """Keep rows of reports the current dataset can't show (they're hidden, not deleted)."""
-    hidden = [kept for kept in ([i for i in row if i not in visible] for row in previous) if kept]
-    return [row for row in edited if row] + hidden
 
 
 def unique_labels(reports: list[ReportSpec], icons: dict[str, str]) -> dict[str, str]:

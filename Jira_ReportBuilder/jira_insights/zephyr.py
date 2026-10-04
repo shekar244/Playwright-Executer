@@ -1,20 +1,24 @@
 """
 Zephyr Squad connectivity — test cycles and executions for execution reports.
 
-Two deployments, one interface (test · cycles · cycle_executions · zql):
+Two deployments, one interface (test · project · versions · cycles · zql · display_names):
 
   ZephyrCloud   Zephyr Squad Cloud API at prod-api.zephyr4jiracloud.com, every
                 request signed with a short-lived JWT (access key / secret key /
                 Atlassian account id). Ported from Amplify QEA routes/zephyr.py —
                 same JWT claims, canonical query string, headers and endpoints:
                   cycles      GET  /public/rest/api/1.0/cycles/search?projectId&versionId
-                  executions  GET  /public/rest/api/1.0/executions/search/cycle/{id}  (size/offset)
-                  ZQL         POST /public/rest/api/1.0/zql/search
+                  test runs   POST /public/rest/api/1.0/zql/search            (offset / maxRecords)
+                Rate-limited calls (HTTP 429) are retried, honouring Retry-After.
   ZephyrServer  Zephyr Squad Server / Data Center (ZAPI on the Jira host), using the
                 Jira login (Basic or Bearer PAT) through JiraClient:
                   statuses    GET  /rest/zapi/latest/util/testExecutionStatus
                   cycles      GET  /rest/zapi/latest/cycle?projectId&versionId
-                  executions  GET  /rest/zapi/latest/zql/executeSearch?zqlQuery&offset&maxRecords
+                  test runs   GET  /rest/zapi/latest/zql/executeSearch?zqlQuery&offset&maxRecords
+
+Test runs are always fetched with ZQL — the drill-down (project → version → cycles) is
+turned into a query by zql.drilldown_zql — one paged search instead of an executions
+call per cycle, which tripped Zephyr's rate limits on large versions.
 """
 from __future__ import annotations
 
@@ -29,13 +33,14 @@ import urllib.request
 import uuid
 from typing import Callable, Optional
 
-from .jira_client import JiraClient, JiraError, _error_message, _ssl_context
+from .jira_client import JiraClient, JiraError, _error_message, _retry_after, _ssl_context
 from .settings import JiraSettings
 
 ZAPI_BASE = "https://prod-api.zephyr4jiracloud.com/connect"
 STATUSES_PATH = "/public/rest/api/1.0/util/statuses"
 ZAPI_SERVER = "/rest/zapi/latest"
 PAGE_SIZE = 50
+MAX_RETRIES = 4
 
 ProgressFn = Callable[[int, Optional[int]], None]
 
@@ -93,15 +98,6 @@ def normalize_cycles(data) -> list[dict]:
             for c in items if c.get("name") or c.get("id") not in (None, "")]
 
 
-def _quote_zql(value: str) -> str:
-    return '"' + str(value).replace("\\", "\\\\").replace('"', '\\"') + '"'
-
-
-def cycle_zql(project_key: str, version_name: str, cycle_name: str) -> str:
-    return (f"project = {_quote_zql(project_key)} AND fixVersion = {_quote_zql(version_name)} "
-            f"AND cycleName = {_quote_zql(cycle_name)}")
-
-
 def _page(data) -> tuple[list, int | None]:
     if not isinstance(data, dict):
         return [], None
@@ -110,20 +106,38 @@ def _page(data) -> tuple[list, int | None]:
     return rows, int(total) if isinstance(total, (int, float, str)) and str(total).isdigit() else None
 
 
+class _RateLimited(Exception):
+    def __init__(self, error: urllib.error.HTTPError):
+        super().__init__("rate limited")
+        self.error = error
+
+
 # ── Zephyr Squad Cloud ────────────────────────────────────────────────────────
 
 class ZephyrCloud:
     mode = "cloud"
 
-    def __init__(self, settings: JiraSettings, opener=None):
+    def __init__(self, settings: JiraSettings, opener=None, sleep=time.sleep):
         if not settings.zephyr_cloud_keys:
             raise JiraError(0, "Zephyr Squad Cloud needs the Zephyr access key, secret key and Atlassian "
                                "account id — or set Zephyr type to Server / DC.")
         self._settings = settings
         self._open = opener or urllib.request.urlopen
+        self._sleep = sleep
         self._ctx = _ssl_context(settings.verify_ssl)
 
     def call(self, method: str, path: str, params: dict | None = None, body=None):
+        for attempt in range(MAX_RETRIES + 1):
+            try:
+                return self._call_once(method, path, params, body)
+            except _RateLimited as limited:
+                if attempt == MAX_RETRIES:
+                    raise JiraError(429, "Zephyr rate limit — still limited after retries; try again shortly "
+                                         "or narrow the selection") from None
+                self._sleep(_retry_after(limited.error, attempt))
+        raise JiraError(429, "Zephyr rate limit")
+
+    def _call_once(self, method: str, path: str, params: dict | None, body):
         s = self._settings
         token = zephyr_jwt(s.zephyr_access_key, s.zephyr_secret_key, s.zephyr_account_id,
                            method, path, params, expires_in=60)
@@ -141,9 +155,17 @@ class ZephyrCloud:
                 raw = resp.read()
             return json.loads(raw.decode("utf-8")) if raw.strip() else {}
         except urllib.error.HTTPError as e:
+            if e.code == 429:
+                raise _RateLimited(e) from None
             raise JiraError(e.code, _error_message(e)) from None
         except urllib.error.URLError as e:
             raise JiraError(0, f"Cannot reach Zephyr at {ZAPI_BASE}: {e.reason}") from None
+
+    def project(self, key: str) -> dict:
+        return JiraClient(self._settings, opener=self._open).project(key)
+
+    def versions(self, key: str) -> list[dict]:
+        return JiraClient(self._settings, opener=self._open).versions(key)
 
     def display_names(self, user_ids) -> dict[str, str]:
         """Account ids → names through the Jira REST API (needs the Jira URL + token too)."""
@@ -159,22 +181,6 @@ class ZephyrCloud:
     def cycles(self, project_id: str, version_id: str) -> list[dict]:
         return normalize_cycles(self.call("GET", "/public/rest/api/1.0/cycles/search",
                                           {"projectId": project_id, "versionId": version_id}))
-
-    def cycle_executions(self, project: dict, version: dict, cycle: dict,
-                         on_progress: ProgressFn | None = None, max_records: int = 20000) -> list[dict]:
-        """Same paging as Amplify's _z_get_all_executions (size / offset / totalCount)."""
-        path = f"/public/rest/api/1.0/executions/search/cycle/{cycle['id']}"
-        rows: list[dict] = []
-        while len(rows) < max_records:
-            params = {"projectId": project["id"], "versionId": version["id"],
-                      "size": str(PAGE_SIZE), "offset": str(len(rows))}
-            page, total = _page(self.call("GET", path, params))
-            rows.extend(page)
-            if on_progress:
-                on_progress(len(rows), total)
-            if len(page) < PAGE_SIZE or (total is not None and len(rows) >= total):
-                break
-        return rows[:max_records]
 
     def zql(self, query: str, max_records: int = 5000, on_progress: ProgressFn | None = None) -> list[dict]:
         rows: list[dict] = []
@@ -197,6 +203,12 @@ class ZephyrServer:
     def __init__(self, settings: JiraSettings, opener=None, jira: JiraClient | None = None):
         self._jira = jira or JiraClient(settings, opener=opener)
 
+    def project(self, key: str) -> dict:
+        return self._jira.project(key)
+
+    def versions(self, key: str) -> list[dict]:
+        return self._jira.versions(key)
+
     def display_names(self, user_ids) -> dict[str, str]:
         return self._jira.display_names(user_ids)
 
@@ -209,10 +221,6 @@ class ZephyrServer:
         return normalize_cycles(self._jira.get(f"{ZAPI_SERVER}/cycle",
                                                {"projectId": project_id, "versionId": version_id}))
 
-    def cycle_executions(self, project: dict, version: dict, cycle: dict,
-                         on_progress: ProgressFn | None = None, max_records: int = 20000) -> list[dict]:
-        query = cycle_zql(project["key"], version.get("name") or "Unscheduled", cycle["name"])
-        return self.zql(query, max_records, on_progress)
 
     def zql(self, query: str, max_records: int = 5000, on_progress: ProgressFn | None = None) -> list[dict]:
         rows: list[dict] = []
@@ -230,4 +238,23 @@ class ZephyrServer:
 def zephyr_client(settings: JiraSettings, opener=None):
     """The right client for settings.zephyr_mode (cloud keys → Cloud, otherwise Server / DC)."""
     return ZephyrCloud(settings, opener) if settings.zephyr_mode == "cloud" else ZephyrServer(settings, opener)
+
+
+# ── What the 🧪 Zephyr panel needs to know (same functions in Amplify QEA's zephyr.py) ──
+
+def is_configured(settings: JiraSettings) -> bool:
+    return settings.zephyr_configured
+
+
+def default_project_key(settings: JiraSettings) -> str:
+    return settings.project_key
+
+
+def setup_hint() -> str:
+    return ("Set up Zephyr under **🔌 Jira / Zephyr config** — Cloud needs the Zephyr API keys; "
+            "Server / DC uses your Jira login.")
+
+
+def backend_label(settings: JiraSettings) -> str:
+    return "Zephyr Squad Cloud" if settings.zephyr_mode == "cloud" else "Zephyr Server / DC"
 

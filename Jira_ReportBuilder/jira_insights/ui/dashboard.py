@@ -1,8 +1,9 @@
 """
-Dashboard: headline KPI tiles (✎ Edit tiles) plus every saved report, all
-under one global filter bar. Reports sit in rows that split the width evenly and share one
-chart height so cards line up; ✥ Arrange lets users drag reports within and
-between rows (saved to the workspace), and ⛶ opens a single report full screen.
+Dashboard: headline KPI tiles (✎ Edit tiles) plus the dataset's reports, all
+under one global filter bar. 🧩 Reports picks which saved reports this dataset's
+dashboard shows (or copies them from another dataset); reports sit in rows that
+split the width evenly and share one chart height so cards line up; ✥ Arrange
+drags them within and between rows; ⛶ opens a single report full screen.
 """
 from __future__ import annotations
 
@@ -14,7 +15,7 @@ from streamlit_sortables import sort_items
 
 from .. import kpi, layout
 from ..store import Store
-from . import tiles
+from . import membership, tiles
 from .builder import CHART_ICONS
 from .common import Dataset, filter_bar, prepare_report, show_report
 from .style import SORTABLE_CSS, accent_for, card_title, stat_tiles_html
@@ -84,7 +85,7 @@ def _focus(report, ds: Dataset, df) -> None:
                     accent=accent, height=_FOCUS_HEIGHT)
 
 
-def _arrange(store: Store, rows: list[list[str]], reports: list) -> list[list[str]]:
+def _arrange(store: Store, ds: Dataset, rows: list[list[str]], reports: list) -> list[list[str]]:
     """Drag-and-drop editor: each row is a group; dropping on the last group starts a new row."""
     labels = layout.unique_labels(reports, CHART_ICONS)
     with st.container(key="card-arrange"):
@@ -92,7 +93,11 @@ def _arrange(store: Store, rows: list[list[str]], reports: list) -> list[list[st
         with head:
             card_title("Arrange dashboard")
         if reset.button("↺ Reset layout", key="dash-reset", width="stretch"):
-            store.set_setting(_LAYOUT_KEY, None)
+            if store.get_dashboard(ds.slug) is not None:         # keep this dataset's reports, re-pack them
+                by_id = {r.id: r for r in reports}
+                store.set_dashboard(ds.slug, layout.default_layout([by_id[i] for i in layout.members(rows)]))
+            else:
+                store.set_setting(_LAYOUT_KEY, None)
             st.rerun()
         st.caption("Drag reports within a row or between rows. Each row splits its width evenly — "
                    "one report is full width, four make quarter tiles. Changes save automatically.")
@@ -116,11 +121,14 @@ def render(store: Store, ds: Dataset) -> None:
         _focus(focused, ds, filtered)
         return
 
-    _, edit_col, arrange_col = st.columns([4.2, 1.2, 1.1])
+    _, edit_col, reports_col, arrange_col = st.columns([3.2, 1.2, 1.15, 1.1])
     editing = edit_col.toggle("✎ Edit tiles", key="dash_edit_tiles",
                               help="Add, reorder and edit the KPI tiles and the data behind them")
+    managing = reports_col.toggle("🧩 Reports", key="dash_manage",
+                                  help="Choose which saved reports this dataset's dashboard shows, "
+                                       "or copy them from another dataset")
     arranging = arrange_col.toggle("✥ Arrange", key="dash_arrange",
-                                   help="Drag reports to reorder and resize the dashboard")
+                                   help="Drag reports to reorder and resize this dashboard")
     _kpi_strip(store, ds, filtered)
     if editing:
         tiles.render(store, ds, filtered)
@@ -128,17 +136,22 @@ def render(store: Store, ds: Dataset) -> None:
         st.info("No saved reports yet — build one in **🧮 Report Builder** and save it.")
         return
 
-    saved = layout.normalize(store.get_setting(_LAYOUT_KEY), reports)
-    rows = layout.visible_rows(saved, set(by_id))
+    default_rows = store.get_setting(_LAYOUT_KEY)
+    rows = membership.board_for(store, ds.slug, reports, columns, default_rows)
+    if managing:
+        membership.render(store, ds, reports, rows, default_rows)
     if arranging:
-        edited = _arrange(store, rows, usable)
+        edited = _arrange(store, ds, rows, usable)
         if edited and edited != rows:
-            store.set_setting(_LAYOUT_KEY, layout.merge_hidden(edited, saved, set(by_id)))
+            store.set_dashboard(ds.slug, edited)               # arranging gives this dataset its own layout
             st.rerun()
 
     for row in rows:
         _row([by_id[i] for i in row], ds, filtered)
 
-    hidden = len(reports) - len(usable)
-    if hidden:
-        st.caption(f"{hidden} saved report(s) hidden — this dataset doesn't have the columns they use.")
+    if not rows:
+        st.info("No reports on this dashboard — turn on **🧩 Reports** to add some.")
+    shown = len(layout.members(rows))
+    if shown < len(reports):
+        st.caption(f"Showing {shown} of {len(reports)} saved reports — use 🧩 Reports to add others "
+                   "that fit this dataset.")

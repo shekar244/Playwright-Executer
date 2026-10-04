@@ -193,12 +193,15 @@ def _actions(store: Store, spec: ReportSpec, pick: str, ds: Dataset) -> None:
     if c1.button("Save", icon=":material/save:", type="primary", width="stretch"):
         spec.id = pick if editing else ""
         saved = store.save_report(spec)
+        if not editing:                              # new reports join this dataset's dashboard
+            store.add_to_dashboard(ds.slug, saved.id)
         _saved(saved.id, f"Saved {saved.code} “{saved.name}” to the dashboard")
     if c2.button("", icon=":material/content_copy:", width="stretch", disabled=not editing,
                  help="Copy — save as a new report", key="rb-copy"):
         spec.id = ""
         spec.name = f"{spec.name} (copy)"
         saved = store.save_report(spec)
+        store.add_to_dashboard(ds.slug, saved.id)
         _saved(saved.id, f"Copied as {saved.code} “{saved.name}”")
     if c3.button("", icon=":material/delete:", width="stretch", disabled=not editing,
                  help="Delete this report", key="rb-delete"):

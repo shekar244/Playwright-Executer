@@ -6,7 +6,7 @@ Workspace persistence for Jira Insights (location: settings.workspace_dir()).
   specs/<slug>.json         — PyGWalker chart specs, saved from the Explorer toolbar
   reports.json              — saved pivot reports, shared by every dataset
   kpis.json                 — headline KPI tiles (editable from the dashboard)
-  settings.json             — UI preferences (colour theme)
+  settings.json             — UI preferences (colour theme, per-dataset dashboards, tester names)
 
 Slugs are sanitised and every path is checked to stay inside the workspace.
 """
@@ -110,6 +110,38 @@ class Store:
     def delete_dataset(self, slug: str) -> None:
         for folder, ext in (("datasets", ".parquet"), ("datasets", ".json"), ("specs", ".json")):
             self._path(folder, slug, ext).unlink(missing_ok=True)
+        self.clear_dashboard(slugify(slug))
+
+    def dataset_columns(self, slug: str) -> set[str]:
+        """Column names without loading the data (used to check which reports fit a dataset)."""
+        import pyarrow.parquet as pq
+        try:
+            return set(pq.read_schema(self._path("datasets", slug, ".parquet")).names)
+        except (OSError, ValueError):
+            return set()
+
+    # ── Per-dataset dashboards (which reports, in what layout) ────────────────
+
+    def get_dashboard(self, slug: str) -> list[list[str]] | None:
+        """The dataset's own dashboard rows, or None when it shows every compatible report."""
+        rows = (self.get_setting("dashboards", {}) or {}).get(slug)
+        return rows if isinstance(rows, list) else None
+
+    def set_dashboard(self, slug: str, rows: list[list[str]]) -> None:
+        boards = dict(self.get_setting("dashboards", {}) or {})
+        boards[slug] = [list(r) for r in rows if r]
+        self.set_setting("dashboards", boards)
+
+    def clear_dashboard(self, slug: str) -> None:
+        boards = dict(self.get_setting("dashboards", {}) or {})
+        if boards.pop(slug, None) is not None:
+            self.set_setting("dashboards", boards)
+
+    def add_to_dashboard(self, slug: str, report_id: str) -> None:
+        """A report created while working on a dataset joins that dataset's own dashboard."""
+        rows = self.get_dashboard(slug)
+        if rows is not None and not any(report_id in row for row in rows):
+            self.set_dashboard(slug, rows + [[report_id]])
 
     def spec_path(self, slug: str) -> Path:
         return self._path("specs", slug, ".json")

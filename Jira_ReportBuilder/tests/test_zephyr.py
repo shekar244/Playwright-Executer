@@ -87,7 +87,7 @@ def test_requires_all_three_zephyr_credentials():
 
 # ── Cycles / executions / ZQL ─────────────────────────────────────────────────
 
-from jira_insights.zephyr import ZephyrServer, cycle_zql, normalize_cycles, zephyr_client  # noqa: E402
+from jira_insights.zephyr import ZephyrServer, normalize_cycles, zephyr_client  # noqa: E402
 
 DC_SETTINGS = JiraSettings("https://jira.corp.example", "svc", "pat", True, zephyr_type="server")
 
@@ -115,18 +115,36 @@ def test_cycles_normalise_list_and_dict_shapes():
     assert normalize_cycles([{"id": 7, "name": "Regression"}]) == [{"id": "7", "name": "Regression"}]
 
 
-def test_cloud_cycle_executions_page_like_amplify():
+def test_cloud_zql_pages_until_total():
     page1 = {"searchObjectList": [{"execution": {"id": i}} for i in range(50)], "totalCount": 60}
     page2 = {"searchObjectList": [{"execution": {"id": i}} for i in range(50, 60)], "totalCount": 60}
     rec = Recorder(page1, page2)
     seen = []
-    rows = ZephyrCloud(SETTINGS, opener=rec).cycle_executions(
-        {"id": "10001", "key": "ABC"}, {"id": "-1", "name": "Unscheduled"}, {"id": "33", "name": "S5"},
-        on_progress=lambda n, t: seen.append((n, t)))
+    rows = ZephyrCloud(SETTINGS, opener=rec).zql('project = "ABC"', on_progress=lambda n, t: seen.append((n, t)))
     assert len(rows) == 60 and seen == [(50, 60), (60, 60)]
-    assert rec.path(0).endswith("/public/rest/api/1.0/executions/search/cycle/33")
-    assert rec.query(0) == {"projectId": "10001", "versionId": "-1", "size": "50", "offset": "0"}
-    assert rec.query(1)["offset"] == "50"
+    assert [json.loads(r.data)["offset"] for r in rec.requests] == [0, 50]
+
+
+def test_cloud_retries_when_rate_limited():
+    calls, sleeps = [], []
+
+    def opener(req, timeout=None, context=None):
+        calls.append(req)
+        if len(calls) < 3:
+            raise urllib.error.HTTPError(req.full_url, 429, "slow down", {"Retry-After": "3"}, io.BytesIO(b"{}"))
+        return FakeResponse({"searchObjectList": [{"execution": {"id": 1}}], "totalCount": 1})
+
+    rows = ZephyrCloud(SETTINGS, opener=opener, sleep=sleeps.append).zql('project = "ABC"')
+    assert len(rows) == 1 and len(calls) == 3 and sleeps == [3.0, 3.0]
+
+
+def test_cloud_gives_a_clear_message_when_still_limited():
+    def opener(req, timeout=None, context=None):
+        raise urllib.error.HTTPError(req.full_url, 429, "slow down", {}, io.BytesIO(b"{}"))
+
+    with pytest.raises(JiraError) as err:
+        ZephyrCloud(SETTINGS, opener=opener, sleep=lambda s: None).cycles("1", "-1")
+    assert err.value.status == 429 and "rate limit" in str(err.value)
 
 
 def test_cloud_zql_posts_query_and_pages():
@@ -143,8 +161,7 @@ def test_server_uses_jira_login_and_zapi_endpoints():
     server = ZephyrServer(DC_SETTINGS, opener=rec)
     assert "Zephyr Server authenticated" in server.test()
     assert server.cycles("10001", "-1") == [{"id": "-1", "name": "Ad hoc"}]
-    rows = server.cycle_executions({"id": "10001", "key": "ABC"}, {"id": "-1", "name": "Unscheduled"},
-                                   {"id": "-1", "name": "Ad hoc"})
+    rows = server.zql('project = "ABC" AND fixVersion = "Unscheduled" AND cycleName = "Ad hoc"')
     assert rows == [{"id": 9, "issueKey": "ABC-1"}]
     assert rec.path(0) == "/rest/zapi/latest/util/testExecutionStatus"
     assert rec.path(1) == "/rest/zapi/latest/cycle" and rec.query(1) == {"projectId": "10001", "versionId": "-1"}
@@ -156,7 +173,6 @@ def test_server_uses_jira_login_and_zapi_endpoints():
 def test_client_choice_follows_zephyr_mode():
     assert isinstance(zephyr_client(SETTINGS), ZephyrCloud)                       # keys → Cloud
     assert isinstance(zephyr_client(JiraSettings("https://jira.corp", "u", "t")), ZephyrServer)
-    assert cycle_zql('A"B', "R1", "C") == 'project = "A\\"B" AND fixVersion = "R1" AND cycleName = "C"'
 
 
 def test_server_display_names_use_the_jira_login():

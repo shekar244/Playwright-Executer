@@ -107,3 +107,18 @@ def test_reports_saved_before_numbering_are_numbered_once(store):
     dup[1]["number"] = 1                                          # duplicate numbers get repaired
     (store.root / "reports.json").write_text(json.dumps(dup))
     assert sorted(r.number for r in store.list_reports()) == [1, 3]
+
+
+def test_per_dataset_dashboards(store):
+    import pandas as pd
+    store.save_dataset("Jira A", pd.DataFrame({"Key": ["QA-1"], "Issue Type": ["Bug"]}), source="jql")
+    assert store.get_dashboard("jira-a") is None                              # automatic until changed
+    assert store.dataset_columns("jira-a") == {"Key", "Issue Type"}
+    store.add_to_dashboard("jira-a", "r1")                                     # automatic: nothing stored
+    assert store.get_dashboard("jira-a") is None
+    store.set_dashboard("jira-a", [["r1", "r2"], [], ["r3"]])
+    store.add_to_dashboard("jira-a", "r4")
+    store.add_to_dashboard("jira-a", "r1")                                     # already on it
+    assert store.get_dashboard("jira-a") == [["r1", "r2"], ["r3"], ["r4"]]
+    store.delete_dataset("jira-a")
+    assert store.get_dashboard("jira-a") is None

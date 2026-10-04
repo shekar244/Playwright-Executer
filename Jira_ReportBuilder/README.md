@@ -122,8 +122,13 @@ Results use the status colours (Passed green, Failed red, Blocked orange, In pro
    - drag tiles to reorder them;
    - set each tile's label, icon and colour, and the data behind it: issue count or sum/average of a field, filters (values, *contains* text such as `bug|defect`, or last N days), an optional **divide by** metric for ratios, and a caption;
    - add, delete or reset tiles. A live preview shows the tile while you edit.
-4. **Arrange the dashboard.** Turn on **✥ Arrange** and drag reports within a row or between rows. Each row splits its width evenly: one report is full width, two are halves, four are quarter tiles. Drop a report on the last group to start a new row. Cards in a row share one height so they line up. The layout saves automatically, and **↺ Reset layout** restores the default.
-5. **Report Builder.** Configure a chart, then click **Save** to pin it to the dashboard. Reports work with any dataset that has the columns they use.
+4. **Choose reports per dataset.** Turn on **🧩 Reports** to reuse saved reports instead of recreating them:
+   - Pick which reports (by R-number) this dataset's dashboard shows. Each is marked 🧾 Jira, 🧪 Zephyr or ◻️ either, and reports that don't fit the dataset are listed with the columns they need.
+   - **Copy reports from another dataset** adds that dataset's reports (the ones that fit) to this one, e.g. reuse your Release 3.1 test-run dashboard on Release 3.2.
+   - A dataset shows every fitting report automatically until you change its list. **↺ Automatic** returns to that.
+   - New reports you save are added to the dataset you were working on.
+5. **Arrange the dashboard.** Turn on **✥ Arrange** and drag reports within a row or between rows. Each row splits its width evenly: one report is full width, two are halves, four are quarter tiles. Drop a report on the last group to start a new row. Cards in a row share one height so they line up. Each dataset keeps its own layout; it saves automatically, and **↺ Reset layout** restores the default.
+6. **Report Builder.** Configure a chart, then click **Save** to pin it to the dashboard. Reports work with any dataset that has the columns they use.
    - Every report gets a permanent number (**R-001**, R-002, …). It shows on its card, in the builder's report list, in Arrange and in download file names.
    - Numbers are never reused, and a copy gets a new one.
    - Clicking ✎ on a card, or picking a report in the list, opens the saved report with all its settings (name, chart, fields, filters, dial bands).
@@ -133,7 +138,7 @@ Results use the status colours (Passed green, Failed red, Blocked orange, In pro
    - Without it, the dial shows the measure on a **minimum…maximum** range, e.g. average rating on a 1–5 scale.
    - **Colour bands:** choose *Red · Amber · Green* or *Red · Amber · Light green · Green*, and set where each band ends as a % of the dial (e.g. red to 25%, amber to 50%, light green to 75%).
    - The gauge arc takes the colour of the band its value falls in, and the meter's needle points into the bands. Choose **Lower** when smaller is better (e.g. open defects); that flips the colours.
-6. **🎨 Colour theme** (bottom of the sidebar) switches between *Aurora* (vivid) and *Classic*. Both palettes are checked for colour-blind safety.
+7. **🎨 Colour theme** (bottom of the sidebar) switches between *Aurora* (vivid) and *Classic*. Both palettes are checked for colour-blind safety.
 
 Every dataset gets these derived columns: **Open/Closed**, **Age (days)**, **Resolution Time (days)**. For the best results, include `Created`, `Resolved`, `Status Category`, `Issue Type`, `Status`, `Priority` and `Story Points` in your exports.
 

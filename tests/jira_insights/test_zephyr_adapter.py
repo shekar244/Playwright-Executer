@@ -42,16 +42,25 @@ def test_uses_amplify_jira_and_zephyr_calls(monkeypatch, cfg):
     assert z.calls[0] == ("GET", "/public/rest/api/1.0/cycles/search", {"projectId": "10500", "versionId": "1"}, None)
 
 
-def test_cycle_executions_page_like_test_management(monkeypatch, cfg):
+def test_zql_pages_until_total(monkeypatch, cfg):
     page1 = ({"searchObjectList": [{"execution": {"id": i}} for i in range(50)], "totalCount": 70}, 200)
     page2 = ({"searchObjectList": [{"execution": {"id": i}} for i in range(50, 70)], "totalCount": 70}, 200)
     z = FakeAmplify(page1, page2)
     monkeypatch.setattr(zephyr, "_z_call", z)
-    rows = zephyr.zephyr_client().cycle_executions({"id": "10500"}, {"id": "-1"}, {"id": "33"})
-    assert len(rows) == 70
-    assert z.calls[0][1] == "/public/rest/api/1.0/executions/search/cycle/33"
-    assert z.calls[0][2] == {"projectId": "10500", "versionId": "-1", "size": "50", "offset": "0"}
-    assert z.calls[1][2]["offset"] == "50"
+    rows = zephyr.zephyr_client().zql('project = "ABC" AND cycleName = "Sprint 5"')
+    assert len(rows) == 70 and [c[3]["offset"] for c in z.calls] == [0, 50]
+
+
+def test_rate_limited_calls_pause_and_retry(monkeypatch, cfg):
+    z = FakeAmplify(({"error": "429"}, 429), ({"error": "429"}, 429),
+                    ({"searchObjectList": [{"execution": {"id": 1}}], "totalCount": 1}, 200))
+    monkeypatch.setattr(zephyr, "_z_call", z)
+    sleeps = []
+    rows = zephyr.AmplifyZephyr(sleep=sleeps.append).zql('project = "ABC"')
+    assert len(rows) == 1 and sleeps == [1.0, 2.0]
+    monkeypatch.setattr(zephyr, "_z_call", FakeAmplify(*[({}, 429)] * 5))
+    with pytest.raises(JiraError, match="rate limit"):
+        zephyr.AmplifyZephyr(sleep=lambda s: None).cycles("1", "-1")
 
 
 def test_errors_surface_instead_of_returning_partial_data(monkeypatch, cfg):

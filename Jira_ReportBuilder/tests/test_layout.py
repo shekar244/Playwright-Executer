@@ -21,13 +21,6 @@ def test_normalize_drops_unknown_duplicates_and_empty_rows_then_appends_new_repo
     assert layout.normalize(None, REPORTS) == layout.default_layout(REPORTS)
 
 
-def test_hidden_reports_survive_an_edit_of_the_visible_ones():
-    saved = [["n1", "c1"], ["c2"], ["c3"]]
-    visible = {"n1", "c1", "c3"}                      # c2 can't render on this dataset
-    assert layout.visible_rows(saved, visible) == [["n1", "c1"], ["c3"]]
-    edited = [["c3", "n1"], ["c1"]]
-    assert layout.merge_hidden(edited, saved, visible) == [["c3", "n1"], ["c1"], ["c2"]]
-
 
 def test_drag_and_drop_round_trip_with_duplicate_names():
     reports = [spec("a", name="Weekly"), spec("b", name="Weekly"), spec("c", "Number", name="Open")]
@@ -52,3 +45,20 @@ def test_gauge_sets_get_a_full_row_by_default():
 def test_drag_labels_carry_the_report_number():
     labels = layout.unique_labels([ReportSpec(id="a", name="Weekly", number=7)], {"Column": "📊"})
     assert labels == {"a": "📊 R-007 · Weekly"}
+
+
+def test_clean_keeps_only_known_reports_without_appending_new_ones():
+    assert layout.clean([["c3", "ghost"], ["n1", "n1"], []], REPORTS) == [["c3"], ["n1"]]
+
+
+def test_with_members_keeps_positions_drops_unpicked_and_adds_new_rows():
+    rows = [["n1", "n2"], ["c1", "c2"]]
+    assert layout.with_members(rows, ["n2", "c2", "c3"], REPORTS) == [["n2"], ["c2"], ["c3"]]
+    assert layout.with_members(rows, [], REPORTS) == []
+
+
+def test_report_kind_from_columns_used():
+    assert layout.report_kind(ReportSpec(chart="Gauge", rows="Cycle", gauge_where={"Result": ["Passed"]})) == "zephyr"
+    assert layout.report_kind(ReportSpec(rows="Status", filters={"Issue Type": ["Story"]})) == "jira"
+    assert layout.report_kind(ReportSpec(rows="Priority")) == "any"
+
