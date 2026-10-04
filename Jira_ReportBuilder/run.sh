@@ -2,7 +2,9 @@
 # ============================================================
 #  Jira Report Builder — macOS / Linux launcher
 #  Run:  ./run.sh            (PORT=8600 ./run.sh to change port)
-#  First run creates ./venv and installs requirements.txt.
+#  Uses an existing .venv or venv folder (in that order), or the folder
+#  named by VENV_DIR; otherwise the first run creates ./venv.
+#  Missing requirements are installed automatically.
 # ============================================================
 set -euo pipefail
 
@@ -10,7 +12,16 @@ APP_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$APP_DIR"
 PORT="${PORT:-8501}"
 
-if [ ! -x venv/bin/python ]; then
+# Pick the virtual environment
+if [ -n "${VENV_DIR:-}" ]; then
+    VENV="$VENV_DIR"
+elif [ -x .venv/bin/python ]; then
+    VENV=".venv"
+else
+    VENV="venv"
+fi
+
+if [ ! -x "$VENV/bin/python" ]; then
     PYTHON=""
     for candidate in python3.13 python3.12 python3.11 python3.10 python3; do
         if command -v "$candidate" &>/dev/null && \
@@ -23,14 +34,18 @@ if [ ! -x venv/bin/python ]; then
         echo "[ERROR] Python 3.10+ not found. Install it (e.g. brew install python@3.13) and retry."
         exit 1
     fi
-    echo "[INFO] Creating virtual environment with $PYTHON ..."
-    "$PYTHON" -m venv venv
+    echo "[INFO] Creating virtual environment in $VENV with $PYTHON ..."
+    "$PYTHON" -m venv "$VENV"
 fi
+PY="$VENV/bin/python"
+echo "[INFO] Using virtual environment: $VENV"
 
-if ! venv/bin/python -c "import streamlit, pygwalker, plotly, pandas, openpyxl, streamlit_sortables" 2>/dev/null; then
-    echo "[INFO] Installing requirements (first run takes a minute) ..."
-    venv/bin/python -m pip install --quiet --upgrade pip
-    venv/bin/python -m pip install --quiet -r requirements.txt
+if ! "$PY" -c "import streamlit, pygwalker, plotly, pandas, openpyxl, streamlit_sortables" 2>/dev/null; then
+    echo "[INFO] Installing requirements into $VENV (first run takes a minute) ..."
+    # venvs created by tools such as uv have no pip — bootstrap it first
+    "$PY" -m pip --version &>/dev/null || "$PY" -m ensurepip --upgrade &>/dev/null || true
+    "$PY" -m pip install --quiet --upgrade pip
+    "$PY" -m pip install --quiet -r requirements.txt
 fi
 
 # Free the port if an earlier instance (or Amplify's embedded Jira Insights) still holds it.
@@ -55,4 +70,4 @@ if command -v lsof &>/dev/null; then
 fi
 
 echo "[INFO] Jira Report Builder → http://localhost:$PORT   (Ctrl+C to stop)"
-exec venv/bin/python -m streamlit run app.py --server.port "$PORT"
+exec "$PY" -m streamlit run app.py --server.port "$PORT"

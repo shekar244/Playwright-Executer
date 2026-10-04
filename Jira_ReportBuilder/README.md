@@ -16,7 +16,7 @@ Requires **Python 3.10+** (3.13 recommended).
 | macOS / Linux | `./run.sh` |
 | Windows | `run.bat` |
 
-The first run creates `venv/` and installs `requirements.txt`, which takes about a minute. The app then opens at **http://localhost:8501**. If something is already using that port (an earlier run, for example), the launcher stops it first. To use a different port: `PORT=8600 ./run.sh` (Windows: `set PORT=8600` then `run.bat`).
+The launcher uses an existing **`.venv/`** or **`venv/`** folder (in that order), or the folder named by `VENV_DIR`. If there's none, the first run creates `venv/`. Missing requirements are installed automatically, which takes about a minute the first time. A `.venv` made by tools such as `uv` (without pip) works too. The app then opens at **http://localhost:8501**. If something is already using that port (an earlier run, for example), the launcher stops it first. To use a different port: `PORT=8600 ./run.sh` (Windows: `set PORT=8600` then `run.bat`).
 
 To run it by hand:
 
@@ -159,7 +159,7 @@ workspace/
   jira_connection.json              connection: typed values (incl. token) or the credentials-file path
 ```
 
-To move the tool to another machine, copy this folder without `venv/` and `workspace/`. Copy `workspace/` as well if you want to keep your data and reports.
+To move the tool to another machine, copy this folder without `venv/` / `.venv/` and `workspace/`. Copy `workspace/` as well if you want to keep your data and reports.
 
 ## Docker
 
