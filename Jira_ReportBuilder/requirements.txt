@@ -1,0 +1,14 @@
+# Jira Report Builder — Python dependencies
+#
+# Install:  pip install -r requirements.txt      (run.sh / run.bat do this for you)
+# Requires: Python 3.10+  (3.13 recommended)
+
+streamlit>=1.45,<1.57 # App shell; PyGWalker's Streamlit bridge needs the Tornado server (<1.57)
+pygwalker>=0.4.9      # Drag-and-drop chart explorer
+plotly>=5.24.0        # Pivot report charts
+pandas>=2.2.0         # Jira issue frames + pivots (pyarrow comes with streamlit)
+openpyxl>=3.1.0       # Excel import (Jira exports) and Excel downloads
+streamlit-sortables>=0.3.1  # Drag-and-drop dashboard layout (✥ Arrange)
+
+# Optional — to run the unit tests (tests/):
+#   pytest

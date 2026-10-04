@@ -1,0 +1,23 @@
+.git
+.gitignore
+venv/
+.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.DS_Store
+.env
+*.env
+
+# Local data — pulled Jira issues and the saved Jira connection (token)
+workspace/
+
+# Not needed at runtime
+tests/
+pytest.ini
+run.sh
+run.bat
+
+# Credentials files — keep them outside this folder; ignored here in case one lands inside
+config.ini
+*.credentials.ini

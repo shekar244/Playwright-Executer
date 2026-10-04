@@ -1,0 +1,28 @@
+# Python
+__pycache__/
+*.py[cod]
+.pytest_cache/
+
+# Virtual environment (created by run.sh / run.bat)
+venv/
+.venv/
+
+# Local data — pulled Jira issues, saved reports, chart specs and the
+# saved Jira connection (contains the API token). Never commit.
+workspace/
+
+# Secrets
+.env
+.env.*
+*.env
+.streamlit/secrets.toml
+
+# OS / IDE
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# Credentials files — keep them outside this folder; ignored here in case one lands inside
+config.ini
+*.credentials.ini

@@ -1,0 +1,23 @@
+# Streamlit settings for Jira Report Builder (app.py).
+# Streamlit reads .streamlit/config.toml from the working directory — run.sh,
+# run.bat and the Dockerfile all start the app from this folder.
+
+[server]
+port = 8501                   # run.sh / run.bat honour PORT=... to change it
+address = "localhost"         # this machine only; the Dockerfile binds 0.0.0.0
+maxUploadSize = 200           # MB — large Jira CSV / Excel exports
+
+[browser]
+gatherUsageStats = false
+
+[client]
+toolbarMode = "minimal"
+
+[theme]
+base = "dark"
+primaryColor = "#7ea8ff"
+backgroundColor = "#0e0e18"
+secondaryBackgroundColor = "#181828"
+textColor = "#dde3f8"
+borderColor = "#2a2a42"
+font = "Inter, system-ui, -apple-system, Segoe UI, sans-serif"
