@@ -16,7 +16,7 @@ Requires **Python 3.10+** (3.13 recommended).
 | macOS / Linux | `./run.sh` |
 | Windows | `run.bat` |
 
-The launcher uses an existing **`.venv/`** or **`venv/`** folder (in that order), or the folder named by `VENV_DIR`. If there's none, the first run creates `venv/`. Missing requirements are installed automatically, which takes about a minute the first time. A `.venv` made by tools such as `uv` (without pip) works too. The app then opens at **http://localhost:8501**. If something is already using that port (an earlier run, for example), the launcher stops it first. To use a different port: `PORT=8600 ./run.sh` (Windows: `set PORT=8600` then `run.bat`).
+The launcher uses the folder named by `VENV_DIR`, else an existing **`.venv/`** or **`venv/`** in this folder, else one in the parent folder (e.g. Amplify QEA's). If there's none, the first run creates `venv/`. Missing requirements are installed automatically, which takes about a minute the first time. A `.venv` made by tools such as `uv` (without pip) works too. If installing fails (e.g. a company network without direct PyPI access), the launcher stops with the pip error and a hint, and the window stays open. Point pip at your mirror once with `python -m pip config set global.index-url <mirror URL>`. The app then opens at **http://localhost:8501**. If something is already using that port (an earlier run, for example), the launcher stops it first. To use a different port: `PORT=8600 ./run.sh` (Windows: `set PORT=8600` then `run.bat`).
 
 To run it by hand:
 

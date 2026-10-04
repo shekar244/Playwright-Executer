@@ -2,8 +2,8 @@
 # ============================================================
 #  Jira Report Builder — macOS / Linux launcher
 #  Run:  ./run.sh            (PORT=8600 ./run.sh to change port)
-#  Uses an existing .venv or venv folder (in that order), or the folder
-#  named by VENV_DIR; otherwise the first run creates ./venv.
+#  Virtual environment: VENV_DIR if set, else .venv or venv in this folder,
+#  else .venv or venv in the parent folder; otherwise ./venv is created.
 #  Missing requirements are installed automatically.
 # ============================================================
 set -euo pipefail
@@ -13,13 +13,13 @@ cd "$APP_DIR"
 PORT="${PORT:-8501}"
 
 # Pick the virtual environment
-if [ -n "${VENV_DIR:-}" ]; then
-    VENV="$VENV_DIR"
-elif [ -x .venv/bin/python ]; then
-    VENV=".venv"
-else
-    VENV="venv"
+VENV="${VENV_DIR:-}"
+if [ -z "$VENV" ]; then
+    for candidate in .venv venv ../.venv ../venv; do
+        if [ -x "$candidate/bin/python" ]; then VENV="$candidate"; break; fi
+    done
 fi
+VENV="${VENV:-venv}"
 
 if [ ! -x "$VENV/bin/python" ]; then
     PYTHON=""
@@ -41,11 +41,17 @@ PY="$VENV/bin/python"
 echo "[INFO] Using virtual environment: $VENV"
 
 if ! "$PY" -c "import streamlit, pygwalker, plotly, pandas, openpyxl, streamlit_sortables" 2>/dev/null; then
-    echo "[INFO] Installing requirements into $VENV (first run takes a minute) ..."
+    echo "[INFO] Installing missing requirements into $VENV ..."
     # venvs created by tools such as uv have no pip — bootstrap it first
     "$PY" -m pip --version &>/dev/null || "$PY" -m ensurepip --upgrade &>/dev/null || true
-    "$PY" -m pip install --quiet --upgrade pip
-    "$PY" -m pip install --quiet -r requirements.txt
+    if ! "$PY" -m pip install -r requirements.txt; then
+        echo ""
+        echo "[ERROR] Could not install the requirements into $VENV."
+        echo "        On a company network, point pip at your package mirror once, e.g."
+        echo "          $PY -m pip config set global.index-url https://YOUR-MIRROR/api/pypi/pypi/simple"
+        echo "        then run ./run.sh again — or install manually: $PY -m pip install -r requirements.txt"
+        exit 1
+    fi
 fi
 
 # Free the port if an earlier instance (or Amplify's embedded Jira Insights) still holds it.
