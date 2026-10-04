@@ -10,6 +10,7 @@ REST with the same config), so authentication is exactly the Test Management tab
   cycles               _z_call     GET  /public/rest/api/1.0/cycles/search
   executions           _z_call     GET  /public/rest/api/1.0/executions/search/cycle/{id}  (size / offset)
   ZQL                  _z_call     POST /public/rest/api/1.0/zql/search
+  tester names         _jira_call  GET /user?accountId=… (Cloud) · ?key=… / ?username=… (Server / DC)
 """
 from __future__ import annotations
 
@@ -76,6 +77,18 @@ class AmplifyZephyr:
     def test(self) -> str:
         statuses = _ok(_z_call("GET", "/public/rest/api/1.0/util/statuses"))
         return f"Zephyr authenticated · {len(statuses) if isinstance(statuses, (dict, list)) else 0} execution statuses"
+
+    def display_names(self, user_ids) -> dict[str, str]:
+        """Best effort: user id → display name via Jira; ids Jira can't resolve are left out."""
+        cloud = ".atlassian.net" in str(_z_cfg().get("jira_url", "")).lower()
+        names: dict[str, str] = {}
+        for uid in dict.fromkeys(str(u).strip() for u in user_ids if str(u).strip()):
+            for params in ([{"accountId": uid}] if cloud else [{"key": uid}, {"username": uid}]):
+                data, code = _jira_call("GET", "/user", params)
+                if code == 200 and isinstance(data, dict) and data.get("displayName"):
+                    names[uid] = data["displayName"]
+                    break
+        return names
 
     def project(self, key: str) -> dict:
         return _ok(_jira_call("GET", f"/project/{key.strip()}"))

@@ -71,3 +71,15 @@ def test_zql_posts_the_query(monkeypatch, cfg):
     method, path, _, body = z.calls[0]
     assert (method, path) == ("POST", "/public/rest/api/1.0/zql/search")
     assert body == {"zqlQuery": 'project = "ABC"', "offset": 0, "maxRecords": 50}
+
+
+def test_display_names_via_amplify_jira_call(monkeypatch, cfg):
+    jira = FakeAmplify(({"displayName": "Ben Ortiz"}, 200), ({"errorMessages": ["no"]}, 404))
+    monkeypatch.setattr(zephyr, "_jira_call", jira)
+    assert zephyr.zephyr_client().display_names(["acc-1", "acc-x"]) == {"acc-1": "Ben Ortiz"}
+    assert jira.calls[0] == ("GET", "/user", {"accountId": "acc-1"}, None)       # Cloud → account id
+    cfg["jira_url"] = "https://jira.corp.example"
+    jira = FakeAmplify(({}, 404), ({"displayName": "Chloe Park"}, 200))
+    monkeypatch.setattr(zephyr, "_jira_call", jira)
+    assert zephyr.zephyr_client().display_names(["cpark"]) == {"cpark": "Chloe Park"}
+    assert [c[2] for c in jira.calls] == [{"key": "cpark"}, {"username": "cpark"}]   # DC → key, then username

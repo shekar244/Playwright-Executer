@@ -147,6 +147,23 @@ class JiraClient:
             return {}
         return {f["id"]: f.get("name") or f["id"] for f in fields if f.get("id")}
 
+    def display_names(self, user_ids) -> dict[str, str]:
+        """Best effort: user id → display name. Cloud looks up account ids; Server / DC tries the
+        user key (JIRAUSER…) then the username. Ids Jira can't resolve are left out."""
+        names: dict[str, str] = {}
+        for uid in dict.fromkeys(str(u).strip() for u in user_ids if str(u).strip()):
+            attempts = [{"accountId": uid}] if self._settings.is_cloud else [{"key": uid}, {"username": uid}]
+            for params in attempts:
+                try:
+                    user = self._get("/rest/api/2/user", params)
+                except JiraError:
+                    continue
+                name = user.get("displayName") if isinstance(user, dict) else None
+                if name:
+                    names[uid] = name
+                    break
+        return names
+
     def project(self, key: str) -> dict:
         return self._get(f"/rest/api/2/project/{urllib.parse.quote(key.strip())}")
 

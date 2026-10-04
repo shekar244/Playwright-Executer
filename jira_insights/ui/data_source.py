@@ -14,7 +14,8 @@ from ..settings import load_jira_settings
 from ..store import Store
 from ..transform import frame_from_export, issues_to_frame
 from .. import zephyr
-from . import zephyr_source
+from ..executions import apply_user_names
+from . import people, zephyr_source
 from .common import Dataset, load_dataset
 from .style import brand, swatches
 
@@ -124,6 +125,9 @@ def render_sidebar(store: Store) -> Dataset | None:
                 ss.pop("ds_slug", None)
                 st.rerun()
             df, meta = load_dataset(str(store.root), slug, meta.get("fetched_at", ""))
+            if meta.get("source") == "zephyr":       # ids → names, editable under 👥 Tester names
+                people.render(store, df, zephyr_source.name_lookup(settings))
+                df = apply_user_names(df, people.known_names(store))
             current = Dataset(slug, meta, df)
             missing = [] if meta.get("source") == "zephyr" else [c for c in CORE_COLUMNS if c not in df.columns]
             if missing:

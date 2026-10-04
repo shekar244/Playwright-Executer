@@ -53,3 +53,14 @@ def test_server_executions():
 def test_no_records_gives_empty_frame():
     df, multi = executions_to_frame([])
     assert df.empty and multi == []
+
+
+def test_user_ids_and_name_mapping():
+    from jira_insights.executions import apply_user_names, user_ids
+    df = pd.DataFrame({"Executed By": ["5b10ac8d82e05b22cc7d4ef5", "JIRAUSER10100", "Ava Chen", None],
+                       "Assignee": ["712020:2a1b3c4d-0000-1111-2222-333344445555", None, None, None]})
+    assert user_ids(df) == ["5b10ac8d82e05b22cc7d4ef5", "712020:2a1b3c4d-0000-1111-2222-333344445555", "JIRAUSER10100"]
+    shown = apply_user_names(df, {"5b10ac8d82e05b22cc7d4ef5": "Ben Ortiz", "JIRAUSER10100": "Chloe Park"})
+    assert shown["Executed By"].tolist()[:3] == ["Ben Ortiz", "Chloe Park", "Ava Chen"]
+    assert shown["Assignee"][0].startswith("712020:")            # no name yet → id stays visible
+    assert df["Executed By"][0] == "5b10ac8d82e05b22cc7d4ef5"     # stored data keeps the raw id

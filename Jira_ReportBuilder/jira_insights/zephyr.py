@@ -145,6 +145,12 @@ class ZephyrCloud:
         except urllib.error.URLError as e:
             raise JiraError(0, f"Cannot reach Zephyr at {ZAPI_BASE}: {e.reason}") from None
 
+    def display_names(self, user_ids) -> dict[str, str]:
+        """Account ids → names through the Jira REST API (needs the Jira URL + token too)."""
+        if not self._settings.configured:
+            return {}
+        return JiraClient(self._settings, opener=self._open).display_names(user_ids)
+
     def test(self) -> str:
         statuses = self.call("GET", STATUSES_PATH)
         count = len(statuses) if isinstance(statuses, (dict, list)) else 0
@@ -190,6 +196,9 @@ class ZephyrServer:
 
     def __init__(self, settings: JiraSettings, opener=None, jira: JiraClient | None = None):
         self._jira = jira or JiraClient(settings, opener=opener)
+
+    def display_names(self, user_ids) -> dict[str, str]:
+        return self._jira.display_names(user_ids)
 
     def test(self) -> str:
         statuses = self._jira.get(f"{ZAPI_SERVER}/util/testExecutionStatus")

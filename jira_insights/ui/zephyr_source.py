@@ -15,6 +15,7 @@ from ..jira_client import JiraError
 from ..settings import JiraSettings
 from ..store import Store
 from ..zephyr import default_project_key, is_configured, zephyr_client
+from . import people
 
 _MODES = {"cycle": "Project / version / cycle", "zql": "ZQL query"}
 
@@ -39,6 +40,13 @@ def _fetch(settings: JiraSettings, params: dict) -> list[dict]:
     return rows
 
 
+def name_lookup(settings: JiraSettings):
+    """User id → display name lookups through Jira (None when Jira isn't configured)."""
+    if not settings.configured:
+        return None
+    return lambda ids: zephyr_client(settings).display_names(ids)
+
+
 def _save(store: Store, name: str, settings: JiraSettings, params: dict) -> None:
     try:
         records = _fetch(settings, params)
@@ -52,6 +60,7 @@ def _save(store: Store, name: str, settings: JiraSettings, params: dict) -> None
     meta = store.save_dataset(name, df, source="zephyr", multi_cols=multi,
                               extra={"zephyr": params, "jira_url": settings.url})
     store.seed_execution_starters()
+    people.resolve_missing(store, df, name_lookup(settings))       # testers / assignees → names
     st.session_state["ds_pending"] = meta["slug"]
     st.rerun()
 

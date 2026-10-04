@@ -24,6 +24,7 @@ EXECUTION_COLUMNS = ("Execution ID", "Key", "Summary", "Execution Status", "Resu
                      "Folder", "Version", "Project", "Executed By", "Executed On", "Assignee", "Priority",
                      "Labels", "Components", "Defects", "Defect Keys", "Comment")
 MULTI_COLUMNS = ("Labels", "Components", "Defect Keys")
+USER_COLUMNS = ("Executed By", "Assignee")      # Zephyr often sends user ids here, not names
 
 
 def _first(*sources_and_keys):
@@ -142,3 +143,26 @@ def executions_to_frame(records: list[dict]) -> tuple[pd.DataFrame, list[str]]:
     df = df.dropna(axis=1, how="all")
     df = normalise_types(df)
     return df, [c for c in MULTI_COLUMNS if c in df.columns]
+
+
+# ── People: user ids → display names ──────────────────────────────────────────
+
+def user_ids(df: pd.DataFrame) -> list[str]:
+    """Distinct values in the user columns that look like ids (account id, DC key, username — no spaces)."""
+    ids: set[str] = set()
+    for col in USER_COLUMNS:
+        if col in df.columns:
+            ids.update(v for v in df[col].dropna().astype(str).str.strip() if v and not any(ch.isspace() for ch in v))
+    return sorted(ids)
+
+
+def apply_user_names(df: pd.DataFrame, names: dict) -> pd.DataFrame:
+    """Show display names instead of ids; values without a name are left as they are."""
+    if not names or not any(c in df.columns for c in USER_COLUMNS):
+        return df
+    out = df.copy()
+    for col in USER_COLUMNS:
+        if col in out.columns:
+            out[col] = out[col].map(lambda v: names.get(str(v).strip(), v) if isinstance(v, str) else v)
+    return out
+

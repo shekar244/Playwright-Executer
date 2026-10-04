@@ -194,3 +194,18 @@ def test_project_and_versions():
     assert client.project("ABC")["id"] == "10001"
     assert client.versions("ABC") == [{"id": "1", "name": "R1"}]
     assert opener.path(1) == "/rest/api/2/project/ABC/versions"
+
+
+def test_display_names_cloud_uses_account_id():
+    opener = FakeOpener({"displayName": "Ben Ortiz"}, http_error(404))
+    names = JiraClient(CLOUD, opener=opener).display_names(["acc-1", "acc-gone", "acc-1"])
+    assert names == {"acc-1": "Ben Ortiz"}
+    assert opener.path(0) == "/rest/api/2/user" and opener.params(0) == {"accountId": "acc-1"}
+    assert len(opener.requests) == 2                                   # duplicates looked up once
+
+
+def test_display_names_data_center_tries_key_then_username():
+    opener = FakeOpener(http_error(404), {"displayName": "Chloe Park"})
+    names = JiraClient(JiraSettings(url="https://jira.corp", token="pat"), opener=opener).display_names(["cpark"])
+    assert names == {"cpark": "Chloe Park"}
+    assert opener.params(0) == {"key": "cpark"} and opener.params(1) == {"username": "cpark"}

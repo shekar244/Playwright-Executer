@@ -101,6 +101,11 @@ Open **🧪 New dataset from Zephyr (test runs)** in the sidebar.
   3. Click **Fetch test runs**.
 - **ZQL query.** Use any Zephyr Query Language search, e.g. `project = "ABC" AND fixVersion = "Release 3.2" AND executionStatus != UNEXECUTED`.
 
+**Tester names.** Zephyr often sends user IDs (Cloud account IDs, Server/DC `JIRAUSER…` keys) for *Executed By* and *Assignee*. These are resolved to display names automatically:
+- When test runs are fetched, each ID is looked up in Jira's user API.
+- The names are kept in a mapping, shown under **👥 Tester names** in the sidebar, where you can correct a name or type one Jira couldn't resolve (e.g. hidden profiles).
+- The dataset keeps the raw IDs, so name changes apply to every report immediately, with no refetch needed.
+
 Every test run becomes a row with these columns: *Key, Summary, Execution Status, Result (Passed / Failed / Blocked / In progress / Not run), Executed (Yes/No), Cycle, Folder, Version, Executed By, Executed On, Assignee, Priority, Labels, Components, Defects, Defect Keys, Comment*. **↻ Refresh** re-runs the same cycles or query.
 
 The first test-run dataset adds ready-made execution reports and KPI tiles:

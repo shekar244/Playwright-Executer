@@ -157,3 +157,17 @@ def test_client_choice_follows_zephyr_mode():
     assert isinstance(zephyr_client(SETTINGS), ZephyrCloud)                       # keys → Cloud
     assert isinstance(zephyr_client(JiraSettings("https://jira.corp", "u", "t")), ZephyrServer)
     assert cycle_zql('A"B', "R1", "C") == 'project = "A\\"B" AND fixVersion = "R1" AND cycleName = "C"'
+
+
+def test_server_display_names_use_the_jira_login():
+    rec = Recorder({"displayName": "Dev Patel"})
+    assert ZephyrServer(DC_SETTINGS, opener=rec).display_names(["JIRAUSER10100"]) == {"JIRAUSER10100": "Dev Patel"}
+    assert rec.path(0) == "/rest/api/2/user" and rec.query(0) == {"key": "JIRAUSER10100"}
+
+
+def test_cloud_display_names_need_jira_credentials():
+    from dataclasses import replace
+    assert ZephyrCloud(replace(SETTINGS, url="", token=""), opener=Recorder()).display_names(["a"]) == {}
+    rec = Recorder({"displayName": "Ava Chen"})
+    assert ZephyrCloud(SETTINGS, opener=rec).display_names(["acc"]) == {"acc": "Ava Chen"}
+    assert rec.query(0) == {"accountId": "acc"}
