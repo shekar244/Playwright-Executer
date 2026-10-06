@@ -15,7 +15,7 @@ from ..settings import load_connection, load_jira_settings
 from ..store import Store
 from ..transform import frame_from_export, issues_to_frame
 from ..executions import apply_user_names
-from . import connection, people, zephyr_source
+from . import connection, people, sprint_source, zephyr_source
 from .common import Dataset, load_dataset
 from .style import brand, swatches
 
@@ -28,6 +28,12 @@ def _describe(meta: dict) -> str:
     source = meta.get("source")
     if source == "zephyr":
         return f"{meta.get('rows', 0):,} test runs · Zephyr · {when} UTC"
+    if source == "sprint":
+        sprint = meta.get("sprint", {})
+        sprint_label = sprint.get("name", "Sprint")
+        if sprint.get("mode") == "multi":
+            sprint_label = f"{len(sprint.get('sprint_names', []))} sprints"
+        return f"{meta.get('rows', 0):,} issues · 🏃 {sprint_label} · {when} UTC"
     origin = "JQL" if source == "jql" else f"upload · {meta.get('file_name', '')}"
     return f"{meta.get('rows', 0):,} issues · {origin} · {when} UTC"
 
@@ -117,13 +123,27 @@ def render_sidebar(store: Store) -> Dataset | None:
                 st.code(zephyr.get("query", ""), language="sql", wrap_lines=True)
             elif zephyr:
                 st.caption(f"🧪 {zephyr_source.describe(zephyr)}")
+            sprint_info = meta.get("sprint") or {}
+            if sprint_info:
+                if sprint_info.get("mode") == "multi":
+                    names = sprint_info.get("sprint_names", [])
+                    st.caption(f"🏃 {len(names)} sprint(s): {', '.join(names[:5])}"
+                               + (f" +{len(names)-5} more" if len(names) > 5 else ""))
+                elif sprint_info.get("name"):
+                    start = (sprint_info.get("startDate") or "")[:10]
+                    end = (sprint_info.get("endDate") or "")[:10]
+                    dates = f" · {start} → {end}" if start and end else ""
+                    st.caption(f"🏃 {sprint_info['name']}{dates}")
             refreshable = (meta.get("source") == "jql" and settings.configured) or \
-                          (meta.get("source") == "zephyr" and settings.zephyr_configured)
+                          (meta.get("source") == "zephyr" and settings.zephyr_configured) or \
+                          (meta.get("source") == "sprint" and settings.configured)
             c1, c2 = st.columns(2)
             if c1.button("↻ Refresh", width="stretch", disabled=not refreshable,
                          help="Re-run the JQL and replace this dataset"):
                 if meta.get("source") == "zephyr":
                     zephyr_source.refresh(store, meta, settings)
+                elif meta.get("source") == "sprint":
+                    sprint_source.refresh(store, meta, settings)
                 else:
                     _pull(store, meta["name"], meta["jql"], meta.get("max_issues", 2000),
                           meta.get("fields", "*navigable"))
@@ -157,6 +177,8 @@ def render_sidebar(store: Store) -> Dataset | None:
                         st.error("Name and JQL are required.")
 
         zephyr_source.render(store, settings)
+
+        sprint_source.render(store, settings)
 
         with st.expander("⬆️ Upload Jira export (CSV / Excel)", expanded=not datasets and not settings.configured):
             with st.form("upload_form", border=False, clear_on_submit=True):

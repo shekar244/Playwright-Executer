@@ -19,7 +19,7 @@ from pathlib import Path
 
 import pandas as pd
 
-from .kpi import EXECUTION_TILES, KpiSpec, default_tiles
+from .kpi import EXECUTION_TILES, KpiSpec, Metric, default_tiles
 from .pivot import ReportSpec
 
 # Seeded into reports.json on first run so the dashboard is useful immediately.
@@ -41,6 +41,31 @@ STARTER_REPORTS = [
      "filters": {"Issue Type": ["Bug", "Defect"], "Open/Closed": ["Open"]}},
 ]
 
+
+_DONE = {"Status Category": ["Done"]}
+_NOT_DONE = {"Open/Closed": ["Open"]}
+
+SPRINT_REPORTS = [
+    {"name": "Sprint status breakdown", "chart": "Donut", "rows": "Status Category", "show_labels": True},
+    {"name": "Stories by status", "chart": "Stacked bar", "rows": "Status", "series": "Issue Type",
+     "sort": "Label"},
+    {"name": "Story points by assignee", "chart": "Bar", "rows": "Assignee", "value": "Story Points",
+     "agg": "Sum", "show_labels": True},
+    {"name": "Sprint completion rate", "chart": "Meter", "gauge_where": _DONE,
+     "gauge_bands": [60.0, 80.0, 90.0]},
+    {"name": "Carry-over (open items)", "chart": "Column", "rows": "Issue Type",
+     "filters": _NOT_DONE, "show_labels": True},
+    {"name": "Issues by priority", "chart": "Column", "rows": "Priority", "series": "Status Category",
+     "sort": "Label"},
+    {"name": "Sprint velocity", "chart": "Column", "rows": "Sprint Name", "value": "Story Points",
+     "agg": "Sum", "show_labels": True},
+    {"name": "Burndown (story points remaining)", "chart": "Line", "rows": "Updated",
+     "value": "Story Points", "agg": "Sum", "date_grain": "Day", "cumulative": False},
+    {"name": "Created vs resolved per day", "chart": "Line", "rows": "Created", "series": "Open/Closed",
+     "date_grain": "Day"},
+    {"name": "Defects in sprint", "chart": "Number",
+     "filters": {"Issue Type": {"contains": "bug|defect"}}},
+]
 
 _EXECUTED, _PASSED = {"Executed": ["Yes"]}, {"Result": ["Passed"]}
 
@@ -236,6 +261,38 @@ class Store:
         tiles += [KpiSpec.from_dict(t.to_dict()) for t in EXECUTION_TILES if t.label not in labels]
         self.save_kpis(tiles)
         self.set_setting("execution_starters_seeded", True)
+        return True
+
+    def seed_sprint_starters(self) -> bool:
+        """Add sprint reports and KPI tiles once (by name — user edits and deletions stick)."""
+        if self.get_setting("sprint_starters_seeded"):
+            return False
+        names = {r.name for r in self.list_reports()}
+        for report in SPRINT_REPORTS:
+            if report["name"] not in names:
+                self.save_report(ReportSpec.from_dict(report))
+        tiles = self.list_kpis()
+        labels = {t.label for t in tiles}
+        sprint_tiles = [
+            KpiSpec("Sprint Items", "🏃", "#7ea8ff", Metric(), caption="dataset", requires=["Sprint Name"]),
+            KpiSpec("Completed", "✅", "#5fd4a0", Metric(filters={"Status Category": ["Done"]}),
+                    requires=["Sprint Name"]),
+            KpiSpec("In Progress", "🔄", "#f0d080",
+                    Metric(filters={"Status Category": ["In Progress"]}), requires=["Sprint Name"]),
+            KpiSpec("To Do", "📋", "#8e98bc", Metric(filters={"Status Category": ["To Do"]}),
+                    requires=["Sprint Name"]),
+            KpiSpec("Completion %", "🎯", "#7ecdc0",
+                    Metric(filters={"Status Category": ["Done"]}), divide_by=Metric(),
+                    caption="text", caption_text="of sprint items", as_percent=True,
+                    requires=["Sprint Name"]),
+            KpiSpec("Sprint Points", "⭐", "#b898f5", Metric("Story Points", "Sum"),
+                    caption="metric", caption_text="completed",
+                    caption_metric=Metric("Story Points", "Sum", {"Status Category": ["Done"]}),
+                    requires=["Sprint Name"]),
+        ]
+        tiles += [KpiSpec.from_dict(t.to_dict()) for t in sprint_tiles if t.label not in labels]
+        self.save_kpis(tiles)
+        self.set_setting("sprint_starters_seeded", True)
         return True
 
     # ── UI settings ───────────────────────────────────────────────────────────
