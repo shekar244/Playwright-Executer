@@ -152,6 +152,9 @@ def _single_sprint(store: Store, settings: JiraSettings, name: str) -> None:
                         st.warning("Could not fetch velocity history — continuing without it.")
 
             ds_name = name or f"{project_key} {selected.get('name', f'Sprint {sprint_id}')}"
+            # Store board_id and project for velocity re-fetch
+            selected["_board_id"] = board_id
+            selected["_project"] = project_key
             extra = {"velocity_history": velocity_history} if velocity_history else {}
             _save_sprint_dataset(store, ds_name, issues, client, selected, settings, extra=extra)
         except JiraError as exc:

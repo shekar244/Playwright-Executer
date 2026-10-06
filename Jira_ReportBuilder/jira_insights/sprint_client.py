@@ -109,6 +109,52 @@ class SprintClient:
         jql += " ORDER BY sprint ASC, rank ASC"
         return self._client.search(jql, fields=fields, max_issues=max_issues, on_progress=on_progress)
 
+    def velocity_report(self, board_id: int) -> list[dict]:
+        """Velocity data straight from Jira's built-in velocity report.
+
+        Uses GET /rest/agile/1.0/board/{boardId}/reports/velocity (Jira Cloud)
+        or  GET /rest/greenhopper/1.0/rapid/charts/velocity (Server/DC).
+
+        Returns [{name, id, committed, completed, startDate, endDate}, ...] in
+        chronological order — the same shape as velocity_history() so callers
+        don't care which source was used.
+        """
+        # Try Jira Cloud endpoint first
+        try:
+            data = self._client._get(f"/rest/agile/1.0/board/{int(board_id)}/reports/velocity")
+        except JiraError as e:
+            if e.status in (404, 405):
+                # Fall back to Greenhopper (Server/DC)
+                data = self._client._get("/rest/greenhopper/1.0/rapid/charts/velocity",
+                                         {"rapidViewId": str(board_id)})
+            else:
+                raise
+
+        sprints_data = data.get("sprints") or {}
+        velocity_stats = data.get("velocityStatEntries") or {}
+
+        result = []
+        for sprint_id_str, stats in velocity_stats.items():
+            sprint_id = int(sprint_id_str)
+            sprint_info = sprints_data.get(sprint_id_str) or sprints_data.get(sprint_id, {})
+
+            estimated = stats.get("estimated") or {}
+            completed_stat = stats.get("completed") or {}
+
+            result.append({
+                "name": sprint_info.get("name", f"Sprint {sprint_id}"),
+                "id": sprint_id,
+                "committed": float(estimated.get("value", 0)),
+                "completed": float(completed_stat.get("value", 0)),
+                "startDate": sprint_info.get("startDate", ""),
+                "endDate": sprint_info.get("endDate") or sprint_info.get("completeDate", ""),
+                "state": sprint_info.get("state", "closed"),
+            })
+
+        # Sort chronologically by start date (or sprint id as fallback)
+        result.sort(key=lambda s: s.get("startDate") or str(s["id"]))
+        return result
+
     def previous_closed_sprints(self, board_id: int, current_sprint_id: int,
                                 count: int = 5) -> list[dict]:
         """The last N closed sprints before the current one, most recent first."""
@@ -119,16 +165,30 @@ class SprintClient:
     def velocity_history(self, board_id: int, current_sprint_id: int,
                          project_key: str = "", history_count: int = 5,
                          on_progress=None) -> list[dict]:
-        """Velocity for the last N closed sprints: [{name, id, committed, completed, startDate, endDate}].
+        """Velocity for the last N closed sprints.
 
-        Fetches all past sprint issues in a single JQL query, groups by sprint,
-        and computes committed (total story points) vs completed (done points).
+        Strategy:
+          1. Try Jira's built-in velocity report endpoint (accurate, one call).
+          2. Fall back to manual computation from issue data.
+
+        Returns [{name, id, committed, completed, startDate, endDate}, ...] in
+        chronological order, excluding the current sprint.
         """
+        # ── Strategy 1: built-in velocity report ────────────────────────────
+        try:
+            report = self.velocity_report(board_id)
+            if report:
+                # Exclude the current sprint, keep last N
+                history = [s for s in report if s["id"] != current_sprint_id]
+                return history[-history_count:] if len(history) > history_count else history
+        except JiraError:
+            pass  # endpoint not available — fall back
+
+        # ── Strategy 2: manual computation from issues ──────────────────────
         past = self.previous_closed_sprints(board_id, current_sprint_id, history_count)
         if not past:
             return []
 
-        # Resolve story points field name from Jira field metadata
         try:
             fn = self._client.field_names()
         except JiraError:
@@ -136,12 +196,10 @@ class SprintClient:
         pts_field = _find_points_field(fn)
 
         all_ids = [s["id"] for s in past]
-        # Use *navigable to get sprint field (often a custom field) and story points
         issues = self.multi_sprint_issues(all_ids, project_key=project_key,
                                           fields="*navigable",
                                           max_issues=20000, on_progress=on_progress)
 
-        # Build a name→id map from the known sprints for assignment
         name_to_id = {s.get("name", ""): s["id"] for s in past}
         per_sprint: dict[int, dict] = {s["id"]: {"committed": 0.0, "completed": 0.0} for s in past}
 
@@ -151,12 +209,10 @@ class SprintClient:
             fields = issue.get("fields") or {}
             pts = _safe_points(fields, pts_field)
 
-            # Try structured assignment first, fall back to name matching
             sid = _assign_sprint_id(fields, set(per_sprint))
             if sid is None:
                 sprint_raw = fields.get("sprint")
                 if sprint_raw is None:
-                    # Try all fields for a sprint-like value
                     for fid, val in fields.items():
                         if fid.startswith("customfield_") and val is not None:
                             flat = flatten_value(val)

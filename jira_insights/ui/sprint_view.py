@@ -210,21 +210,22 @@ def _fetch_velocity_inline(store: Store, ds: Dataset, meta: dict) -> None:
     """Fetch velocity history on demand and patch it into the existing dataset metadata."""
     sprint_meta = meta.get("sprint") or {}
     sprint_id = sprint_meta.get("id")
+    saved_board_id = sprint_meta.get("_board_id")
+    saved_project = sprint_meta.get("_project", "")
 
-    if not sprint_id:
-        st.caption("Cannot auto-fetch — this dataset has no sprint id in its metadata. "
-                   "Use the sidebar → 🏃 New dataset from Sprint → re-fetch with "
-                   "**Include velocity history** checked.")
-        return
-
-    c1, c2 = st.columns([1, 1])
+    c1, c2, c3 = st.columns([1, 1, 1])
     history_count = c1.number_input("Past sprints to fetch", min_value=1, max_value=20,
                                     value=5, step=1, key="vel_inline_count")
-    project_key = c2.text_input("Project key (optional)", key="vel_inline_project",
+    project_key = c2.text_input("Project key", key="vel_inline_project",
+                                value=saved_project,
                                 placeholder="ABC",
-                                help="Leave blank to search across all projects on the board.")
+                                help="Needed to find the board for this sprint.")
+    board_id_input = c3.text_input("Board ID (optional)", key="vel_inline_board",
+                                   value=str(saved_board_id) if saved_board_id else "",
+                                   placeholder="e.g. 42",
+                                   help="From the board URL: /boards/42/reports/velocity. "
+                                        "Leave blank to auto-detect from the project.")
 
-    # Need board_id — try to find it from the sprint
     if st.button("🚀 Fetch velocity history", key="vel_inline_fetch", type="primary"):
         from ..jira_client import JiraClient, JiraError
         from ..settings import load_jira_settings
@@ -239,44 +240,58 @@ def _fetch_velocity_inline(store: Store, ds: Dataset, meta: dict) -> None:
             client = JiraClient(settings)
             sc = SprintClient(client)
 
-            # Find the board that has this sprint
-            proj = project_key.strip().upper() or sprint_meta.get("_project", "")
-            board_id = sprint_meta.get("_board_id")
+            proj = project_key.strip().upper()
+            board_id = None
+            if board_id_input.strip().isdigit():
+                board_id = int(board_id_input.strip())
+            elif saved_board_id:
+                board_id = saved_board_id
+
+            # Auto-detect board from project
             if not board_id and proj:
                 with st.spinner("Finding board…"):
                     boards = sc.boards(proj)
                     for board in boards:
-                        try:
-                            board_sprints = sc.sprints(board["id"])
-                            if any(s["id"] == sprint_id for s in board_sprints):
-                                board_id = board["id"]
-                                break
-                        except JiraError:
-                            continue
+                        if sprint_id:
+                            try:
+                                board_sprints = sc.sprints(board["id"])
+                                if any(s["id"] == sprint_id for s in board_sprints):
+                                    board_id = board["id"]
+                                    break
+                            except JiraError:
+                                continue
+                        else:
+                            board_id = board["id"]
+                            break
 
             if not board_id:
-                st.error("Could not find the board for this sprint. Enter the project key above "
-                         "so the tool can locate the board.")
+                st.error("Could not find the board. Enter the board ID from the URL "
+                         "(e.g. `/boards/42/reports/velocity` → board ID is **42**).")
                 return
 
-            with st.spinner(f"Fetching velocity from last {int(history_count)} closed sprints…"):
-                velocity = sc.velocity_history(board_id, sprint_id,
+            with st.spinner(f"Fetching velocity (board {board_id})…"):
+                velocity = sc.velocity_history(board_id, sprint_id or 0,
                                                project_key=proj,
                                                history_count=int(history_count))
 
+            source = "built-in report" if velocity else ""
             if not velocity:
-                st.warning("No closed sprints found on this board, or no story points in them.")
+                st.warning("No velocity data returned. Check that the board ID is correct and the board has closed sprints.")
                 return
 
             # Patch the metadata file
             import json
-            from ..store import slugify
             meta_path = store._path("datasets", ds.slug, ".json")
             disk_meta = json.loads(meta_path.read_text(encoding="utf-8"))
             disk_meta["velocity_history"] = velocity
+            # Save board_id for future re-fetches
+            if "sprint" in disk_meta and isinstance(disk_meta["sprint"], dict):
+                disk_meta["sprint"]["_board_id"] = board_id
+                if proj:
+                    disk_meta["sprint"]["_project"] = proj
             meta_path.write_text(json.dumps(disk_meta, indent=2), encoding="utf-8")
 
-            st.toast(f"Fetched velocity for {len(velocity)} sprints — reload to see the chart.", icon="✅")
+            st.toast(f"Fetched velocity for {len(velocity)} sprint(s).", icon="✅")
             st.rerun()
 
         except JiraError as exc:
