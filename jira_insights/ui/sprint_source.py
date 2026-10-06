@@ -123,12 +123,9 @@ def _single_sprint(store: Store, settings: JiraSettings, name: str) -> None:
             st.caption(f"Goal: {selected['goal']}")
 
     limit = st.number_input("Max issues", min_value=50, max_value=50000, value=2000, step=500, key="sp_max")
-    v1, v2 = st.columns([1.2, 1])
-    include_velocity = v1.checkbox("Include velocity history", value=True, key="sp_velocity",
-                                   help="Pull the last N closed sprints from this board to show "
-                                        "team velocity trend alongside the current sprint.")
-    history_count = v2.number_input("Past sprints", min_value=1, max_value=20, value=5, step=1,
-                                    key="sp_history_count", disabled=not include_velocity)
+    include_velocity = st.checkbox("Include velocity from board report", value=True, key="sp_velocity",
+                                   help="Pull the velocity report from Jira's board — "
+                                        "shows committed vs completed across past sprints.")
 
     if st.button("Fetch sprint issues", key="sp_fetch", type="primary", width="stretch"):
         try:
@@ -140,22 +137,18 @@ def _single_sprint(store: Store, settings: JiraSettings, name: str) -> None:
                 st.warning("No issues found in this sprint.")
                 return
 
-            velocity_history = []
+            velocity_data = []
             if include_velocity:
-                with st.spinner(f"Fetching velocity from last {int(history_count)} sprints…"):
+                with st.spinner("Fetching velocity report from board…"):
                     try:
-                        velocity_history = sc.velocity_history(
-                            board_id, sprint_id, project_key=project_key,
-                            history_count=int(history_count),
-                        )
+                        velocity_data = sc.velocity_report(board_id)
                     except JiraError:
-                        st.warning("Could not fetch velocity history — continuing without it.")
+                        st.warning("Could not fetch velocity report — continuing without it.")
 
             ds_name = name or f"{project_key} {selected.get('name', f'Sprint {sprint_id}')}"
-            # Store board_id and project for velocity re-fetch
             selected["_board_id"] = board_id
             selected["_project"] = project_key
-            extra = {"velocity_history": velocity_history} if velocity_history else {}
+            extra = {"velocity_history": velocity_data} if velocity_data else {}
             _save_sprint_dataset(store, ds_name, issues, client, selected, settings, extra=extra)
         except JiraError as exc:
             st.error(f"Jira{f' ({exc.status})' if exc.status else ''}: {exc}")
