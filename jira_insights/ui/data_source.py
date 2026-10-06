@@ -12,7 +12,7 @@ from ..charts import DEFAULT_THEME, THEMES
 from ..jira_client import JiraClient, JiraError
 from ..settings import load_jira_settings
 from ..store import Store
-from ..transform import frame_from_export, issues_to_frame
+from ..transform import DEFAULT_SKIP_FIELDS, SKIP_FIELD_GROUPS, _ALWAYS_SPECIAL, frame_from_export, issues_to_frame
 from .. import zephyr
 from ..executions import apply_user_names
 from . import people, sprint_source, zephyr_source
@@ -37,8 +37,17 @@ def _describe(meta: dict) -> str:
     return f"{meta.get('rows', 0):,} issues · {origin} · {when} UTC"
 
 
+def _active_skip_fields(store: Store) -> set[str]:
+    """The user's skip-field preferences, falling back to the defaults."""
+    saved = store.get_setting("skip_fields")
+    if isinstance(saved, list):
+        return set(saved) | _ALWAYS_SPECIAL
+    return DEFAULT_SKIP_FIELDS
+
+
 def _pull(store: Store, name: str, jql: str, max_issues: int, fields: str) -> None:
     settings = load_jira_settings()
+    skip = _active_skip_fields(store)
     try:
         client = JiraClient(settings)
         bar = st.progress(0.0, text="Querying Jira…")
@@ -57,7 +66,7 @@ def _pull(store: Store, name: str, jql: str, max_issues: int, fields: str) -> No
     if not issues:
         st.warning("The JQL returned no issues.")
         return
-    df, multi = issues_to_frame(issues, names)
+    df, multi = issues_to_frame(issues, names, skip_fields=skip)
     meta = store.save_dataset(name, df, source="jql", jql=jql, multi_cols=multi,
                               extra={"max_issues": int(max_issues), "fields": fields, "jira_url": settings.url})
     st.session_state["ds_pending"] = meta["slug"]
@@ -183,8 +192,43 @@ def render_sidebar(store: Store) -> Dataset | None:
                     else:
                         _import(store, up_name.strip(), upload)
 
+        _skip_fields_config(store)
+
         st.selectbox("🎨 Colour theme", list(THEMES), key="ji_theme",
                      on_change=lambda: store.set_setting("theme", ss["ji_theme"]),
                      help="Chart palette — every theme is checked for colour-blind safety and contrast.")
         swatches(THEMES[ss["ji_theme"]].palette)
     return current
+
+
+def _skip_fields_config(store: Store) -> None:
+    """UI to view and modify which Jira fields are excluded from datasets."""
+    with st.expander("🔧 Excluded fields", expanded=False):
+        st.caption("Fields skipped when building datasets. Uncheck a group to include those fields. "
+                   "Issue links and sub-tasks are always extracted into structured columns.")
+
+        saved = store.get_setting("skip_fields")
+        current_skip = set(saved) if isinstance(saved, list) else \
+            {f for group in SKIP_FIELD_GROUPS.values() for f in group}
+
+        changed = False
+        new_skip: set[str] = set()
+
+        for group_name, fields in SKIP_FIELD_GROUPS.items():
+            all_skipped = fields <= current_skip
+            label = f"{group_name}  ({', '.join(sorted(fields))})"
+            skip_this = st.checkbox(f"Skip {group_name}", value=all_skipped,
+                                    key=f"skip_{group_name}",
+                                    help=f"Fields: {', '.join(sorted(fields))}")
+            if skip_this:
+                new_skip |= fields
+            if skip_this != all_skipped:
+                changed = True
+
+        if changed:
+            store.set_setting("skip_fields", sorted(new_skip))
+            st.caption("✅ Saved — re-fetch or refresh a dataset to apply.")
+        else:
+            included = {f for group in SKIP_FIELD_GROUPS.values() for f in group} - current_skip
+            if included:
+                st.caption(f"Currently included: {', '.join(sorted(included))}")

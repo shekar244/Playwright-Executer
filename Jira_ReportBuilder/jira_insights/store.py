@@ -39,6 +39,12 @@ STARTER_REPORTS = [
     {"name": "Average age of open defects (days)", "chart": "Bar", "rows": "Priority",
      "value": "Age (days)", "agg": "Average", "sort": "Label", "show_labels": True,
      "filters": {"Issue Type": ["Bug", "Defect"], "Open/Closed": ["Open"]}},
+    {"name": "Epic progress", "chart": "Stacked bar", "rows": "Epic Name",
+     "series": "Status Category", "sort": "Value"},
+    {"name": "Story points by epic", "chart": "Bar", "rows": "Epic Name",
+     "value": "Story Points", "agg": "Sum", "show_labels": True, "sort": "Value"},
+    {"name": "Linked issues by type", "chart": "Bar", "rows": "Link Type",
+     "show_labels": True, "sort": "Value"},
 ]
 
 
@@ -65,6 +71,12 @@ SPRINT_REPORTS = [
      "date_grain": "Day"},
     {"name": "Defects in sprint", "chart": "Number",
      "filters": {"Issue Type": {"contains": "bug|defect"}}},
+    {"name": "Epic progress in sprint", "chart": "Stacked bar", "rows": "Epic Name",
+     "series": "Status Category", "sort": "Value"},
+    {"name": "Story points by epic", "chart": "Bar", "rows": "Epic Name",
+     "value": "Story Points", "agg": "Sum", "show_labels": True, "sort": "Value"},
+    {"name": "Linked issues by relationship", "chart": "Bar", "rows": "Link Type",
+     "show_labels": True, "sort": "Value"},
 ]
 
 _EXECUTED, _PASSED = {"Executed": ["Yes"]}, {"Result": ["Passed"]}

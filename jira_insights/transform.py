@@ -34,17 +34,35 @@ SYSTEM_NAMES = {
 }
 
 # Rich-text / bulky fields that would bloat the frame without helping pivots.
-_SKIP_FIELDS = {
-    "description", "environment", "comment", "worklog", "attachment", "watches",
-    "votes", "timetracking", "progress", "aggregateprogress", "thumbnail",
-    "lastViewed", "issuelinks", "subtasks",
+# Default fields to skip — grouped by reason so the config UI can explain each.
+SKIP_FIELD_GROUPS = {
+    "Rich text": {"description", "environment"},
+    "Comments & logs": {"comment", "worklog"},
+    "Attachments": {"attachment", "thumbnail"},
+    "Social": {"watches", "votes"},
+    "Internal tracking": {"timetracking", "progress", "aggregateprogress"},
+    "Metadata noise": {"lastViewed"},
 }
+
+# Always handled specially (extracted into structured columns, never togglable).
+_ALWAYS_SPECIAL = {"issuelinks", "subtasks"}
+
+# The default skip set — union of all groups + always-special.
+DEFAULT_SKIP_FIELDS = _ALWAYS_SPECIAL | {f for group in SKIP_FIELD_GROUPS.values() for f in group}
+
+# Module-level alias for backwards compatibility.
+_SKIP_FIELDS = DEFAULT_SKIP_FIELDS
 
 _LEADING_COLUMNS = [
     "Key", "Summary", "Issue Type", "Status", "Status Category", "Open/Closed",
-    "Priority", "Assignee", "Reporter", "Created", "Updated", "Resolved",
+    "Priority", "Assignee", "Reporter", "Epic Name", "Epic Key",
+    "Created", "Updated", "Resolved",
     "Age (days)", "Resolution Time (days)",
 ]
+
+# Known custom field names for the Epic Link field across Jira instances.
+_EPIC_LINK_NAMES = {"epic link", "epic", "epic name"}
+_EPIC_LINK_IDS = {"customfield_10008", "customfield_10014"}
 
 # Used for Open/Closed when an export has neither Status Category nor Resolved.
 _DONE_STATUSES = {"done", "closed", "resolved", "released", "complete", "completed",
@@ -53,6 +71,86 @@ _DONE_STATUSES = {"done", "closed", "resolved", "released", "complete", "complet
 _GH_SPRINT = re.compile(r"name=([^,\]]+)")                     # Server/DC sprint strings
 _DATE_LIKE = re.compile(r"^\s*(\d{4}-\d{2}-\d{2}|\d{1,2}/[A-Za-z]{3}/\d{2,4})")
 _CUSTOM_FIELD = re.compile(r"^Custom field \((.+)\)$")
+
+
+# ── Epic extraction ───────────────────────────────────────────────────────────
+
+def _extract_epic(fields: dict, field_names: dict[str, str] | None = None) -> tuple[str | None, str | None]:
+    """Extract (epic_name, epic_key) from an issue's fields.
+
+    Sources checked in order:
+      1. parent field (next-gen / team-managed projects — epic is the parent)
+      2. Epic Link custom field (classic projects — customfield_10008 or similar)
+      3. Any custom field whose display name matches 'Epic Link' or 'Epic Name'
+    """
+    # 1. Parent field: {"key": "PROJ-10", "fields": {"summary": "Epic title", "issuetype": {"name": "Epic"}}}
+    parent = fields.get("parent")
+    if isinstance(parent, dict):
+        parent_fields = parent.get("fields") or {}
+        parent_type = (parent_fields.get("issuetype") or {}).get("name", "")
+        if parent_type.lower() == "epic":
+            return parent_fields.get("summary"), parent.get("key")
+        # Even if parent isn't an epic, return it as the parent context
+        if parent.get("key"):
+            return parent_fields.get("summary"), parent.get("key")
+
+    # 2. Well-known Epic Link custom fields
+    for fid in _EPIC_LINK_IDS:
+        raw = fields.get(fid)
+        if raw is not None:
+            if isinstance(raw, str) and raw.strip():
+                return raw, raw  # Cloud: epic key as a string
+            if isinstance(raw, dict):
+                return (raw.get("fields", {}).get("summary") or raw.get("name") or raw.get("key"),
+                        raw.get("key"))
+
+    # 3. Search by display name
+    names = field_names or {}
+    for fid, display in names.items():
+        if display.lower() in _EPIC_LINK_NAMES and fid.startswith("customfield_"):
+            raw = fields.get(fid)
+            if raw is not None:
+                if isinstance(raw, str) and raw.strip():
+                    return raw, raw
+                if isinstance(raw, dict):
+                    return (raw.get("fields", {}).get("summary") or raw.get("name") or raw.get("key"),
+                            raw.get("key"))
+
+    return None, None
+
+
+# ── Issue link extraction ────────────────────────────────────────────────────
+
+def _extract_links(fields: dict) -> tuple[str | None, str | None, int]:
+    """Extract (link_types, linked_keys, link_count) from issuelinks.
+
+    link_types: comma-separated link relationship names (e.g. "blocks, is blocked by")
+    linked_keys: comma-separated keys of linked issues (e.g. "PROJ-1, PROJ-2")
+    """
+    links = fields.get("issuelinks")
+    if not isinstance(links, list) or not links:
+        return None, None, 0
+
+    types: list[str] = []
+    keys: list[str] = []
+    for link in links:
+        link_type = link.get("type") or {}
+        if "outwardIssue" in link:
+            rel = link_type.get("outward", link_type.get("name", "links to"))
+            key = (link["outwardIssue"] or {}).get("key", "")
+        elif "inwardIssue" in link:
+            rel = link_type.get("inward", link_type.get("name", "linked from"))
+            key = (link["inwardIssue"] or {}).get("key", "")
+        else:
+            continue
+        if rel and rel not in types:
+            types.append(rel)
+        if key:
+            keys.append(key)
+
+    return (MULTI_SEP.join(types) if types else None,
+            MULTI_SEP.join(keys) if keys else None,
+            len(links))
 
 
 # ── REST issues ───────────────────────────────────────────────────────────────
@@ -95,11 +193,13 @@ def _column_names(field_ids: list[str], field_names: dict[str, str]) -> dict[str
 
 
 def issues_to_frame(issues: list[dict], field_names: dict[str, str] | None = None,
-                    now: pd.Timestamp | None = None) -> tuple[pd.DataFrame, list[str]]:
+                    now: pd.Timestamp | None = None,
+                    skip_fields: set[str] | None = None) -> tuple[pd.DataFrame, list[str]]:
+    skip = (skip_fields | _ALWAYS_SPECIAL) if skip_fields is not None else _SKIP_FIELDS
     field_ids: dict[str, None] = {}
     for issue in issues:
         for fid in (issue.get("fields") or {}):
-            if fid not in _SKIP_FIELDS:
+            if fid not in skip:
                 field_ids.setdefault(fid)
     names = _column_names(list(field_ids), field_names or {})
 
@@ -112,8 +212,24 @@ def issues_to_frame(issues: list[dict], field_names: dict[str, str] | None = Non
                "Status Category": (status.get("statusCategory") or {}).get("name")}
         if "subtasks" in fields:
             row["Sub-tasks"] = len(fields.get("subtasks") or [])
-        if "issuelinks" in fields:
-            row["Linked Issues"] = len(fields.get("issuelinks") or [])
+
+        # Epic name and key
+        epic_name, epic_key = _extract_epic(fields, field_names)
+        if epic_name:
+            row["Epic Name"] = epic_name
+        if epic_key:
+            row["Epic Key"] = epic_key
+
+        # Issue links — structured columns
+        link_types, linked_keys, link_count = _extract_links(fields)
+        row["Linked Issues"] = link_count
+        if link_types:
+            row["Link Type"] = link_types
+            multi.add("Link Type")
+        if linked_keys:
+            row["Linked Keys"] = linked_keys
+            multi.add("Linked Keys")
+
         for fid, name in names.items():
             raw = fields.get(fid)
             row[name] = flatten_value(raw)

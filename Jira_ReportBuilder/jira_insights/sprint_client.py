@@ -108,3 +108,66 @@ class SprintClient:
             jql = f'project = "{project_key}" AND {jql}'
         jql += " ORDER BY sprint ASC, rank ASC"
         return self._client.search(jql, fields=fields, max_issues=max_issues, on_progress=on_progress)
+
+    def previous_closed_sprints(self, board_id: int, current_sprint_id: int,
+                                count: int = 5) -> list[dict]:
+        """The last N closed sprints before the current one, most recent first."""
+        closed = self.sprints(board_id, state="closed")
+        closed.sort(key=lambda s: s.get("endDate") or "", reverse=True)
+        return [s for s in closed if s["id"] != current_sprint_id][:count]
+
+    def velocity_history(self, board_id: int, current_sprint_id: int,
+                         project_key: str = "", history_count: int = 5,
+                         on_progress=None) -> list[dict]:
+        """Velocity for the last N closed sprints: [{name, id, committed, completed, startDate, endDate}].
+
+        Fetches all past sprint issues in a single JQL query, groups by sprint,
+        and computes committed (total story points) vs completed (done points).
+        """
+        past = self.previous_closed_sprints(board_id, current_sprint_id, history_count)
+        if not past:
+            return []
+
+        all_ids = [s["id"] for s in past]
+        issues = self.multi_sprint_issues(all_ids, project_key=project_key,
+                                          fields="sprint,status,customfield_10016,story_points",
+                                          max_issues=20000, on_progress=on_progress)
+
+        from .sprint_transform import _assign_sprint_id
+        per_sprint: dict[int, dict] = {s["id"]: {"committed": 0.0, "completed": 0.0} for s in past}
+        for issue in issues:
+            fields = issue.get("fields") or {}
+            pts = _safe_points(fields)
+            sid = _assign_sprint_id(fields, set(per_sprint))
+            if sid is None:
+                continue
+            per_sprint[sid]["committed"] += pts
+            status_cat = ((fields.get("status") or {}).get("statusCategory") or {}).get("name", "")
+            if status_cat.lower() == "done":
+                per_sprint[sid]["completed"] += pts
+
+        result = []
+        for sprint in reversed(past):  # chronological order
+            sid = sprint["id"]
+            result.append({
+                "name": sprint.get("name", ""),
+                "id": sid,
+                "committed": round(per_sprint[sid]["committed"], 1),
+                "completed": round(per_sprint[sid]["completed"], 1),
+                "startDate": sprint.get("startDate", ""),
+                "endDate": sprint.get("endDate", ""),
+            })
+        return result
+
+
+def _safe_points(fields: dict) -> float:
+    """Extract story points from any of the common field locations."""
+    for key in ("story_points", "customfield_10016", "customfield_10028",
+                "customfield_10014"):
+        val = fields.get(key)
+        if val is not None:
+            try:
+                return float(val)
+            except (TypeError, ValueError):
+                continue
+    return 0.0

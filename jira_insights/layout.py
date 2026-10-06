@@ -73,7 +73,8 @@ def with_members(rows: list[list[str]], picked: list[str], reports: list[ReportS
 _ZEPHYR_COLUMNS = {"Result", "Executed", "Execution Status", "Execution ID", "Cycle", "Folder",
                    "Executed By", "Executed On", "Defect Keys", "Defects"}
 _JIRA_COLUMNS = {"Issue Type", "Status", "Status Category", "Open/Closed", "Created", "Updated", "Resolved",
-                 "Age (days)", "Resolution Time (days)", "Story Points", "Sprint", "Reporter", "Resolution"}
+                 "Age (days)", "Resolution Time (days)", "Story Points", "Sprint", "Reporter", "Resolution",
+                 "Epic Name", "Epic Key", "Link Type", "Linked Keys"}
 KIND_BADGES = {"zephyr": "🧪", "jira": "🧾", "any": "◻️"}
 
 

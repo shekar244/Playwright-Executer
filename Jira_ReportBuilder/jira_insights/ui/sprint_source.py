@@ -18,6 +18,7 @@ from ..settings import JiraSettings, load_jira_settings
 from ..sprint_client import SprintClient
 from ..sprint_transform import sprint_issues_to_frame
 from ..store import Store
+from ..transform import DEFAULT_SKIP_FIELDS, _ALWAYS_SPECIAL
 
 
 def _progress():
@@ -29,6 +30,13 @@ def _progress():
     return update
 
 
+def _active_skip_fields(store: Store) -> set[str]:
+    saved = store.get_setting("skip_fields")
+    if isinstance(saved, list):
+        return set(saved) | _ALWAYS_SPECIAL
+    return DEFAULT_SKIP_FIELDS
+
+
 def _save_sprint_dataset(store: Store, name: str, issues: list[dict], client: JiraClient,
                          sprint_meta: dict | None, settings: JiraSettings,
                          extra: dict | None = None) -> None:
@@ -36,7 +44,8 @@ def _save_sprint_dataset(store: Store, name: str, issues: list[dict], client: Ji
         field_names = client.field_names()
     except JiraError:
         field_names = {}
-    df, multi = sprint_issues_to_frame(issues, field_names, sprint_meta)
+    skip = _active_skip_fields(store)
+    df, multi = sprint_issues_to_frame(issues, field_names, sprint_meta, skip_fields=skip)
     if df.empty:
         st.warning("No issues found for this sprint.")
         return
@@ -114,6 +123,13 @@ def _single_sprint(store: Store, settings: JiraSettings, name: str) -> None:
             st.caption(f"Goal: {selected['goal']}")
 
     limit = st.number_input("Max issues", min_value=50, max_value=50000, value=2000, step=500, key="sp_max")
+    v1, v2 = st.columns([1.2, 1])
+    include_velocity = v1.checkbox("Include velocity history", value=True, key="sp_velocity",
+                                   help="Pull the last N closed sprints from this board to show "
+                                        "team velocity trend alongside the current sprint.")
+    history_count = v2.number_input("Past sprints", min_value=1, max_value=20, value=5, step=1,
+                                    key="sp_history_count", disabled=not include_velocity)
+
     if st.button("Fetch sprint issues", key="sp_fetch", type="primary", width="stretch"):
         try:
             client = JiraClient(settings)
@@ -123,8 +139,21 @@ def _single_sprint(store: Store, settings: JiraSettings, name: str) -> None:
             if not issues:
                 st.warning("No issues found in this sprint.")
                 return
+
+            velocity_history = []
+            if include_velocity:
+                with st.spinner(f"Fetching velocity from last {int(history_count)} sprints…"):
+                    try:
+                        velocity_history = sc.velocity_history(
+                            board_id, sprint_id, project_key=project_key,
+                            history_count=int(history_count),
+                        )
+                    except JiraError:
+                        st.warning("Could not fetch velocity history — continuing without it.")
+
             ds_name = name or f"{project_key} {selected.get('name', f'Sprint {sprint_id}')}"
-            _save_sprint_dataset(store, ds_name, issues, client, selected, settings)
+            extra = {"velocity_history": velocity_history} if velocity_history else {}
+            _save_sprint_dataset(store, ds_name, issues, client, selected, settings, extra=extra)
         except JiraError as exc:
             st.error(f"Jira{f' ({exc.status})' if exc.status else ''}: {exc}")
 

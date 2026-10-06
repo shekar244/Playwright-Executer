@@ -14,6 +14,7 @@ import pandas as pd
 from .transform import MULTI_SEP, issues_to_frame
 
 _GH_SPRINT = re.compile(r"name=([^,\]]+)")
+_GH_SPRINT_ID = re.compile(r"id=(\d+)")
 
 
 def _extract_sprint_name(value) -> str | None:
@@ -27,11 +28,43 @@ def _extract_sprint_name(value) -> str | None:
     return parts[-1] if parts else None
 
 
+def _assign_sprint_id(fields: dict, valid_ids: set[int]) -> int | None:
+    """Find which of the valid sprint ids this issue belongs to.
+
+    An issue can appear in multiple sprints (carry-over). We pick the one that
+    is in our valid set; when multiple match, the highest id wins (most recent).
+    """
+    sprint_field = fields.get("sprint")
+    if isinstance(sprint_field, dict) and sprint_field.get("id"):
+        sid = int(sprint_field["id"])
+        return sid if sid in valid_ids else None
+
+    # The sprint field can be a list of Greenhopper sprint strings or dicts
+    raw = sprint_field
+    if not isinstance(raw, list):
+        raw = [raw] if raw else []
+
+    found: list[int] = []
+    for entry in raw:
+        if isinstance(entry, dict) and entry.get("id"):
+            sid = int(entry["id"])
+            if sid in valid_ids:
+                found.append(sid)
+        elif isinstance(entry, str) and "com.atlassian.greenhopper" in entry:
+            match = _GH_SPRINT_ID.search(entry)
+            if match:
+                sid = int(match.group(1))
+                if sid in valid_ids:
+                    found.append(sid)
+    return max(found) if found else None
+
+
 def sprint_issues_to_frame(issues: list[dict], field_names: dict[str, str] | None = None,
                            sprint_meta: dict | None = None,
-                           now: pd.Timestamp | None = None) -> tuple[pd.DataFrame, list[str]]:
+                           now: pd.Timestamp | None = None,
+                           skip_fields: set[str] | None = None) -> tuple[pd.DataFrame, list[str]]:
     """Like issues_to_frame but enriches with sprint-derived columns."""
-    df, multi = issues_to_frame(issues, field_names, now)
+    df, multi = issues_to_frame(issues, field_names, now, skip_fields=skip_fields)
     if df.empty:
         return df, multi
 
