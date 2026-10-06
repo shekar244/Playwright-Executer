@@ -206,159 +206,200 @@ def _burndown_chart(filtered, sprint_meta) -> go.Figure | None:
     return fig
 
 
-def _velocity_chart(filtered, meta: dict) -> go.Figure | None:
-    """Velocity chart with historical closed sprints + current sprint.
+def _fetch_velocity_inline(store: Store, ds: Dataset, meta: dict) -> None:
+    """Fetch velocity history on demand and patch it into the existing dataset metadata."""
+    sprint_meta = meta.get("sprint") or {}
+    sprint_id = sprint_meta.get("id")
 
-    The history comes from metadata saved at fetch time (velocity_history),
-    so it doesn't require extra API calls at render time. The current sprint's
-    velocity is computed live from the filtered issues.
-    """
+    if not sprint_id:
+        st.caption("Cannot auto-fetch — this dataset has no sprint id in its metadata. "
+                   "Use the sidebar → 🏃 New dataset from Sprint → re-fetch with "
+                   "**Include velocity history** checked.")
+        return
+
+    c1, c2 = st.columns([1, 1])
+    history_count = c1.number_input("Past sprints to fetch", min_value=1, max_value=20,
+                                    value=5, step=1, key="vel_inline_count")
+    project_key = c2.text_input("Project key (optional)", key="vel_inline_project",
+                                placeholder="ABC",
+                                help="Leave blank to search across all projects on the board.")
+
+    # Need board_id — try to find it from the sprint
+    if st.button("🚀 Fetch velocity history", key="vel_inline_fetch", type="primary"):
+        from ..jira_client import JiraClient, JiraError
+        from ..settings import load_jira_settings
+        from ..sprint_client import SprintClient
+
+        settings = load_jira_settings()
+        if not settings.configured:
+            st.error("Jira is not configured — set it in Config → Zephyr.")
+            return
+
+        try:
+            client = JiraClient(settings)
+            sc = SprintClient(client)
+
+            # Find the board that has this sprint
+            proj = project_key.strip().upper() or sprint_meta.get("_project", "")
+            board_id = sprint_meta.get("_board_id")
+            if not board_id and proj:
+                with st.spinner("Finding board…"):
+                    boards = sc.boards(proj)
+                    for board in boards:
+                        try:
+                            board_sprints = sc.sprints(board["id"])
+                            if any(s["id"] == sprint_id for s in board_sprints):
+                                board_id = board["id"]
+                                break
+                        except JiraError:
+                            continue
+
+            if not board_id:
+                st.error("Could not find the board for this sprint. Enter the project key above "
+                         "so the tool can locate the board.")
+                return
+
+            with st.spinner(f"Fetching velocity from last {int(history_count)} closed sprints…"):
+                velocity = sc.velocity_history(board_id, sprint_id,
+                                               project_key=proj,
+                                               history_count=int(history_count))
+
+            if not velocity:
+                st.warning("No closed sprints found on this board, or no story points in them.")
+                return
+
+            # Patch the metadata file
+            import json
+            from ..store import slugify
+            meta_path = store._path("datasets", ds.slug, ".json")
+            disk_meta = json.loads(meta_path.read_text(encoding="utf-8"))
+            disk_meta["velocity_history"] = velocity
+            meta_path.write_text(json.dumps(disk_meta, indent=2), encoding="utf-8")
+
+            st.toast(f"Fetched velocity for {len(velocity)} sprints — reload to see the chart.", icon="✅")
+            st.rerun()
+
+        except JiraError as exc:
+            st.error(f"Jira{f' ({exc.status})' if exc.status else ''}: {exc}")
+        except Exception as exc:
+            st.error(f"Error: {exc}")
+
+
+def _velocity_data_section(store: Store, ds: Dataset, filtered, meta: dict) -> None:
+    """Velocity history: diagnostic view + create-as-dataset for Report Builder editing."""
     import pandas as pd
 
-    # Historical velocity from stored metadata
     history = meta.get("velocity_history") or []
-
-    # Current sprint velocity from live data
     current = compute_velocity(filtered)
+    sprint_meta = meta.get("sprint") or {}
 
-    sprints: list[str] = []
-    committed: list[float] = []
-    completed: list[float] = []
-    is_current: list[bool] = []
+    with st.expander(f"📊 Sprint Velocity Data ({len(history)} historical + {len(current)} current)", expanded=True):
+        if not history:
+            st.warning("No velocity history. Fetch it now from the board's closed sprints — "
+                       "no need to re-import the sprint dataset.")
+            _fetch_velocity_inline(store, ds, meta)
+            if current.empty:
+                return
 
-    for h in history:
-        sprints.append(h.get("name", ""))
-        committed.append(h.get("committed", 0))
-        completed.append(h.get("completed", 0))
-        is_current.append(False)
+        # Build combined velocity table
+        rows = []
+        for h in history:
+            rows.append({
+                "Sprint": h.get("name", ""),
+                "Committed": h.get("committed", 0),
+                "Completed": h.get("completed", 0),
+                "Completion %": round(h["completed"] / h["committed"] * 100, 1) if h.get("committed") else 0,
+                "Start": h.get("startDate", "")[:10],
+                "End": h.get("endDate", "")[:10],
+                "Source": "history",
+            })
+        if not current.empty:
+            for _, row in current.iterrows():
+                name = str(row["Sprint"])
+                rows.append({
+                    "Sprint": name,
+                    "Committed": row["Committed"],
+                    "Completed": row["Completed"],
+                    "Completion %": round(row["Completed"] / row["Committed"] * 100, 1) if row["Committed"] else 0,
+                    "Start": (sprint_meta.get("startDate") or "")[:10],
+                    "End": (sprint_meta.get("endDate") or "")[:10],
+                    "Source": "current",
+                })
 
-    if not current.empty:
-        for _, row in current.iterrows():
-            name = str(row["Sprint"])
-            if name not in sprints:
-                sprints.append(name)
-                committed.append(row["Committed"])
-                completed.append(row["Completed"])
-                is_current.append(True)
+        if not rows:
+            st.info("No velocity data to show.")
+            return
 
-    if not sprints:
-        return None
+        vel_df = pd.DataFrame(rows)
+        st.dataframe(vel_df, use_container_width=True, hide_index=True)
 
-    fig = go.Figure()
-    fig.add_trace(go.Bar(
-        x=sprints, y=committed, name="Committed",
-        marker=dict(color=["rgba(126,168,255,0.35)" if not cur else "rgba(126,168,255,0.7)"
-                           for cur in is_current], cornerradius=4),
-    ))
-    fig.add_trace(go.Bar(
-        x=sprints, y=completed, name="Completed",
-        marker=dict(color=["rgba(95,212,160,0.5)" if not cur else "#5fd4a0"
-                           for cur in is_current], cornerradius=4),
-    ))
+        # Averages
+        if len(rows) >= 2:
+            avg_committed = vel_df["Committed"].mean()
+            avg_completed = vel_df["Completed"].mean()
+            avg_pct = vel_df["Completion %"].mean()
+            st.caption(f"**Average:** {avg_committed:.0f} committed · {avg_completed:.0f} completed · "
+                       f"{avg_pct:.0f}% completion rate")
 
-    # Average velocity line
-    if len(completed) >= 2:
-        avg = sum(completed) / len(completed)
-        fig.add_hline(y=avg, line=dict(color=INK_MUTED, width=1.5, dash="dot"),
-                      annotation=dict(text=f"Avg: {avg:.0f}", font=dict(color=INK_MUTED, size=10),
-                                      showarrow=False, xanchor="left"))
+        # Re-fetch / update velocity
+        if history:
+            with st.popover("↻ Re-fetch velocity"):
+                st.caption("Pull fresh velocity data from the board without re-importing the sprint.")
+                _fetch_velocity_inline(store, ds, meta)
 
-    fig.update_layout(template=TEMPLATE, paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
-                      margin=dict(t=10, b=30, l=10, r=10), barmode="group",
-                      xaxis=dict(tickfont=dict(color=INK, size=10)),
-                      yaxis=dict(gridcolor=GRID, tickfont=dict(color=INK_MUTED),
-                                 title=dict(text="Story Points", font=dict(color=INK_MUTED, size=11))),
-                      legend=dict(font=dict(color=INK, size=11)))
-    return fig
+        # Save as dataset for Report Builder
+        if st.button("💾 Save as editable dataset", key="sprint-vel-save", type="primary",
+                     help="Create a separate velocity dataset so you can build custom reports on it "
+                          "in Report Builder — modify charts, add filters, change layout."):
+            sprint_name = sprint_meta.get("name", "Sprint")
+            ds_name = f"{sprint_name} velocity"
+            vel_df_save = vel_df.copy()
+            vel_df_save["Committed"] = pd.to_numeric(vel_df_save["Committed"], errors="coerce")
+            vel_df_save["Completed"] = pd.to_numeric(vel_df_save["Completed"], errors="coerce")
+            vel_df_save["Completion %"] = pd.to_numeric(vel_df_save["Completion %"], errors="coerce")
+            store.save_dataset(ds_name, vel_df_save, source="sprint",
+                               extra={"sprint": {"name": f"{sprint_name} velocity", "mode": "velocity"},
+                                      "jira_url": meta.get("jira_url", ""),
+                                      "parent_dataset": ds.slug})
+            # Seed velocity-specific reports
+            vel_reports = [
+                {"name": "Sprint velocity trend", "chart": "Column", "rows": "Sprint",
+                 "value": "Committed", "agg": "Sum", "show_labels": True},
+                {"name": "Completed vs committed", "chart": "Stacked bar", "rows": "Sprint",
+                 "value": "Completed", "agg": "Sum", "show_labels": True},
+                {"name": "Completion rate trend", "chart": "Line", "rows": "Sprint",
+                 "value": "Completion %", "agg": "Average", "show_labels": True},
+            ]
+            existing = {r.name for r in store.list_reports()}
+            from ..pivot import ReportSpec
+            for r in vel_reports:
+                if r["name"] not in existing:
+                    store.save_report(ReportSpec.from_dict(r))
+            st.toast(f"Saved \"{ds_name}\" — switch to it from the sidebar, then use Report Builder to customise.", icon="✅")
+            st.rerun()
 
 
-def _builtin_card_header(name: str, accent: str, code: str, toggle_key: str, store: Store) -> bool:
-    """Card header for built-in charts with a hide toggle. Returns True if visible."""
-    visible = store.get_setting(toggle_key) is not False  # default visible
-    head, toggle = st.columns([9, 1.5], vertical_alignment="center")
-    with head:
-        card_title(name, accent, code)
-    if toggle.button("✕ Hide" if visible else "＋ Show", key=f"btn-{toggle_key}",
-                     type="tertiary", help="Hide or show this built-in chart"):
-        store.set_setting(toggle_key, not visible)
-        st.rerun()
-    return visible
+def _burndown_section(store: Store, filtered, sprint_meta) -> None:
+    """Burndown chart with hide/show control."""
+    fig = _burndown_chart(filtered, sprint_meta)
+    visible = store.get_setting("sprint_builtin_burndown") is not False
 
-
-def _builtin_charts(filtered, sprint_meta, meta: dict, store: Store) -> None:
-    """Render the sprint-specific built-in charts with hide/show controls."""
-    burndown_fig = _burndown_chart(filtered, sprint_meta)
-    velocity_fig = _velocity_chart(filtered, meta)
-
-    show_burndown = burndown_fig is not None
-    show_velocity = velocity_fig is not None
-
-    if not show_burndown and not show_velocity:
-        # Check if they're hidden — show a restore hint
-        bd_hidden = store.get_setting("sprint_builtin_burndown") is False
-        vl_hidden = store.get_setting("sprint_builtin_velocity") is False
-        if bd_hidden or vl_hidden:
-            hidden_names = []
-            if bd_hidden:
-                hidden_names.append("Burndown")
-            if vl_hidden:
-                hidden_names.append("Velocity")
-            st.caption(f"Hidden built-in charts: {', '.join(hidden_names)}")
-            if st.button("Show all built-in charts", key="sprint-show-all-builtin", type="tertiary"):
-                store.set_setting("sprint_builtin_burndown", True)
-                store.set_setting("sprint_builtin_velocity", True)
-                st.rerun()
+    if fig is None and not visible:
+        return
+    if fig is None:
         return
 
-    # Check visibility settings
-    bd_visible = store.get_setting("sprint_builtin_burndown") is not False
-    vl_visible = store.get_setting("sprint_builtin_velocity") is not False
-
-    charts_to_show = []
-    if show_burndown and bd_visible:
-        charts_to_show.append(("burndown", burndown_fig))
-    if show_velocity and vl_visible:
-        charts_to_show.append(("velocity", velocity_fig))
-
-    if len(charts_to_show) == 2:
-        c1, c2 = st.columns(2, gap="medium")
-        cols = [c1, c2]
-    elif len(charts_to_show) == 1:
-        cols = [st.container()]
-    else:
-        # All hidden — show restore hint
-        hidden = []
-        if show_burndown and not bd_visible:
-            hidden.append("Burndown")
-        if show_velocity and not vl_visible:
-            hidden.append("Velocity")
-        if hidden:
-            st.caption(f"Hidden: {', '.join(hidden)}")
-            if st.button("Show all", key="sprint-restore-builtin", type="tertiary"):
-                store.set_setting("sprint_builtin_burndown", True)
-                store.set_setting("sprint_builtin_velocity", True)
-                st.rerun()
-        return
-
-    for i, (chart_type, fig) in enumerate(charts_to_show):
-        with cols[i]:
-            if chart_type == "burndown":
-                with st.container(key="card-sprint-burndown"):
-                    visible = _builtin_card_header("Sprint Burndown", "#7ea8ff", "built-in",
-                                                   "sprint_builtin_burndown", store)
-                    if visible:
-                        st.plotly_chart(fig, key="sprint-burndown", theme=None,
-                                        config=PLOTLY_CONFIG, use_container_width=True)
-            else:
-                with st.container(key="card-sprint-velocity"):
-                    visible = _builtin_card_header("Sprint Velocity", "#5fd4a0", "built-in",
-                                                   "sprint_builtin_velocity", store)
-                    if visible:
-                        history = meta.get("velocity_history") or []
-                        if history:
-                            st.caption(f"Showing velocity across {len(history)} previous sprint(s) + current")
-                        st.plotly_chart(fig, key="sprint-velocity", theme=None,
-                                        config=PLOTLY_CONFIG, use_container_width=True)
+    with st.container(key="card-sprint-burndown"):
+        head, toggle = st.columns([9, 1.5], vertical_alignment="center")
+        with head:
+            card_title("Sprint Burndown", "#7ea8ff", "built-in")
+        if toggle.button("✕ Hide" if visible else "＋ Show", key="btn-burndown-toggle",
+                         type="tertiary"):
+            store.set_setting("sprint_builtin_burndown", not visible)
+            st.rerun()
+        if visible:
+            st.plotly_chart(fig, key="sprint-burndown", theme=None,
+                            config=PLOTLY_CONFIG, use_container_width=True)
 
 
 # ── Report rendering (same as Dashboard) ─────────────────────────────────────
@@ -496,8 +537,11 @@ def render(store: Store, ds: Dataset) -> None:
     if editing:
         tiles.render(store, ds, filtered)
 
-    # Built-in sprint charts (burndown + velocity) — always shown, not part of report system
-    _builtin_charts(filtered, sprint_meta, meta, store)
+    # Burndown (built-in, hideable)
+    _burndown_section(store, filtered, sprint_meta)
+
+    # Velocity data section (diagnostic table + save-as-dataset for Report Builder)
+    _velocity_data_section(store, ds, filtered, meta)
 
     if not reports:
         st.info("No saved reports yet — build one in **🧮 Report Builder** and save it.")
