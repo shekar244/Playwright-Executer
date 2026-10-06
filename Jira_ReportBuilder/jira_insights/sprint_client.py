@@ -29,6 +29,11 @@ class SprintClient:
             data = self._client._get("/rest/agile/1.0/board", {
                 "projectKeyOrId": project_key, "startAt": start, "maxResults": 50,
             })
+            if isinstance(data, list):
+                boards.extend(d for d in data if isinstance(d, dict))
+                break
+            if not isinstance(data, dict):
+                break
             batch = data.get("values") or []
             boards.extend(batch)
             if data.get("isLast", True) or not batch:
@@ -46,6 +51,11 @@ class SprintClient:
         while True:
             params["startAt"] = start
             data = self._client._get(f"/rest/agile/1.0/board/{int(board_id)}/sprint", params)
+            if isinstance(data, list):
+                sprints.extend(d for d in data if isinstance(d, dict))
+                break
+            if not isinstance(data, dict):
+                break
             batch = data.get("values") or []
             sprints.extend(batch)
             if data.get("isLast", True) or not batch:
@@ -54,7 +64,8 @@ class SprintClient:
         return sprints
 
     def sprint(self, sprint_id: int) -> dict:
-        return self._client._get(f"/rest/agile/1.0/sprint/{int(sprint_id)}")
+        data = self._client._get(f"/rest/agile/1.0/sprint/{int(sprint_id)}")
+        return data if isinstance(data, dict) else {}
 
     def active_sprints_across_boards(self, project_keys: list[str]) -> list[dict]:
         """Active sprints across multiple projects (de-duplicated by sprint id)."""
@@ -130,25 +141,62 @@ class SprintClient:
             else:
                 raise
 
-        sprints_data = data.get("sprints") or {}
-        velocity_stats = data.get("velocityStatEntries") or {}
+        if not isinstance(data, dict):
+            return []
+
+        raw_sprints = data.get("sprints") or {}
+        raw_stats = data.get("velocityStatEntries") or {}
+
+        # Normalize sprints: API returns a dict {id: {...}} or a list [{id, name, ...}]
+        if isinstance(raw_sprints, list):
+            sprints_data = {str(s.get("id", "")): s for s in raw_sprints if isinstance(s, dict)}
+        elif isinstance(raw_sprints, dict):
+            sprints_data = raw_sprints
+        else:
+            sprints_data = {}
+
+        # Normalize velocity stats: dict {id: {estimated, completed}} or list
+        if isinstance(raw_stats, list):
+            velocity_stats = {}
+            for entry in raw_stats:
+                if isinstance(entry, dict):
+                    sid = str(entry.get("sprintId", entry.get("id", "")))
+                    if sid:
+                        velocity_stats[sid] = entry
+        elif isinstance(raw_stats, dict):
+            velocity_stats = raw_stats
+        else:
+            velocity_stats = {}
 
         result = []
         for sprint_id_str, stats in velocity_stats.items():
-            sprint_id = int(sprint_id_str)
-            sprint_info = sprints_data.get(sprint_id_str) or sprints_data.get(sprint_id, {})
+            try:
+                sprint_id = int(sprint_id_str)
+            except (ValueError, TypeError):
+                continue
+            sprint_info = sprints_data.get(sprint_id_str) or sprints_data.get(str(sprint_id), {})
 
-            estimated = stats.get("estimated") or {}
-            completed_stat = stats.get("completed") or {}
+            estimated = stats.get("estimated") or stats.get("committedEstimate") or {}
+            completed_stat = stats.get("completed") or stats.get("completedEstimate") or {}
+
+            # Values can be {"value": N} dicts or plain numbers
+            committed_val = estimated.get("value", estimated) if isinstance(estimated, dict) else estimated
+            completed_val = completed_stat.get("value", completed_stat) if isinstance(completed_stat, dict) else completed_stat
+
+            try:
+                committed_f = float(committed_val or 0)
+                completed_f = float(completed_val or 0)
+            except (TypeError, ValueError):
+                committed_f, completed_f = 0.0, 0.0
 
             result.append({
-                "name": sprint_info.get("name", f"Sprint {sprint_id}"),
+                "name": sprint_info.get("name", f"Sprint {sprint_id}") if isinstance(sprint_info, dict) else f"Sprint {sprint_id}",
                 "id": sprint_id,
-                "committed": float(estimated.get("value", 0)),
-                "completed": float(completed_stat.get("value", 0)),
-                "startDate": sprint_info.get("startDate", ""),
-                "endDate": sprint_info.get("endDate") or sprint_info.get("completeDate", ""),
-                "state": sprint_info.get("state", "closed"),
+                "committed": committed_f,
+                "completed": completed_f,
+                "startDate": sprint_info.get("startDate", "") if isinstance(sprint_info, dict) else "",
+                "endDate": (sprint_info.get("endDate") or sprint_info.get("completeDate", "")) if isinstance(sprint_info, dict) else "",
+                "state": sprint_info.get("state", "closed") if isinstance(sprint_info, dict) else "closed",
             })
 
         # Sort chronologically by start date (or sprint id as fallback)
