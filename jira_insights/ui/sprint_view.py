@@ -272,35 +272,93 @@ def _velocity_chart(filtered, meta: dict) -> go.Figure | None:
     return fig
 
 
-def _builtin_charts(filtered, sprint_meta, meta: dict) -> None:
-    """Render the sprint-specific built-in charts that live outside the report system."""
+def _builtin_card_header(name: str, accent: str, code: str, toggle_key: str, store: Store) -> bool:
+    """Card header for built-in charts with a hide toggle. Returns True if visible."""
+    visible = store.get_setting(toggle_key) is not False  # default visible
+    head, toggle = st.columns([9, 1.5], vertical_alignment="center")
+    with head:
+        card_title(name, accent, code)
+    if toggle.button("✕ Hide" if visible else "＋ Show", key=f"btn-{toggle_key}",
+                     type="tertiary", help="Hide or show this built-in chart"):
+        store.set_setting(toggle_key, not visible)
+        st.rerun()
+    return visible
+
+
+def _builtin_charts(filtered, sprint_meta, meta: dict, store: Store) -> None:
+    """Render the sprint-specific built-in charts with hide/show controls."""
     burndown_fig = _burndown_chart(filtered, sprint_meta)
     velocity_fig = _velocity_chart(filtered, meta)
-    if not burndown_fig and not velocity_fig:
+
+    show_burndown = burndown_fig is not None
+    show_velocity = velocity_fig is not None
+
+    if not show_burndown and not show_velocity:
+        # Check if they're hidden — show a restore hint
+        bd_hidden = store.get_setting("sprint_builtin_burndown") is False
+        vl_hidden = store.get_setting("sprint_builtin_velocity") is False
+        if bd_hidden or vl_hidden:
+            hidden_names = []
+            if bd_hidden:
+                hidden_names.append("Burndown")
+            if vl_hidden:
+                hidden_names.append("Velocity")
+            st.caption(f"Hidden built-in charts: {', '.join(hidden_names)}")
+            if st.button("Show all built-in charts", key="sprint-show-all-builtin", type="tertiary"):
+                store.set_setting("sprint_builtin_burndown", True)
+                store.set_setting("sprint_builtin_velocity", True)
+                st.rerun()
         return
 
-    if burndown_fig and velocity_fig:
+    # Check visibility settings
+    bd_visible = store.get_setting("sprint_builtin_burndown") is not False
+    vl_visible = store.get_setting("sprint_builtin_velocity") is not False
+
+    charts_to_show = []
+    if show_burndown and bd_visible:
+        charts_to_show.append(("burndown", burndown_fig))
+    if show_velocity and vl_visible:
+        charts_to_show.append(("velocity", velocity_fig))
+
+    if len(charts_to_show) == 2:
         c1, c2 = st.columns(2, gap="medium")
-        with c1:
-            with st.container(key="card-sprint-burndown"):
-                card_title("Sprint Burndown", "#7ea8ff", "built-in")
-                st.plotly_chart(burndown_fig, key="sprint-burndown", theme=None,
-                                config=PLOTLY_CONFIG, use_container_width=True)
-        with c2:
-            with st.container(key="card-sprint-velocity"):
-                card_title("Sprint Velocity", "#5fd4a0", "built-in")
-                st.plotly_chart(velocity_fig, key="sprint-velocity", theme=None,
-                                config=PLOTLY_CONFIG, use_container_width=True)
-    elif burndown_fig:
-        with st.container(key="card-sprint-burndown"):
-            card_title("Sprint Burndown", "#7ea8ff", "built-in")
-            st.plotly_chart(burndown_fig, key="sprint-burndown", theme=None,
-                            config=PLOTLY_CONFIG, use_container_width=True)
-    elif velocity_fig:
-        with st.container(key="card-sprint-velocity"):
-            card_title("Sprint Velocity", "#5fd4a0", "built-in")
-            st.plotly_chart(velocity_fig, key="sprint-velocity", theme=None,
-                            config=PLOTLY_CONFIG, use_container_width=True)
+        cols = [c1, c2]
+    elif len(charts_to_show) == 1:
+        cols = [st.container()]
+    else:
+        # All hidden — show restore hint
+        hidden = []
+        if show_burndown and not bd_visible:
+            hidden.append("Burndown")
+        if show_velocity and not vl_visible:
+            hidden.append("Velocity")
+        if hidden:
+            st.caption(f"Hidden: {', '.join(hidden)}")
+            if st.button("Show all", key="sprint-restore-builtin", type="tertiary"):
+                store.set_setting("sprint_builtin_burndown", True)
+                store.set_setting("sprint_builtin_velocity", True)
+                st.rerun()
+        return
+
+    for i, (chart_type, fig) in enumerate(charts_to_show):
+        with cols[i]:
+            if chart_type == "burndown":
+                with st.container(key="card-sprint-burndown"):
+                    visible = _builtin_card_header("Sprint Burndown", "#7ea8ff", "built-in",
+                                                   "sprint_builtin_burndown", store)
+                    if visible:
+                        st.plotly_chart(fig, key="sprint-burndown", theme=None,
+                                        config=PLOTLY_CONFIG, use_container_width=True)
+            else:
+                with st.container(key="card-sprint-velocity"):
+                    visible = _builtin_card_header("Sprint Velocity", "#5fd4a0", "built-in",
+                                                   "sprint_builtin_velocity", store)
+                    if visible:
+                        history = meta.get("velocity_history") or []
+                        if history:
+                            st.caption(f"Showing velocity across {len(history)} previous sprint(s) + current")
+                        st.plotly_chart(fig, key="sprint-velocity", theme=None,
+                                        config=PLOTLY_CONFIG, use_container_width=True)
 
 
 # ── Report rendering (same as Dashboard) ─────────────────────────────────────
@@ -319,24 +377,40 @@ def _focus_on(report_id: str | None) -> None:
     st.rerun()
 
 
-def _card_header(report, accent: str) -> None:
-    head, expand, edit = st.columns([8, 1, 1], vertical_alignment="center")
+def _remove_from_dashboard(store: Store, ds_slug: str, report_id: str) -> None:
+    """Remove a report from this dataset's dashboard layout."""
+    rows = store.get_dashboard(ds_slug)
+    if rows is None:
+        reports = store.list_reports()
+        columns = store.dataset_columns(ds_slug)
+        usable = [r for r in reports if not (r.required_columns() - columns)]
+        rows = layout.default_layout(usable)
+    new_rows = [[rid for rid in row if rid != report_id] for row in rows]
+    new_rows = [row for row in new_rows if row]
+    store.set_dashboard(ds_slug, new_rows)
+    st.rerun()
+
+
+def _card_header(report, accent: str, store: Store = None, ds_slug: str = "") -> None:
+    head, expand, edit, remove = st.columns([7, 1, 1, 1], vertical_alignment="center")
     with head:
         card_title(report.name, accent, report.code)
     if expand.button("⛶", key=f"sf-{report.id}", help="Open this report full screen", type="tertiary"):
         _focus_on(report.id)
     if edit.button("✎", key=f"se-{report.id}", help="Edit in Report Builder", type="tertiary"):
         _open_in_builder(report.id)
+    if store and remove.button("✕", key=f"sx-{report.id}", help="Remove from this dashboard", type="tertiary"):
+        _remove_from_dashboard(store, ds_slug, report.id)
 
 
-def _row(reports: list, ds: Dataset, df) -> None:
+def _row(reports: list, ds: Dataset, df, store: Store) -> None:
     prepared = [prepare_report(r, ds, df) for r in reports]
     height = max((p.height for p in prepared), default=0) or None
     for col, report, prep in zip(st.columns(len(reports), gap="medium"), reports, prepared):
         with col:
             accent = accent_for(report.id or report.name)
             with st.container(key=f"scard-{report.id}"):
-                _card_header(report, accent)
+                _card_header(report, accent, store, ds.slug)
                 show_report(prep, ds, key=f"sr-{report.id}", accent=accent, height=height,
                             table=None if report.chart == "Number" else "expander")
 
@@ -423,7 +497,7 @@ def render(store: Store, ds: Dataset) -> None:
         tiles.render(store, ds, filtered)
 
     # Built-in sprint charts (burndown + velocity) — always shown, not part of report system
-    _builtin_charts(filtered, sprint_meta, meta)
+    _builtin_charts(filtered, sprint_meta, meta, store)
 
     if not reports:
         st.info("No saved reports yet — build one in **🧮 Report Builder** and save it.")
@@ -442,7 +516,7 @@ def render(store: Store, ds: Dataset) -> None:
 
     # Render report rows
     for row in rows:
-        _row([by_id[i] for i in row], ds, filtered)
+        _row([by_id[i] for i in row], ds, filtered, store)
 
     if not rows:
         st.info("No reports on this dashboard — turn on **🧩 Reports** to add some.")

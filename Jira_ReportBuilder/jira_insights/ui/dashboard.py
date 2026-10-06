@@ -47,17 +47,33 @@ def _focus_on(report_id: str | None) -> None:
     st.rerun()
 
 
-def _card_header(report, accent: str) -> None:
-    head, expand, edit = st.columns([8, 1, 1], vertical_alignment="center")
+def _remove_from_dashboard(store: Store, ds_slug: str, report_id: str) -> None:
+    """Remove a report from this dataset's dashboard layout."""
+    rows = store.get_dashboard(ds_slug)
+    if rows is None:
+        reports = store.list_reports()
+        columns = store.dataset_columns(ds_slug)
+        usable = [r for r in reports if not (r.required_columns() - columns)]
+        rows = layout.default_layout(usable)
+    new_rows = [[rid for rid in row if rid != report_id] for row in rows]
+    new_rows = [row for row in new_rows if row]
+    store.set_dashboard(ds_slug, new_rows)
+    st.rerun()
+
+
+def _card_header(report, accent: str, store: Store = None, ds_slug: str = "") -> None:
+    head, expand, edit, remove = st.columns([7, 1, 1, 1], vertical_alignment="center")
     with head:
         card_title(report.name, accent, report.code)
     if expand.button("⛶", key=f"focus-{report.id}", help="Open this report full screen", type="tertiary"):
         _focus_on(report.id)
     if edit.button("✎", key=f"edit-{report.id}", help="Edit in Report Builder", type="tertiary"):
         open_in_builder(report.id)
+    if store and remove.button("✕", key=f"rm-{report.id}", help="Remove from this dashboard", type="tertiary"):
+        _remove_from_dashboard(store, ds_slug, report.id)
 
 
-def _row(reports: list, ds: Dataset, df) -> None:
+def _row(reports: list, ds: Dataset, df, store: Store = None) -> None:
     """One dashboard row: equal widths, and every chart at the tallest chart's height."""
     prepared = [prepare_report(r, ds, df) for r in reports]
     height = max((p.height for p in prepared), default=0) or None
@@ -65,7 +81,7 @@ def _row(reports: list, ds: Dataset, df) -> None:
         with col:
             accent = accent_for(report.id or report.name)
             with st.container(key=f"card-{report.id}"):
-                _card_header(report, accent)
+                _card_header(report, accent, store, ds.slug)
                 show_report(prep, ds, key=f"dash-{report.id}", accent=accent, height=height,
                             table=None if report.chart == "Number" else "expander")
 
@@ -147,7 +163,7 @@ def render(store: Store, ds: Dataset) -> None:
             st.rerun()
 
     for row in rows:
-        _row([by_id[i] for i in row], ds, filtered)
+        _row([by_id[i] for i in row], ds, filtered, store)
 
     if not rows:
         st.info("No reports on this dashboard — turn on **🧩 Reports** to add some.")

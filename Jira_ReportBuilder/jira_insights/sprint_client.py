@@ -128,17 +128,51 @@ class SprintClient:
         if not past:
             return []
 
+        # Resolve story points field name from Jira field metadata
+        try:
+            fn = self._client.field_names()
+        except JiraError:
+            fn = {}
+        pts_field = _find_points_field(fn)
+
         all_ids = [s["id"] for s in past]
+        # Use *navigable to get sprint field (often a custom field) and story points
         issues = self.multi_sprint_issues(all_ids, project_key=project_key,
-                                          fields="sprint,status,customfield_10016,story_points",
+                                          fields="*navigable",
                                           max_issues=20000, on_progress=on_progress)
 
-        from .sprint_transform import _assign_sprint_id
+        # Build a name→id map from the known sprints for assignment
+        name_to_id = {s.get("name", ""): s["id"] for s in past}
         per_sprint: dict[int, dict] = {s["id"]: {"committed": 0.0, "completed": 0.0} for s in past}
+
+        from .sprint_transform import _assign_sprint_id, _extract_sprint_name
+        from .transform import flatten_value
         for issue in issues:
             fields = issue.get("fields") or {}
-            pts = _safe_points(fields)
+            pts = _safe_points(fields, pts_field)
+
+            # Try structured assignment first, fall back to name matching
             sid = _assign_sprint_id(fields, set(per_sprint))
+            if sid is None:
+                sprint_raw = fields.get("sprint")
+                if sprint_raw is None:
+                    # Try all fields for a sprint-like value
+                    for fid, val in fields.items():
+                        if fid.startswith("customfield_") and val is not None:
+                            flat = flatten_value(val)
+                            if isinstance(flat, str) and flat in name_to_id:
+                                sid = name_to_id[flat]
+                                break
+                elif isinstance(sprint_raw, dict):
+                    sname = sprint_raw.get("name", "")
+                    if sname in name_to_id:
+                        sid = name_to_id[sname]
+                elif isinstance(sprint_raw, list):
+                    for entry in sprint_raw:
+                        sname = entry.get("name", "") if isinstance(entry, dict) else _extract_sprint_name(entry)
+                        if sname and sname in name_to_id:
+                            sid = name_to_id[sname]
+                            break
             if sid is None:
                 continue
             per_sprint[sid]["committed"] += pts
@@ -160,10 +194,17 @@ class SprintClient:
         return result
 
 
-def _safe_points(fields: dict) -> float:
-    """Extract story points from any of the common field locations."""
+def _safe_points(fields: dict, points_field: str = "") -> float:
+    """Extract story points from the resolved field or common field locations."""
+    if points_field:
+        val = fields.get(points_field)
+        if val is not None:
+            try:
+                return float(val)
+            except (TypeError, ValueError):
+                pass
     for key in ("story_points", "customfield_10016", "customfield_10028",
-                "customfield_10014"):
+                "customfield_10014", "story_point_estimate"):
         val = fields.get(key)
         if val is not None:
             try:
@@ -171,3 +212,12 @@ def _safe_points(fields: dict) -> float:
             except (TypeError, ValueError):
                 continue
     return 0.0
+
+
+def _find_points_field(field_names: dict[str, str]) -> str:
+    """Find the story points field ID by display name."""
+    targets = {"story points", "story point estimate"}
+    for fid, name in field_names.items():
+        if name.lower() in targets:
+            return fid
+    return ""
