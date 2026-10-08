@@ -19,6 +19,7 @@ import plotly.graph_objects as go
 from .chart_theme import (  # noqa: F401 — re-exported for callers and tests
     AXIS, CRITICAL, DATE_HOVER, DATE_TICKS, DEFAULT_THEME, GAUGE_TRACK, GOOD, GRID, HOVER_BG, INK, INK_MUTED,
     LIGHT_GOOD, OTHER_COLOR, PLOTLY_CONFIG, SERIOUS, STATUS_COLORS, SURFACE, TEMPLATE, THEMES, WARNING, Theme,
+    ColorScheme, DARK_SCHEME, LIGHT_SCHEME, get_scheme, make_template,
     row_label, value_format)
 from .dials import _gauges, _gauge_values, _meters, band_colors, dial_range, gauge_color  # noqa: F401
 from .pivot import DIALS, OTHER, PivotResult, ReportSpec
@@ -77,9 +78,10 @@ def _wash(hex_color: str, top: float) -> dict:
 
 # ── Figure builders ───────────────────────────────────────────────────────────
 
-def _empty(message: str = "No issues match this report") -> go.Figure:
-    fig = go.Figure(layout=dict(template=TEMPLATE, height=220))
-    fig.add_annotation(text=message, showarrow=False, font=dict(color=INK_MUTED, size=13),
+def _empty(message: str = "No issues match this report", scheme: ColorScheme | None = None) -> go.Figure:
+    s = scheme or DARK_SCHEME
+    fig = go.Figure(layout=dict(template=make_template(s), height=220))
+    fig.add_annotation(text=message, showarrow=False, font=dict(color=s.ink_muted, size=13),
                        xref="paper", yref="paper", x=0.5, y=0.5)
     fig.update_xaxes(visible=False)
     fig.update_yaxes(visible=False)
@@ -105,12 +107,14 @@ def _category_axis(fig: go.Figure, result: PivotResult, spec: ReportSpec, axis: 
         update(type="category", categoryorder="array", categoryarray=result.row_order)
 
 
-def _bars(result: PivotResult, spec: ReportSpec, colors: dict, theme: Theme) -> go.Figure:
+def _bars(result: PivotResult, spec: ReportSpec, colors: dict, theme: Theme,
+          scheme: ColorScheme | None = None) -> go.Figure:
+    s = scheme or DARK_SCHEME
     horizontal = spec.chart in ("Bar", "Stacked bar")
     stacked = spec.chart.startswith("Stacked") or (spec.normalize and bool(spec.series))
     fmt, suffix = value_format(spec)
     multi = bool(result.series_order)
-    fig = go.Figure(layout=dict(template=TEMPLATE, barmode="stack" if stacked else "group"))
+    fig = go.Figure(layout=dict(template=make_template(s), barmode="stack" if stacked else "group"))
     for name, frame in _series_frames(result, spec):
         cats, vals = frame[spec.rows], frame["Value"]
         if multi or not colors:
@@ -124,13 +128,13 @@ def _bars(result: PivotResult, spec: ReportSpec, colors: dict, theme: Theme) -> 
         fig.add_bar(
             x=vals if horizontal else cats, y=cats if horizontal else vals,
             name=str(name), orientation="h" if horizontal else "v",
-            marker=dict(color=fill, line=dict(color=SURFACE, width=2 if stacked or multi else 0)),
+            marker=dict(color=fill, line=dict(color=s.surface, width=2 if stacked or multi else 0)),
             hovertemplate=f"<b>{value_ref}:{fmt}}}{suffix}</b><br>{cat_ref}"
                           + ("<extra>%{fullData.name}</extra>" if multi else "<extra></extra>"),
             text=vals if spec.show_labels else None,
             texttemplate=f"%{{text:{fmt}}}{suffix}" if spec.show_labels else None,
             textposition="inside" if stacked else "outside",
-            insidetextfont=dict(color=ink), outsidetextfont=dict(color=INK_MUTED),
+            insidetextfont=dict(color=ink), outsidetextfont=dict(color=s.ink_muted),
             cliponaxis=False,
         )
     _category_axis(fig, result, spec, "y" if horizontal else "x")
@@ -144,77 +148,83 @@ def _bars(result: PivotResult, spec: ReportSpec, colors: dict, theme: Theme) -> 
     return fig
 
 
-def _lines(result: PivotResult, spec: ReportSpec, colors: dict, theme: Theme) -> go.Figure:
+def _lines(result: PivotResult, spec: ReportSpec, colors: dict, theme: Theme,
+           scheme: ColorScheme | None = None) -> go.Figure:
+    s = scheme or DARK_SCHEME
     area = spec.chart == "Area"
     fmt, suffix = value_format(spec)
     multi = bool(result.series_order)
-    fig = go.Figure(layout=dict(template=TEMPLATE, hovermode="x unified"))
+    fig = go.Figure(layout=dict(template=make_template(s), hovermode="x unified"))
     for name, frame in _series_frames(result, spec):
         color = colors.get(name, theme.palette[0])
         n = len(frame)
-        # Selective labels: only the end value of each line.
         labels = [""] * (n - 1) + [format(frame["Value"].iloc[-1], fmt) + suffix] if spec.show_labels and n else None
-        # Areas stack with a gradient wash per band; a lone line gets a soft glow beneath it.
         fill = "tonexty" if area else ("tozeroy" if not multi else None)
         fig.add_scatter(
             x=frame[spec.rows], y=frame["Value"], name=str(name),
             mode=("lines+markers" if n <= 40 else "lines") + ("+text" if labels else ""),
             line=dict(color=color, width=2, shape="linear"),
-            marker=dict(size=8, color=color, line=dict(color=SURFACE, width=2)),
+            marker=dict(size=8, color=color, line=dict(color=s.surface, width=2)),
             stackgroup="one" if area else None, fill=fill,
             fillgradient=_wash(color, 0.42 if area else 0.28) if fill else None,
-            text=labels, textposition="middle right", textfont=dict(color=INK_MUTED),
+            text=labels, textposition="middle right", textfont=dict(color=s.ink_muted),
             hovertemplate=f"<b>%{{y:{fmt}}}{suffix}</b>" + ("  %{fullData.name}" if multi else "") + "<extra></extra>",
             cliponaxis=False,
         )
     _category_axis(fig, result, spec, "x")
-    fig.update_xaxes(showspikes=True, spikemode="across", spikethickness=1, spikecolor=AXIS,
+    fig.update_xaxes(showspikes=True, spikemode="across", spikethickness=1, spikecolor=s.axis,
                      spikedash="solid", spikesnap="data")
     fig.update_layout(showlegend=multi)
     return fig
 
 
-def _donut(result: PivotResult, spec: ReportSpec, colors: dict, theme: Theme) -> go.Figure:
+def _donut(result: PivotResult, spec: ReportSpec, colors: dict, theme: Theme,
+           scheme: ColorScheme | None = None) -> go.Figure:
+    s = scheme or DARK_SCHEME
     fmt, _ = value_format(spec)
     labels = [str(r) for r in result.long[spec.rows]]
-    fig = go.Figure(layout=dict(template=TEMPLATE))
+    fig = go.Figure(layout=dict(template=make_template(s)))
     fig.add_pie(
         labels=labels, values=result.long["Value"], hole=0.66, sort=False, direction="clockwise",
         marker=dict(colors=[colors.get(r, theme.palette[0]) for r in result.long[spec.rows]],
-                    line=dict(color=SURFACE, width=3)),
+                    line=dict(color=s.surface, width=3)),
         textinfo="percent" if spec.show_labels else "none",
-        textfont=dict(color=INK), insidetextorientation="horizontal",
+        textfont=dict(color=s.ink), insidetextorientation="horizontal",
         hovertemplate=f"<b>%{{value:{fmt}}}</b> · %{{percent}}<br>%{{label}}<extra></extra>",
     )
     total = result.long["Value"].sum()
     fig.add_annotation(
         text=f"<b style='font-size:28px'>{format(total, fmt)}</b>"
-             f"<br><span style='font-size:11px;color:{INK_MUTED}'>{spec.value_label}</span>",
-        showarrow=False, x=0.5, y=0.5, xref="paper", yref="paper", font=dict(color=INK))
+             f"<br><span style='font-size:11px;color:{s.ink_muted}'>{spec.value_label}</span>",
+        showarrow=False, x=0.5, y=0.5, xref="paper", yref="paper", font=dict(color=s.ink))
     fig.update_layout(legend=dict(orientation="v", x=1.02, xanchor="left", y=0.5, yanchor="middle"))
     return fig
 
 
-def _heatmap(result: PivotResult, spec: ReportSpec, theme: Theme) -> go.Figure:
+def _heatmap(result: PivotResult, spec: ReportSpec, theme: Theme,
+             scheme: ColorScheme | None = None) -> go.Figure:
+    s = scheme or DARK_SCHEME
     fmt, suffix = value_format(spec)
     table = result.table.drop(columns=["Total"], errors="ignore")
     rows = [row_label(r, result, spec) for r in table.index]
     cols = [str(c) for c in table.columns]
     ramp = theme.sequential
     scale = [[i / (len(ramp) - 1), c] for i, c in enumerate(ramp)]
-    fig = go.Figure(layout=dict(template=TEMPLATE))
+    fig = go.Figure(layout=dict(template=make_template(s)))
     fig.add_heatmap(
         z=table.values, x=cols, y=rows, colorscale=scale, xgap=3, ygap=3, hoverongaps=False,
         hovertemplate=f"<b>%{{z:{fmt}}}{suffix}</b><br>%{{y}} · %{{x}}<extra></extra>",
         texttemplate=f"%{{z:{fmt}}}" if spec.show_labels else None,
-        colorbar=dict(thickness=10, outlinewidth=0, tickfont=dict(color=INK_MUTED, size=10)),
+        colorbar=dict(thickness=10, outlinewidth=0, tickfont=dict(color=s.ink_muted, size=10)),
     )
     fig.update_xaxes(type="category", showgrid=False, side="top")
     fig.update_yaxes(type="category", showgrid=False, autorange="reversed")
     return fig
 
 
-def _treemap(result: PivotResult, spec: ReportSpec, colors: dict, theme: Theme) -> go.Figure:
+def _treemap(result: PivotResult, spec: ReportSpec, colors: dict, theme: Theme,
+             scheme: ColorScheme | None = None) -> go.Figure:
+    s = scheme or DARK_SCHEME
     fmt, _ = value_format(spec)
     long = result.long
     row_totals = long.groupby(spec.rows, sort=False)["Value"].sum()
@@ -228,10 +238,10 @@ def _treemap(result: PivotResult, spec: ReportSpec, colors: dict, theme: Theme) 
             for _, rec in long[long[spec.rows] == row].iterrows():
                 ids.append(f"r::{row}::{rec[spec.series]}"); labels.append(str(rec[spec.series]))
                 parents.append(f"r::{row}"); values.append(rec["Value"]); fills.append(_rgba(color, 0.78))
-    fig = go.Figure(layout=dict(template=TEMPLATE, margin=dict(l=4, r=4, t=8, b=4)))
+    fig = go.Figure(layout=dict(template=make_template(s), margin=dict(l=4, r=4, t=8, b=4)))
     fig.add_treemap(
         ids=ids, labels=labels, parents=parents, values=values, branchvalues="total",
-        marker=dict(colors=fills, line=dict(color=SURFACE, width=2), cornerradius=6),
+        marker=dict(colors=fills, line=dict(color=s.surface, width=2), cornerradius=6),
         textinfo="label+value" if spec.show_labels else "label",
         texttemplate=f"%{{label}}<br>%{{value:{fmt}}}" if spec.show_labels else "%{label}",
         hovertemplate=f"<b>%{{value:{fmt}}}</b><br>%{{label}}<extra></extra>",
@@ -319,7 +329,7 @@ def apply_overrides(colors: dict, spec: ReportSpec, overrides: dict | None) -> d
 
 def build_figure(result: PivotResult, spec: ReportSpec, color_order: list | tuple = (),
                  theme: str = DEFAULT_THEME, height: int | None = None,
-                 overrides: dict | None = None) -> go.Figure:
+                 overrides: dict | None = None, dark: bool = True) -> go.Figure:
     """Chart for every type except Number, which the UI renders as a stat tile.
 
     `height` overrides the natural height — the dashboard passes the tallest
@@ -327,32 +337,35 @@ def build_figure(result: PivotResult, spec: ReportSpec, color_order: list | tupl
     `overrides` (category → #rrggbb) replaces automatic colours — see effective_overrides."""
     if spec.chart == "Number":
         raise ValueError("Number reports render as stat tiles, not figures")
+    scheme = get_scheme(dark)
+    tmpl = make_template(scheme)
     if spec.chart == "Gauge":
-        fig = _gauges(result, spec)
+        fig = _gauges(result, spec, scheme=scheme)
     elif spec.chart == "Meter":
-        fig = _meters(result, spec)
+        fig = _meters(result, spec, scheme=scheme)
     else:
-        fig = _empty() if result.empty else _chart(result, spec, color_order,
-                                                    THEMES.get(theme, THEMES[DEFAULT_THEME]), overrides)
-    # Set explicitly — Streamlit repaints a paper colour that only comes from the template.
-    fig.update_layout(paper_bgcolor=SURFACE, plot_bgcolor=SURFACE,
+        fig = _empty(scheme=scheme) if result.empty else _chart(result, spec, color_order,
+                                                    THEMES.get(theme, THEMES[DEFAULT_THEME]), overrides,
+                                                    scheme=scheme)
+    fig.update_layout(template=tmpl, paper_bgcolor=scheme.surface, plot_bgcolor=scheme.surface,
                       height=max(height or 0, natural_height(result, spec)))
     return fig
 
 
-def _chart(result: PivotResult, spec: ReportSpec, color_order, theme: Theme, overrides: dict | None = None) -> go.Figure:
+def _chart(result: PivotResult, spec: ReportSpec, color_order, theme: Theme,
+           overrides: dict | None = None, scheme: ColorScheme | None = None) -> go.Figure:
     colors = apply_overrides(resolve_colors(result, spec, color_order, theme), spec, overrides)
 
     if spec.chart in _BAR_CHARTS:
-        fig = _bars(result, spec, colors, theme)
+        fig = _bars(result, spec, colors, theme, scheme=scheme)
     elif spec.chart in ("Line", "Area"):
-        fig = _lines(result, spec, colors, theme)
+        fig = _lines(result, spec, colors, theme, scheme=scheme)
     elif spec.chart == "Donut":
-        fig = _donut(result, spec, colors, theme)
+        fig = _donut(result, spec, colors, theme, scheme=scheme)
     elif spec.chart == "Heatmap":
-        fig = _heatmap(result, spec, theme)
+        fig = _heatmap(result, spec, theme, scheme=scheme)
     else:
-        fig = _treemap(result, spec, colors, theme)
+        fig = _treemap(result, spec, colors, theme, scheme=scheme)
 
     if spec.chart in ("Column", "Stacked column"):
         fig.update_layout(bargap=_column_gap(result, spec))

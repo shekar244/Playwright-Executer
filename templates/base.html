@@ -258,6 +258,37 @@
     .vtab-panel{flex:1;padding:14px 16px;overflow-y:auto;display:flex;flex-direction:column;gap:10px;min-width:0;}
     .vtab-panel.hidden{display:none;}
     .mapping-group-title{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.09em;color:var(--text-dim);border-bottom:1px solid var(--border);padding-bottom:6px;margin-bottom:2px;}
+
+    /* ── Theme toggle switch ── */
+    .theme-toggle{display:flex;align-items:center;gap:6px;cursor:pointer;user-select:none;margin-left:8px;}
+    .theme-toggle-track{width:40px;height:22px;border-radius:12px;background:var(--surface2);border:1px solid var(--border);position:relative;transition:all var(--tr);flex-shrink:0;}
+    .theme-toggle-thumb{width:16px;height:16px;border-radius:50%;background:var(--accent);position:absolute;top:2px;left:2px;transition:transform var(--tr),background var(--tr);box-shadow:0 1px 4px rgba(0,0,0,.3);}
+    .theme-toggle-track.light .theme-toggle-thumb{transform:translateX(18px);}
+    .theme-toggle-label{font-size:14px;line-height:1;}
+
+    /* ── Light theme ── */
+    body.light-theme{
+      --bg:#f5f6fa;--surface:#ffffff;--surface2:#ebedf5;--surface3:#dfe2ec;
+      --border:#d0d4e2;--border-hover:#b8bdd0;
+      --border-focus:rgba(80,120,200,0.45);--text:#1a1d2e;--text-dim:#6b7294;
+      --text-muted:#4a5070;--accent:#4a80e0;--accent-glow:rgba(74,128,224,0.10);
+      --accent-border:rgba(74,128,224,0.28);
+      --green:#2e8b57;--green-glow:rgba(46,139,87,0.12);--red:#d04060;
+      --red-glow:rgba(208,64,96,0.12);--yellow:#c08820;--yellow-glow:rgba(192,136,32,0.12);
+      --teal:#2a9080;--purple:#7860c0;--peach:#c07040;
+      --header-bg:rgba(245,246,250,0.95);--input-bg:#ffffff;--input-border:#d0d4e2;--log-bg:#f0f1f6;
+      --shadow-sm:0 1px 4px rgba(0,0,0,0.06);--shadow-md:0 4px 12px rgba(0,0,0,0.08);
+      --shadow-lg:0 8px 24px rgba(0,0,0,0.10);
+    }
+    body.light-theme header::after{background:linear-gradient(90deg,var(--accent) 0%,var(--purple) 40%,transparent 70%);opacity:0.25;}
+    body.light-theme .logo-mark{background:linear-gradient(135deg,#4a80e0 0%,#7860c0 100%);box-shadow:0 0 12px rgba(74,128,224,0.25),0 2px 4px rgba(0,0,0,.1);}
+    body.light-theme select option{background:#ffffff;}
+    body.light-theme .log-cmd{color:#7860c0;} body.light-theme .log-sep{color:#d0d4e2;}
+    body.light-theme .log-passed{color:#2e8b57;} body.light-theme .log-failed{color:#d04060;}
+    body.light-theme .log-warning{color:#c08820;} body.light-theme .log-info{color:#2a9080;}
+    body.light-theme .log-highlight{color:#c07040;} body.light-theme .log-default{color:#4a5070;}
+    body.light-theme ::-webkit-scrollbar-thumb{background:var(--border);}
+    body.light-theme ::-webkit-scrollbar-thumb:hover{background:var(--border-hover);}
   </style>
 </head>
 <body>
@@ -271,6 +302,12 @@
   <div class="header-right">
     <span class="version-badge">v1.0.0</span>
     <a href="/readme" target="_blank" class="help-link" title="Open documentation">Docs</a>
+    <div class="theme-toggle" onclick="toggleTheme()" title="Toggle dark / light theme">
+      <span class="theme-toggle-label" id="themeIcon">🌙</span>
+      <div class="theme-toggle-track" id="themeTrack">
+        <div class="theme-toggle-thumb"></div>
+      </div>
+    </div>
   </div>
 </header>
 
@@ -496,6 +533,28 @@ function applyUiTabs(tabs) {
     }
   });
 }
+
+// ── Theme toggle ─────────────────────────────────────────────────────────────
+function applyTheme(light) {
+  document.body.classList.toggle('light-theme', light);
+  const track = document.getElementById('themeTrack');
+  const icon = document.getElementById('themeIcon');
+  if (track) track.classList.toggle('light', light);
+  if (icon) icon.textContent = light ? '☀️' : '🌙';
+}
+
+function toggleTheme() {
+  const isLight = !document.body.classList.contains('light-theme');
+  applyTheme(isLight);
+  try { localStorage.setItem('amplify-theme', isLight ? 'light' : 'dark'); } catch(e) {}
+}
+
+(function() {
+  try {
+    const saved = localStorage.getItem('amplify-theme');
+    if (saved === 'light') applyTheme(true);
+  } catch(e) {}
+})();
 
 async function init() {
   const cfg = await fetch('/api/config').then(r => r.json()).catch(() => ({}));

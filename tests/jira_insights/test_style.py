@@ -37,8 +37,8 @@ def test_number_tile_can_stretch_to_its_row():
 def test_cards_never_trap_the_fullscreen_overlay():
     # transform / overflow:hidden on a card make Streamlit's fixed fullscreen view render inside it.
     import re
-    from jira_insights.ui.style import _CSS
-    css = re.sub(r"/\*.*?\*/", "", _CSS, flags=re.S)
+    from jira_insights.ui.style import _CSS_DARK
+    css = re.sub(r"/\*.*?\*/", "", _CSS_DARK, flags=re.S)
     card_rules = [block for block in css.split("}") if 'st-key-card-' in block]
     assert card_rules and not any("transform" in r or "overflow: hidden" in r for r in card_rules)
 

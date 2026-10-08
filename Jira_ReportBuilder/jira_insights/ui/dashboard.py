@@ -18,7 +18,7 @@ from ..store import Store
 from . import membership, tiles
 from .builder import CHART_ICONS
 from .common import Dataset, filter_bar, prepare_report, show_report
-from .style import SORTABLE_CSS, accent_for, card_title, stat_tiles_html
+from .style import SORTABLE_CSS, accent_for, card_title, get_sortable_css, stat_tiles_html
 
 _LAYOUT_KEY = "dashboard_layout"
 _NEW_ROW = "＋ Drop here to start a new row"
@@ -121,7 +121,7 @@ def _arrange(store: Store, ds: Dataset, rows: list[list[str]], reports: list) ->
         # (and a fresh empty "new row" group) instead of keeping its stale drag state.
         version = hashlib.sha1(json.dumps(rows).encode()).hexdigest()[:10]
         edited = sort_items(layout.to_containers(rows, labels, _NEW_ROW), multi_containers=True,
-                            direction="horizontal", custom_style=SORTABLE_CSS, key=f"dash-arrange-{version}")
+                            direction="horizontal", custom_style=get_sortable_css(), key=f"dash-arrange-{version}")
     return layout.from_containers(edited, labels)
 
 

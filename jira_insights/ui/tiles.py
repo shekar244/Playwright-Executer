@@ -19,7 +19,7 @@ from ..kpi import CAPTIONS, KpiSpec, Metric, evaluate, is_available
 from ..pivot import AGGREGATIONS, distinct_values
 from ..store import Store
 from .common import Dataset
-from .style import ACCENTS, SORTABLE_CSS, card_title, stat_tiles_html
+from .style import ACCENTS, SORTABLE_CSS, card_title, get_sortable_css, stat_tiles_html
 
 _METRICS = (("m", "metric"), ("d", "divide_by"), ("c", "caption_metric"))
 
@@ -148,7 +148,7 @@ def render(store: Store, ds: Dataset, df: pd.DataFrame) -> None:
         labels = _labels(tiles)
         st.caption("Drag to reorder. Pick a tile below to change its label, icon, colour and the data behind it.")
         version = hashlib.sha1(json.dumps(list(labels.values())).encode()).hexdigest()[:10]
-        order = sort_items(list(labels.values()), direction="horizontal", custom_style=SORTABLE_CSS,
+        order = sort_items(list(labels.values()), direction="horizontal", custom_style=get_sortable_css(),
                            key=f"kpi-order-{version}")
         if order != list(labels.values()):
             by_label = {lbl: rid for rid, lbl in labels.items()}

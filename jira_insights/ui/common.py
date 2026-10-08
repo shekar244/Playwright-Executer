@@ -117,7 +117,13 @@ def _display_table(result, spec: ReportSpec) -> pd.DataFrame:
         table.index = [ts.strftime(_DATE_LABELS.get(spec.date_grain, "%b %Y")) for ts in table.index]
     table.index.name = spec.rows or None
     table.columns = [str(c) for c in table.columns]
-    decimals = 0 if spec.additive and not (spec.normalize and spec.series) else 1
+    if not spec.value or spec.agg in ("Count", "Distinct count"):
+        decimals = 0
+    elif spec.normalize and spec.series:
+        decimals = 1
+    else:
+        all_int = all(float(v).is_integer() for v in table.values.flat if pd.notna(v))
+        decimals = 0 if all_int else 1
     return table.round(decimals)
 
 
@@ -152,15 +158,20 @@ def show_report(prepared: PreparedReport, ds: Dataset, *, key: str, table: str |
         st.info(prepared.note)
         return
     if spec.chart == "Number":
-        decimals = 0 if not spec.value or spec.agg in ("Count", "Distinct count") else 1
-        # Next to charts, match their height (chart + its "Table view" row) so the row lines up.
+        if not spec.value or spec.agg in ("Count", "Distinct count"):
+            decimals = 0
+        elif float(result.total).is_integer():
+            decimals = 0
+        else:
+            decimals = 1
         st.markdown(number_html(f"{result.total:,.{decimals}f}", spec.value_label, accent,
                                 min_height=height + 56 if height else 0), unsafe_allow_html=True)
         return
     order = category_rank(ds.df, _color_dimension(spec), ds.multi_cols)
     overrides = effective_overrides(spec, result, st.session_state.get("ji_category_colors"))
+    dark = st.session_state.get("ji_dark_mode", True)
     fig = build_figure(result, spec, order, theme=st.session_state.get("ji_theme", DEFAULT_THEME), height=height,
-                       overrides=overrides)
+                       overrides=overrides, dark=dark)
     config = {**PLOTLY_CONFIG,
               "toImageButtonOptions": {**PLOTLY_CONFIG["toImageButtonOptions"], "filename": slugify(spec.title)}}
     st.plotly_chart(fig, key=key, theme=None, config=config)

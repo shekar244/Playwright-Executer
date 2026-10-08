@@ -31,10 +31,13 @@ VIEWS = {"Dashboard": "📊", "Sprint Reports": "🏃", "Report Builder": "🧮"
 
 st.set_page_config(page_title="Jira Insights", page_icon="📈", layout="wide",
                    initial_sidebar_state="expanded")
+
+ss = st.session_state
+ss.setdefault("ji_dark_mode", True)
 inject_css()
 
 store = Store(workspace_dir())
-st.session_state["ji_category_colors"] = store.get_setting("category_colors", {}) or {}   # 🎨 field defaults
+ss["ji_category_colors"] = store.get_setting("category_colors", {}) or {}   # 🎨 field defaults
 ds = data_source.render_sidebar(store)
 
 if ds is None:
@@ -45,12 +48,11 @@ if ds is None:
                 "Then build reports in **🧮 Report Builder** and pin them to the **📊 Dashboard**.")
     st.stop()
 
-ss = st.session_state
 if "view_pending" in ss:
     ss.view = ss.pop("view_pending")
 ss.setdefault("view", "Dashboard")
 
-head, nav = st.columns([1.2, 2], vertical_alignment="center")
+head, nav, theme_col = st.columns([1.2, 2, 0.5], vertical_alignment="center")
 with head:
     meta = ds.meta
     source = meta.get("source")
@@ -60,6 +62,13 @@ with head:
                                      f"🕒 {meta.get('fetched_at', '')[:16].replace('T', ' ')} UTC"])
 view = nav.segmented_control("View", list(VIEWS), key="view", required=True,
                              format_func=lambda v: f"{VIEWS[v]} {v}", label_visibility="collapsed")
+with theme_col:
+    mode_label = "🌙 Dark" if ss.get("ji_dark_mode", True) else "☀️ Light"
+    dark = st.toggle(mode_label, value=ss.get("ji_dark_mode", True), key="ji_theme_toggle",
+                     help="Toggle dark / light theme")
+    if dark != ss.get("ji_dark_mode", True):
+        ss["ji_dark_mode"] = dark
+        st.rerun()
 
 if view == "Report Builder":
     builder.render(store, ds)

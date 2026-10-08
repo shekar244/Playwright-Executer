@@ -11,6 +11,7 @@ import plotly.graph_objects as go
 
 from .pivot import PivotResult, ReportSpec
 
+# ── Dark mode surface colours (default) ─────────────────────────────────────
 SURFACE   = "#181828"   # card surface (host --surface)
 INK       = "#dde3f8"
 INK_MUTED = "#8e98bc"
@@ -19,6 +20,36 @@ AXIS      = "#3a3a58"
 HOVER_BG  = "#1f1f34"
 OTHER_COLOR = "#6e6e8c"
 GAUGE_TRACK = "#262640"
+
+
+@dataclass(frozen=True)
+class ColorScheme:
+    surface: str
+    ink: str
+    ink_muted: str
+    grid: str
+    axis: str
+    hover_bg: str
+    other_color: str
+    gauge_track: str
+
+
+DARK_SCHEME = ColorScheme(
+    surface="#181828", ink="#dde3f8", ink_muted="#8e98bc",
+    grid="#2a2a42", axis="#3a3a58", hover_bg="#1f1f34",
+    other_color="#6e6e8c", gauge_track="#262640",
+)
+
+LIGHT_SCHEME = ColorScheme(
+    surface="#ffffff", ink="#1a1d2e", ink_muted="#6b7294",
+    grid="#e4e7f0", axis="#c8cdd8", hover_bg="#f0f1f6",
+    other_color="#9ea2b8", gauge_track="#e8eaf0",
+)
+
+
+def get_scheme(dark: bool = True) -> ColorScheme:
+    return DARK_SCHEME if dark else LIGHT_SCHEME
+
 
 # Reserved status colours (good / warning / serious / critical) — never used for ordinary series.
 GOOD, WARNING, SERIOUS, CRITICAL = "#0ca30c", "#fab219", "#ec835a", "#d03b3b"
@@ -65,21 +96,27 @@ DATE_HOVER = {"Day": "%d %b %Y", "Week": "Week of %d %b %Y", "Month": "%B %Y",
                "Quarter": "Quarter from %b %Y", "Year": "%Y"}
 
 
-def _template() -> go.layout.Template:
-    axis = dict(gridcolor=GRID, gridwidth=1, griddash="solid", linecolor=AXIS, linewidth=1,
-                zerolinecolor=AXIS, zerolinewidth=1, tickfont=dict(color=INK_MUTED, size=11),
-                title=dict(font=dict(color=INK_MUTED, size=11)), automargin=True)
+def make_template(scheme: ColorScheme | None = None) -> go.layout.Template:
+    s = scheme or DARK_SCHEME
+    axis = dict(gridcolor=s.grid, gridwidth=1, griddash="solid", linecolor=s.axis, linewidth=1,
+                zerolinecolor=s.axis, zerolinewidth=1, tickfont=dict(color=s.ink_muted, size=11),
+                title=dict(font=dict(color=s.ink_muted, size=11)), automargin=True)
+    border = "#4a4a72" if s is DARK_SCHEME else "#c8cdd8"
     return go.layout.Template(layout=dict(
-        font=dict(family="Inter, system-ui, -apple-system, Segoe UI, sans-serif", size=12, color=INK),
-        paper_bgcolor=SURFACE, plot_bgcolor=SURFACE, colorway=list(THEMES[DEFAULT_THEME].palette),
+        font=dict(family="Inter, system-ui, -apple-system, Segoe UI, sans-serif", size=12, color=s.ink),
+        paper_bgcolor=s.surface, plot_bgcolor=s.surface, colorway=list(THEMES[DEFAULT_THEME].palette),
         margin=dict(l=8, r=16, t=36, b=8),
         legend=dict(orientation="h", x=0, xanchor="left", y=1.02, yanchor="bottom",
-                    font=dict(color=INK_MUTED, size=11), title=dict(text="")),
-        hoverlabel=dict(bgcolor=HOVER_BG, bordercolor="#4a4a72", font=dict(color=INK, size=12)),
+                    font=dict(color=s.ink_muted, size=11), title=dict(text="")),
+        hoverlabel=dict(bgcolor=s.hover_bg, bordercolor=border, font=dict(color=s.ink, size=12)),
         xaxis=dict(axis, showgrid=False), yaxis=dict(axis, showgrid=True, separatethousands=True),
         bargap=0.38, bargroupgap=0.1, barcornerradius=4,
         uniformtext=dict(minsize=9, mode="hide"),
     ))
+
+
+def _template() -> go.layout.Template:
+    return make_template(DARK_SCHEME)
 
 
 TEMPLATE = _template()
@@ -90,6 +127,8 @@ def value_format(spec: ReportSpec) -> tuple[str, str]:
     if spec.normalize and spec.series:
         return ".1f", "%"
     if not spec.value or spec.agg in ("Count", "Distinct count"):
+        return ",.0f", ""
+    if spec.agg == "Sum":
         return ",.0f", ""
     return ",.1f", ""
 

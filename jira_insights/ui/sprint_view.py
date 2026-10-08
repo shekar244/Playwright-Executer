@@ -20,14 +20,14 @@ import streamlit as st
 from streamlit_sortables import sort_items
 
 from .. import kpi, layout
-from ..charts import GRID, INK, INK_MUTED, PLOTLY_CONFIG, TEMPLATE
+from ..charts import GRID, INK, INK_MUTED, PLOTLY_CONFIG, TEMPLATE, get_scheme, make_template
 from ..sprint_transform import compute_burndown
 from ..store import Store
 from . import membership, tiles
 from .builder import CHART_ICONS
 from ..pivot import apply_filters, distinct_values
 from .common import DATE_PRESETS, Dataset, download_buttons, prepare_report, show_report
-from .style import SORTABLE_CSS, accent_for, card_title, stat_tiles_html
+from .style import SORTABLE_CSS, accent_for, card_title, get_sortable_css, stat_tiles_html
 
 _LAYOUT_KEY = "sprint_layout"
 _NEW_ROW = "＋ Drop here to start a new row"
@@ -186,10 +186,11 @@ def _burndown_chart(filtered, sprint_meta) -> go.Figure | None:
     burndown = compute_burndown(filtered, sprint_meta)
     if burndown.empty:
         return None
+    s = get_scheme(st.session_state.get("ji_dark_mode", True))
     fig = go.Figure()
     fig.add_trace(go.Scatter(
         x=burndown["Date"], y=burndown["Ideal"], mode="lines", name="Ideal",
-        line=dict(color=INK_MUTED, width=2, dash="dash"),
+        line=dict(color=s.ink_muted, width=2, dash="dash"),
     ))
     fig.add_trace(go.Scatter(
         x=burndown["Date"], y=burndown["Remaining"], mode="lines+markers", name="Remaining",
@@ -197,12 +198,12 @@ def _burndown_chart(filtered, sprint_meta) -> go.Figure | None:
         marker=dict(size=5, color="#7ea8ff"),
         fill="tozeroy", fillcolor="rgba(126,168,255,0.08)",
     ))
-    fig.update_layout(template=TEMPLATE, paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
+    fig.update_layout(template=make_template(s), paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
                       margin=dict(t=10, b=30, l=10, r=10),
-                      xaxis=dict(gridcolor=GRID, tickfont=dict(color=INK_MUTED, size=10)),
-                      yaxis=dict(gridcolor=GRID, tickfont=dict(color=INK_MUTED),
-                                 title=dict(text="Story Points", font=dict(color=INK_MUTED, size=11))),
-                      legend=dict(font=dict(color=INK, size=11)))
+                      xaxis=dict(gridcolor=s.grid, tickfont=dict(color=s.ink_muted, size=10)),
+                      yaxis=dict(gridcolor=s.grid, tickfont=dict(color=s.ink_muted),
+                                 title=dict(text="Story Points", font=dict(color=s.ink_muted, size=11))),
+                      legend=dict(font=dict(color=s.ink, size=11)))
     return fig
 
 
@@ -298,6 +299,7 @@ def _velocity_section(store: Store, ds: Dataset, meta: dict) -> None:
         committed = [v.get("committed", 0) for v in velocity]
         completed = [v.get("completed", 0) for v in velocity]
 
+        s = get_scheme(st.session_state.get("ji_dark_mode", True))
         fig = go.Figure()
         fig.add_trace(go.Bar(
             x=sprints, y=committed, name="Committed",
@@ -310,16 +312,16 @@ def _velocity_section(store: Store, ds: Dataset, meta: dict) -> None:
 
         if len(completed) >= 2:
             avg = sum(completed) / len(completed)
-            fig.add_hline(y=avg, line=dict(color=INK_MUTED, width=1.5, dash="dot"),
-                          annotation=dict(text=f"Avg: {avg:.0f}", font=dict(color=INK_MUTED, size=10),
+            fig.add_hline(y=avg, line=dict(color=s.ink_muted, width=1.5, dash="dot"),
+                          annotation=dict(text=f"Avg: {avg:.0f}", font=dict(color=s.ink_muted, size=10),
                                           showarrow=False, xanchor="left"))
 
-        fig.update_layout(template=TEMPLATE, paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
+        fig.update_layout(template=make_template(s), paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
                           margin=dict(t=10, b=30, l=10, r=10), barmode="group",
-                          xaxis=dict(tickfont=dict(color=INK, size=10)),
-                          yaxis=dict(gridcolor=GRID, tickfont=dict(color=INK_MUTED),
-                                     title=dict(text="Story Points", font=dict(color=INK_MUTED, size=11))),
-                          legend=dict(font=dict(color=INK, size=11)))
+                          xaxis=dict(tickfont=dict(color=s.ink, size=10)),
+                          yaxis=dict(gridcolor=s.grid, tickfont=dict(color=s.ink_muted),
+                                     title=dict(text="Story Points", font=dict(color=s.ink_muted, size=11))),
+                          legend=dict(font=dict(color=s.ink, size=11)))
 
         st.plotly_chart(fig, key="sprint-velocity-chart", theme=None,
                         config=PLOTLY_CONFIG, use_container_width=True)
@@ -465,7 +467,7 @@ def _arrange(store: Store, ds: Dataset, rows: list[list[str]], reports: list) ->
                    "one report is full width, four make quarter tiles. Changes save automatically.")
         version = hashlib.sha1(json.dumps(rows).encode()).hexdigest()[:10]
         edited = sort_items(layout.to_containers(rows, labels, _NEW_ROW), multi_containers=True,
-                            direction="horizontal", custom_style=SORTABLE_CSS, key=f"sprint-arrange-{version}")
+                            direction="horizontal", custom_style=get_sortable_css(), key=f"sprint-arrange-{version}")
     return layout.from_containers(edited, labels)
 
 
@@ -515,11 +517,12 @@ def render(store: Store, ds: Dataset) -> None:
     if editing:
         tiles.render(store, ds, filtered)
 
-    # Burndown (built-in, hideable)
-    _burndown_section(store, filtered, sprint_meta)
-
-    # Velocity chart from Jira board report
-    _velocity_section(store, ds, meta)
+    # Burndown + Velocity side by side
+    bd_col, vel_col = st.columns(2, gap="medium")
+    with bd_col:
+        _burndown_section(store, filtered, sprint_meta)
+    with vel_col:
+        _velocity_section(store, ds, meta)
 
     if not reports:
         st.info("No saved reports yet — build one in **🧮 Report Builder** and save it.")

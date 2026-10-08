@@ -12,8 +12,8 @@ import math
 
 import plotly.graph_objects as go
 
-from .chart_theme import (AXIS, CRITICAL, GAUGE_TRACK, GOOD, INK, INK_MUTED, LIGHT_GOOD, SURFACE, TEMPLATE,
-                          WARNING, row_label, value_format)
+from .chart_theme import (AXIS, CRITICAL, DARK_SCHEME, GAUGE_TRACK, GOOD, INK, INK_MUTED, LIGHT_GOOD,
+                          SURFACE, TEMPLATE, WARNING, ColorScheme, make_template, row_label, value_format)
 from .pivot import MAX_GAUGES, PivotResult, ReportSpec
 
 
@@ -72,13 +72,14 @@ def _dial_format(spec: ReportSpec, values: list[float]) -> tuple[str, str]:
     return (".1f" if small and fmt == ",.0f" and not all(float(v).is_integer() for v in values) else fmt), ""
 
 
-def _gauges(result: PivotResult, spec: ReportSpec) -> go.Figure:
+def _gauges(result: PivotResult, spec: ReportSpec, scheme: ColorScheme | None = None) -> go.Figure:
+    s = scheme or DARK_SCHEME
     values = _gauge_values(result, spec)
     low, high = dial_range(spec, [v for _, v in values])
     fmt, suffix = _dial_format(spec, [v for _, v in values])
     per_line, lines = _dial_grid(len(values))
     number_size = {1: 52, 2: 36, 3: 26}.get(per_line, 20)
-    fig = go.Figure(layout=dict(template=TEMPLATE, margin=dict(l=24, r=24, t=30, b=10)))
+    fig = go.Figure(layout=dict(template=make_template(s), margin=dict(l=24, r=24, t=30, b=10)))
     for i, (label, value) in enumerate(values):
         col, line = i % per_line, i // per_line
         x0, x1 = col / per_line + 0.03, (col + 1) / per_line - 0.03
@@ -86,21 +87,22 @@ def _gauges(result: PivotResult, spec: ReportSpec) -> go.Figure:
         y0 = 1 - (line + 1) / lines + 0.04
         fig.add_indicator(
             mode="gauge+number", value=value, domain=dict(x=[x0, x1], y=[y0, y1]),
-            title=dict(text=label, font=dict(size=13 if per_line <= 2 else 11, color=INK)),
-            number=dict(valueformat=fmt, suffix=suffix, font=dict(size=number_size, color=INK)),
+            title=dict(text=label, font=dict(size=13 if per_line <= 2 else 11, color=s.ink)),
+            number=dict(valueformat=fmt, suffix=suffix, font=dict(size=number_size, color=s.ink)),
             gauge=dict(
-                axis=dict(range=[low, high], tickcolor=AXIS, tickwidth=1, tickfont=dict(color=INK_MUTED, size=10),
+                axis=dict(range=[low, high], tickcolor=s.axis, tickwidth=1, tickfont=dict(color=s.ink_muted, size=10),
                           nticks=6),
                 bar=dict(color=gauge_color(value, low, high, spec), thickness=0.32),
-                bgcolor=GAUGE_TRACK, borderwidth=0,
-                steps=[dict(range=[low, high], color=GAUGE_TRACK)],
+                bgcolor=s.gauge_track, borderwidth=0,
+                steps=[dict(range=[low, high], color=s.gauge_track)],
             ),
         )
     return fig
 
 
-def _meters(result: PivotResult, spec: ReportSpec) -> go.Figure:
+def _meters(result: PivotResult, spec: ReportSpec, scheme: ColorScheme | None = None) -> go.Figure:
     """Needle meters: fixed colour bands around a half circle, a needle at the value, the value below."""
+    s = scheme or DARK_SCHEME
     values = _gauge_values(result, spec)
     low, high = dial_range(spec, [v for _, v in values])
     fmt, suffix = _dial_format(spec, [v for _, v in values])
@@ -110,7 +112,7 @@ def _meters(result: PivotResult, spec: ReportSpec) -> go.Figure:
     colors = band_colors(spec)
     ticks = [0, 45, 90, 135, 180]
     tick_text = [format(low + (high - low) * t / 180, fmt) for t in ticks]
-    fig = go.Figure(layout=dict(template=TEMPLATE, margin=dict(l=20, r=20, t=26, b=26), showlegend=False))
+    fig = go.Figure(layout=dict(template=make_template(s), margin=dict(l=20, r=20, t=26, b=26), showlegend=False))
     for i, (label, value) in enumerate(values):
         col, line = i % per_line, i // per_line
         x0, x1 = col / per_line + 0.015, (col + 1) / per_line - 0.015
@@ -119,31 +121,30 @@ def _meters(result: PivotResult, spec: ReportSpec) -> go.Figure:
         polar = "polar" if i == 0 else f"polar{i + 1}"
         fig.update_layout(**{polar: dict(
             domain=dict(x=[x0, x1], y=[y0, y1]), sector=[0, 180], bgcolor="rgba(0,0,0,0)",
-            radialaxis=dict(visible=False, range=[0, 1.3 if label else 1.0]),   # headroom for the label
+            radialaxis=dict(visible=False, range=[0, 1.3 if label else 1.0]),
             angularaxis=dict(rotation=180, direction="clockwise", tickmode="array", tickvals=ticks,
-                             ticktext=tick_text, tickfont=dict(color=INK_MUTED, size=10), showline=False,
+                             ticktext=tick_text, tickfont=dict(color=s.ink_muted, size=10), showline=False,
                              showgrid=False, ticks=""),
         )})
-        # Bands: a ring from r=0.55 to 1, each wedge spanning its share of the half circle.
         fig.add_barpolar(
             subplot=polar, r=[0.45] * len(colors), base=[0.55] * len(colors),
             theta=[(a + b) / 2 * 1.8 for a, b in zip(cuts, cuts[1:])],
             width=[(b - a) * 1.8 for a, b in zip(cuts, cuts[1:])],
-            marker=dict(color=colors, line=dict(color=SURFACE, width=3)), hoverinfo="skip",
+            marker=dict(color=colors, line=dict(color=s.surface, width=3)), hoverinfo="skip",
         )
         angle = _completion(value, low, high) * 1.8
         text = format(value, fmt) + suffix
         fig.add_scatterpolar(
             subplot=polar, r=[0, 0.92], theta=[angle, angle], mode="lines",
-            line=dict(color=INK, width=4), hovertemplate=f"<b>{text}</b><br>{label}<extra></extra>",
+            line=dict(color=s.ink, width=4), hovertemplate=f"<b>{text}</b><br>{label}<extra></extra>",
         )
         fig.add_scatterpolar(
-            subplot=polar, r=[0], theta=[0], mode="markers+text", marker=dict(size=13, color=INK),
+            subplot=polar, r=[0], theta=[0], mode="markers+text", marker=dict(size=13, color=s.ink),
             text=[f"<b>{text}</b>"], textposition="bottom center", cliponaxis=False,
-            textfont=dict(size=number_size, color=INK), hoverinfo="skip",
+            textfont=dict(size=number_size, color=s.ink), hoverinfo="skip",
         )
-        if label:   # anchored to the dial itself, so it always sits just above the arc
+        if label:
             fig.add_scatterpolar(
                 subplot=polar, r=[1.18], theta=[90], mode="text", text=[label], cliponaxis=False,
-                textfont=dict(size=13 if per_line <= 2 else 11, color=INK), hoverinfo="skip", name=label)
+                textfont=dict(size=13 if per_line <= 2 else 11, color=s.ink), hoverinfo="skip", name=label)
     return fig
