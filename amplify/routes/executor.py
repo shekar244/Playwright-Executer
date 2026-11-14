@@ -16,12 +16,13 @@ import sys
 import tempfile
 from pathlib import Path
 
-from flask import Blueprint, Response, jsonify, request
+from flask import Blueprint, Response, jsonify, request, g
 
 from amplify.routes import state
 from amplify.routes.history import record_run_history
 from amplify.command_builder import CommandBuilder, resolve_python, venv_env_overrides
-from amplify.config_reader import ConfigReader
+from amplify.user_config_reader import UserConfigReader
+from amplify.auth_utils import require_auth
 from amplify.runner import TestRunner
 from amplify.test_discovery import TestDiscovery
 
@@ -734,6 +735,7 @@ def readme():
 # ── Repos ──────────────────────────────────────────────────────────────────────
 
 @bp.route("/api/repos")
+@require_auth
 def get_repos():
     home = Path.home()
     scan_dirs = [
@@ -763,6 +765,7 @@ def get_repos():
 # ── Test discovery ─────────────────────────────────────────────────────────────
 
 @bp.route("/api/tests")
+@require_auth
 def get_tests():
     repo = request.args.get("repo", "").strip()
     if not repo or not os.path.isdir(repo):
@@ -780,6 +783,7 @@ def get_tests():
 
 
 @bp.route("/api/tests/names")
+@require_auth
 def get_test_names():
     import ast
     repo = request.args.get("repo", "").strip()
@@ -809,6 +813,7 @@ def get_test_names():
 # ── Run / Stop / Status ────────────────────────────────────────────────────────
 
 @bp.route("/api/run", methods=["POST"])
+@require_auth
 def run_tests():
     with state._run_lock:
         if state._is_running:
@@ -820,7 +825,7 @@ def run_tests():
             return jsonify({"error": "Repo path not found"}), 400
 
         try:
-            cfg = ConfigReader().load()
+            cfg = UserConfigReader(g.user.id).load()
             disc = TestDiscovery(repo)
             test_tree = disc.discover()
 
@@ -868,6 +873,8 @@ def run_tests():
         history_dir = Path(repo) / cfg.get("allure_history_dir", "allure/allure-history")
         history_dir.mkdir(parents=True, exist_ok=True)
 
+        _run_user_id = g.user.id
+
         state.broadcast("cmd", _display_cmd(cmd, repo))
         state._is_running = True
 
@@ -891,7 +898,7 @@ def run_tests():
             n_pertest = len(report_info.get("pertest", {}))
             if n_pertest:
                 state.broadcast("line", f"[Report] ✓  {n_pertest} individual test report(s) generated")
-            record_run_history(repo, run_status, cfg, report_info=report_info)
+            record_run_history(repo, run_status, cfg, report_info=report_info, user_id=_run_user_id)
             state.broadcast("done", "")
 
         python = cmd[0] if cmd else sys.executable
@@ -905,6 +912,7 @@ def run_tests():
 
 
 @bp.route("/api/stop", methods=["POST"])
+@require_auth
 def stop_tests():
     if state._runner and state._is_running:
         state._runner.stop()
@@ -913,6 +921,7 @@ def stop_tests():
 
 
 @bp.route("/api/status")
+@require_auth
 def get_status():
     return jsonify({"running": state._is_running})
 
@@ -920,6 +929,7 @@ def get_status():
 # ── SSE stream ─────────────────────────────────────────────────────────────────
 
 @bp.route("/api/stream")
+@require_auth
 def stream():
     q: queue.Queue = queue.Queue(maxsize=600)
 
@@ -963,6 +973,7 @@ def stream():
 # ── Features run ───────────────────────────────────────────────────────────────
 
 @bp.route("/api/features/run", methods=["POST"])
+@require_auth
 def run_feature():
     with state._run_lock:
         if state._is_running:
@@ -978,7 +989,7 @@ def run_feature():
         if not script:
             return jsonify({"error": "No script specified"}), 400
 
-        cfg       = ConfigReader().load()
+        cfg       = UserConfigReader(g.user.id).load()
         repo_root = cfg.get("repo_root", "").strip() or str(_ROOT)
         py        = resolve_python(repo_root, cfg.get("venv_path", ""))
 
@@ -1110,9 +1121,10 @@ def run_feature():
 # ── Venv status / install ─────────────────────────────────────────────────────
 
 @bp.route("/api/venv/status")
+@require_auth
 def venv_status():
     repo = request.args.get("repo", "").strip()
-    cfg  = ConfigReader().load()
+    cfg  = UserConfigReader(g.user.id).load()
     if not repo:
         repo = cfg.get("repo_root", "").strip()
     venv_path_cfg = cfg.get("venv_path", "").strip()
@@ -1143,6 +1155,7 @@ def venv_status():
 
 
 @bp.route("/api/venv/install", methods=["POST"])
+@require_auth
 def venv_install():
     with state._run_lock:
         if state._is_running:
@@ -1151,7 +1164,7 @@ def venv_install():
         body = request.json or {}
         repo = body.get("repo", "").strip()
         req  = body.get("requirements_file", "").strip()
-        cfg  = ConfigReader().load()
+        cfg  = UserConfigReader(g.user.id).load()
         if not repo:
             repo = cfg.get("repo_root", "").strip()
 
@@ -1211,10 +1224,11 @@ def venv_install():
 
 
 @bp.route("/api/config/venv-path", methods=["POST"])
+@require_auth
 def save_venv_path():
     body = request.json or {}
     venv = body.get("venv_path", "").strip()
-    reader = ConfigReader()
+    reader = UserConfigReader(g.user.id)
     cfg = reader.load()
     cfg["venv_path"] = venv
     try:
@@ -1227,6 +1241,7 @@ def save_venv_path():
 # ── Browse folder ──────────────────────────────────────────────────────────────
 
 @bp.route("/api/browse-folder", methods=["POST"])
+@require_auth
 def browse_folder():
     import platform, subprocess
     body = request.json or {}

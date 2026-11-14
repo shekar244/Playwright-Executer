@@ -10,13 +10,14 @@ from __future__ import annotations
 import webbrowser
 from pathlib import Path
 
-from flask import Blueprint, jsonify, request, send_from_directory
+from flask import Blueprint, jsonify, request, send_from_directory, g
 
 from amplify.routes.history import (
     load_history, save_history,
     parse_allure_results_full, parse_allure_history_trend,
 )
-from amplify.config_reader import ConfigReader
+from amplify.user_config_reader import UserConfigReader
+from amplify.auth_utils import require_auth
 from amplify.report_resolver import ReportResolver
 
 bp = Blueprint("dashboard", __name__)
@@ -53,7 +54,7 @@ def _resolve_report_path(path: str, rel_path: str) -> tuple[str, str]:
         path, frag = path.split("#", 1)
         anchor = "#" + frag
 
-    cfg = ConfigReader().load()
+    cfg = UserConfigReader(g.user.id).load()
     repo_root = cfg.get("repo_root", "").strip()
 
     candidates: list[str] = []
@@ -73,6 +74,7 @@ def _resolve_report_path(path: str, rel_path: str) -> tuple[str, str]:
 # ── Report open logic ─────────────────────────────────────────────────────────
 
 @bp.route("/api/report/open", methods=["POST"])
+@require_auth
 def open_report():
     """
     Open an Allure report in the default browser.
@@ -119,9 +121,10 @@ def open_report():
 # ── Dashboard ─────────────────────────────────────────────────────────────────
 
 @bp.route("/api/dashboard")
+@require_auth
 def get_dashboard():
     repo = request.args.get("repo", "").strip()
-    cfg  = ConfigReader().load()
+    cfg  = UserConfigReader(g.user.id).load()
     tests, allure_trend = [], []
     report_path = ""
 
@@ -145,7 +148,7 @@ def get_dashboard():
         # using them here ensures the current-run view shows both "📄 Test" and
         # "📊 Run" buttons, not just the consolidated link.
         uid_to_individual: dict = {}
-        history_records = load_history(repo)
+        history_records = load_history(repo, user_id=g.user.id)
         if history_records:
             for ht in (history_records[0].get("tests") or []):
                 uid = ht.get("uid", "")
@@ -169,17 +172,18 @@ def get_dashboard():
         "tests":       tests,
         "summaries":   [],
         "trend":       allure_trend,
-        "run_history": load_history(repo),
+        "run_history": load_history(repo, user_id=g.user.id),
         "report_path": report_path,
     })
 
 
 @bp.route("/api/report")
+@require_auth
 def get_report():
     repo = request.args.get("repo", "").strip()
     if not repo:
         return jsonify({"individual": None, "consolidated": None})
-    cfg = ConfigReader().load()
+    cfg = UserConfigReader(g.user.id).load()
     resolver = ReportResolver(repo, cfg.get("report_paths", []))
     individual   = resolver.find_latest_in_dir(cfg.get("report_individual_dir", "allure/reports"))
     consolidated = resolver.find_latest_in_dir(cfg.get("report_consolidated_dir", ""))
@@ -187,13 +191,15 @@ def get_report():
 
 
 @bp.route("/api/report/history")
+@require_auth
 def get_report_history():
     repo = request.args.get("repo", "").strip()
-    return jsonify({"records": load_history(repo)})
+    return jsonify({"records": load_history(repo, user_id=g.user.id)})
 
 
 @bp.route("/api/report/history/clear", methods=["POST"])
+@require_auth
 def clear_report_history():
     repo = (request.json or {}).get("repo", "").strip()
-    save_history([], repo)
+    save_history([], repo, user_id=g.user.id)
     return jsonify({"ok": True})

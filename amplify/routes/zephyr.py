@@ -19,9 +19,10 @@ import uuid as _uuid
 from collections import OrderedDict, defaultdict
 from pathlib import Path
 
-from flask import Blueprint, jsonify, request
+from flask import Blueprint, jsonify, request, g
 
-from amplify.config_reader import ConfigReader
+from amplify.user_config_reader import UserConfigReader
+from amplify.auth_utils import require_auth
 
 bp = Blueprint("zephyr", __name__)
 
@@ -142,7 +143,7 @@ def _zephyr_jwt(access_key: str, secret_key: str, account_id: str,
 
 
 def _z_cfg() -> dict:
-    return ConfigReader().load().get(ZEPHYR_CONFIG_KEY, {})
+    return UserConfigReader(g.user.id).load().get(ZEPHYR_CONFIG_KEY, {})
 
 
 def _z_call(method: str, path: str, params: dict | None = None, body=None) -> tuple:
@@ -355,6 +356,7 @@ def _attach_file_to_exec(exec_id: str, issue_id, cycle_id: str,
 # ── Routes ─────────────────────────────────────────────────────────────────────
 
 @bp.route("/api/zephyr/debug")
+@require_auth
 def zephyr_debug():
     cfg = _z_cfg()
     path   = "/public/rest/api/1.0/cycles/search"
@@ -382,6 +384,7 @@ def zephyr_debug():
 
 
 @bp.route("/api/zephyr/statuses")
+@require_auth
 def zephyr_statuses():
     data, code = _z_call("GET", "/public/rest/api/1.0/util/statuses")
     if code == 200 and isinstance(data, dict) and not data.get("error"):
@@ -405,14 +408,16 @@ def zephyr_statuses():
 
 
 @bp.route("/api/zephyr/test-jira")
+@require_auth
 def test_jira():
     data, code = _jira_call("GET", "/myself")
     return jsonify({"status": code, "response": data})
 
 
 @bp.route("/api/zephyr/config", methods=["GET", "POST"])
+@require_auth
 def zephyr_config():
-    reader = ConfigReader()
+    reader = UserConfigReader(g.user.id)
     cfg = reader.load()
     if request.method == "POST":
         body = request.json or {}
@@ -426,12 +431,14 @@ def zephyr_config():
 
 
 @bp.route("/api/zephyr/projects")
+@require_auth
 def zephyr_projects():
     data, code = _jira_call("GET", "/project")
     return jsonify(data), code
 
 
 @bp.route("/api/zephyr/versions")
+@require_auth
 def zephyr_versions():
     pid = request.args.get("projectKey", "").strip()
     if not pid:
@@ -441,6 +448,7 @@ def zephyr_versions():
 
 
 @bp.route("/api/zephyr/cycles")
+@require_auth
 def zephyr_cycles():
     path   = "/public/rest/api/1.0/cycles/search"
     params = {k: request.args.get(k) for k in ("projectId", "versionId") if request.args.get(k)}
@@ -449,12 +457,14 @@ def zephyr_cycles():
 
 
 @bp.route("/api/zephyr/cycle", methods=["POST"])
+@require_auth
 def create_cycle():
     data, code = _z_call("POST", "/public/rest/api/1.0/cycle", body=request.json or {})
     return jsonify(data), code
 
 
 @bp.route("/api/zephyr/folders")
+@require_auth
 def zephyr_folders():
     path   = "/public/rest/api/1.0/folders"
     params = {k: request.args.get(k) for k in ("projectId", "versionId", "cycleId") if request.args.get(k)}
@@ -463,12 +473,14 @@ def zephyr_folders():
 
 
 @bp.route("/api/zephyr/folder", methods=["POST"])
+@require_auth
 def create_folder():
     data, code = _z_call("POST", "/public/rest/api/1.0/folder", body=request.json or {})
     return jsonify(data), code
 
 
 @bp.route("/api/zephyr/executions/add", methods=["POST"])
+@require_auth
 def add_tests_to_cycle():
     body = request.json or {}
     cycle_id  = body.pop("cycleId", "")
@@ -483,6 +495,7 @@ def add_tests_to_cycle():
 
 
 @bp.route("/api/zephyr/executions")
+@require_auth
 def list_executions():
     cycle_id  = request.args.get("cycleId", "")
     folder_id = request.args.get("folderId", "")
@@ -497,18 +510,21 @@ def list_executions():
 
 
 @bp.route("/api/zephyr/execution/<exec_id>", methods=["PUT"])
+@require_auth
 def update_execution(exec_id: str):
     data, code = _z_call("PUT", f"/public/rest/api/1.0/execution/{exec_id}", body=request.json or {})
     return jsonify(data), code
 
 
 @bp.route("/api/zephyr/executions/bulk", methods=["POST"])
+@require_auth
 def bulk_update_executions():
     data, code = _z_call("POST", "/public/rest/api/1.0/executions", body=request.json or {})
     return jsonify(data), code
 
 
 @bp.route("/api/zephyr/stepresults")
+@require_auth
 def get_step_results():
     params = {k: request.args.get(k) for k in ("executionId", "issueId") if request.args.get(k)}
     data, code = _z_call("GET", "/public/rest/api/1.0/stepresult/search", params)
@@ -516,12 +532,14 @@ def get_step_results():
 
 
 @bp.route("/api/zephyr/stepresult/<sr_id>", methods=["PUT"])
+@require_auth
 def update_step_result(sr_id: str):
     data, code = _z_call("PUT", f"/public/rest/api/1.0/stepresult/{sr_id}", body=request.json or {})
     return jsonify(data), code
 
 
 @bp.route("/api/zephyr/attach", methods=["POST"])
+@require_auth
 def zephyr_attach():
     cfg = _z_cfg()
     if not cfg.get("access_key"):
@@ -553,6 +571,7 @@ def zephyr_attach():
 
 
 @bp.route("/api/jira/search")
+@require_auth
 def jira_search():
     jql         = request.args.get("jql", "").strip()
     filter_id   = request.args.get("filterId", "").strip()
@@ -569,6 +588,7 @@ def jira_search():
 
 
 @bp.route("/api/jira/project-info")
+@require_auth
 def jira_project_info():
     key = request.args.get("key", "").strip() or _z_cfg().get("project_key","")
     if not key:
@@ -583,12 +603,14 @@ def jira_project_info():
 
 
 @bp.route("/api/jira/link-types")
+@require_auth
 def jira_link_types():
     data, code = _jira_call("GET", "/issueLinkType")
     return jsonify(data), code
 
 
 @bp.route("/api/jira/link", methods=["POST"])
+@require_auth
 def jira_link():
     body = request.json or {}
     data, code = _jira_call("POST", "/issueLink", body=body)
@@ -596,6 +618,7 @@ def jira_link():
 
 
 @bp.route("/api/zephyr/import-testcases-grouped", methods=["POST"])
+@require_auth
 def import_testcases_grouped():
     file        = request.files.get("file")
     cycle_id    = request.form.get("cycleId", "")
@@ -606,7 +629,7 @@ def import_testcases_grouped():
     if not file or not project_key:
         return jsonify({"error": "file and projectKey are required"}), 400
 
-    app_cfg = ConfigReader().load()
+    app_cfg = UserConfigReader(g.user.id).load()
     mapping = app_cfg.get("zephyr_tc_mapping", app_cfg.get("zephyr_mapping", {}))
     col_story   = mapping.get("story_id",            "Story ID")
     col_summary = mapping.get("summary",             "Summary")
@@ -769,6 +792,7 @@ def import_testcases_grouped():
 
 
 @bp.route("/api/zephyr/proxy-raw", methods=["POST"])
+@require_auth
 def zephyr_proxy_raw():
     body   = request.json or {}
     method = body.get("method", "GET").upper()
@@ -780,8 +804,9 @@ def zephyr_proxy_raw():
 
 
 @bp.route("/api/zephyr/mapping/testcase", methods=["GET", "POST"])
+@require_auth
 def zephyr_mapping_testcase():
-    reader = ConfigReader(); cfg = reader.load()
+    reader = UserConfigReader(g.user.id); cfg = reader.load()
     if request.method == "POST":
         cfg["zephyr_tc_mapping"] = request.json or {}
         try: reader.save(cfg)
@@ -791,8 +816,9 @@ def zephyr_mapping_testcase():
 
 
 @bp.route("/api/zephyr/mapping/results", methods=["GET", "POST"])
+@require_auth
 def zephyr_mapping_results():
-    reader = ConfigReader(); cfg = reader.load()
+    reader = UserConfigReader(g.user.id); cfg = reader.load()
     if request.method == "POST":
         cfg["zephyr_results_mapping"] = request.json or {}
         try: reader.save(cfg)
@@ -802,8 +828,9 @@ def zephyr_mapping_results():
 
 
 @bp.route("/api/zephyr/mapping", methods=["GET", "POST"])
+@require_auth
 def zephyr_mapping():
-    reader = ConfigReader(); cfg = reader.load()
+    reader = UserConfigReader(g.user.id); cfg = reader.load()
     if request.method == "POST":
         body = request.json or {}
         cfg["zephyr_tc_mapping"]      = {k: v for k, v in body.items() if not k.startswith("results_")}
@@ -817,6 +844,7 @@ def zephyr_mapping():
 
 
 @bp.route("/api/zephyr/csv-preview", methods=["POST"])
+@require_auth
 def csv_preview():
     file = request.files.get("file")
     if not file:
@@ -832,6 +860,7 @@ def csv_preview():
 
 
 @bp.route("/api/zephyr/import-testcases", methods=["POST"])
+@require_auth
 def import_testcases():
     file        = request.files.get("file")
     cycle_id    = request.form.get("cycleId", "")
@@ -841,7 +870,7 @@ def import_testcases():
     if not file or not project_key:
         return jsonify({"error": "file and projectKey are required"}), 400
 
-    app_cfg = ConfigReader().load()
+    app_cfg = UserConfigReader(g.user.id).load()
     mapping = app_cfg.get("zephyr_tc_mapping", app_cfg.get("zephyr_mapping", {}))
     col_summary    = mapping.get("summary", "Summary")
     col_desc       = mapping.get("description", "")
@@ -941,6 +970,7 @@ def import_testcases():
 
 
 @bp.route("/api/zephyr/bulk-results", methods=["POST"])
+@require_auth
 def bulk_results_upload():
     file       = request.files.get("file")
     cycle_id   = request.form.get("cycleId", "")
@@ -958,7 +988,7 @@ def bulk_results_upload():
     reader  = csv.DictReader(io.StringIO(content))
     rows    = list(reader)
 
-    app_cfg     = ConfigReader().load()
+    app_cfg     = UserConfigReader(g.user.id).load()
     res_map     = app_cfg.get("zephyr_results_mapping", {})
     col_key     = res_map.get("issue_key",     "Issue Key")
     col_status  = res_map.get("status",        "Status")

@@ -13,16 +13,17 @@ import subprocess
 import sys
 from pathlib import Path
 
-from flask import Blueprint, jsonify, request
+from flask import Blueprint, jsonify, request, g
 
-from amplify.config_reader import ConfigReader
+from amplify.user_config_reader import UserConfigReader
+from amplify.auth_utils import require_auth
 from amplify.command_builder import resolve_python
 
 bp = Blueprint("studio", __name__)
 
 
 def _cfg():
-    return ConfigReader().load()
+    return UserConfigReader(g.user.id).load()
 
 
 def _allure_results_dir(cfg) -> Path:
@@ -89,6 +90,7 @@ def _match_file(full_name: str, tests_dir: Path) -> str | None:
 
 
 @bp.route("/studio/data")
+@require_auth
 def studio_data():
     cfg         = _cfg()
     results_dir = _allure_results_dir(cfg)
@@ -136,6 +138,7 @@ def studio_data():
 
 
 @bp.route("/studio/file")
+@require_auth
 def studio_file():
     """
     Accept ?path= as an absolute path.
@@ -167,6 +170,7 @@ def studio_file():
 
 
 @bp.route("/studio/save", methods=["POST"])
+@require_auth
 def studio_save():
     cfg       = _cfg()
     tests_dir = _tests_dir(cfg)

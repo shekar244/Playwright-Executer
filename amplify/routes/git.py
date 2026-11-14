@@ -8,18 +8,20 @@ from __future__ import annotations
 import os
 import sys
 
-from flask import Blueprint, jsonify, request
+from flask import Blueprint, jsonify, request, g
 
 from amplify.routes import state
-from amplify.config_reader import ConfigReader
+from amplify.user_config_reader import UserConfigReader
+from amplify.auth_utils import require_auth
 from amplify.runner import TestRunner
 
 bp = Blueprint("git", __name__)
 
 
 @bp.route("/api/git/commands", methods=["GET", "POST"])
+@require_auth
 def git_commands():
-    reader = ConfigReader()
+    reader = UserConfigReader(g.user.id)
     cfg = reader.load()
     if request.method == "POST":
         body = request.json or {}
@@ -36,6 +38,7 @@ def git_commands():
 
 
 @bp.route("/api/git/run", methods=["POST"])
+@require_auth
 def run_git_command():
     with state._run_lock:
         if state._is_running:
@@ -49,7 +52,7 @@ def run_git_command():
             return jsonify({"error": "No command specified"}), 400
 
         if not repo or not os.path.isdir(repo):
-            repo = ConfigReader().load().get("repo_root", "").strip()
+            repo = UserConfigReader(g.user.id).load().get("repo_root", "").strip()
         if not repo or not os.path.isdir(repo):
             return jsonify({"error": "Repo path not found — set repo_root in config"}), 400
 

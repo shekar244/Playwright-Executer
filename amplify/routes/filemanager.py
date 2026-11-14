@@ -12,8 +12,9 @@ import json
 import sys
 from pathlib import Path
 
-from flask import Blueprint, jsonify, request
-from amplify.config_reader import ConfigReader
+from flask import Blueprint, jsonify, request, g
+from amplify.user_config_reader import UserConfigReader
+from amplify.auth_utils import require_auth
 from amplify.command_builder import resolve_python
 
 
@@ -25,7 +26,7 @@ def _ensure_repo_venv_on_path() -> None:
     Called lazily before any import that may live in the repo venv.
     """
     try:
-        cfg      = ConfigReader().load()
+        cfg      = UserConfigReader(g.user.id).load()
         repo     = cfg.get("repo_root", "").strip()
         venv_cfg = cfg.get("venv_path", "").strip()
         if not repo:
@@ -76,6 +77,7 @@ def _ext(p: Path) -> str:
 # ── Browse ─────────────────────────────────────────────────────────────────────
 
 @bp.route("/api/fm/browse")
+@require_auth
 def browse():
     raw = request.args.get("path", "").strip() or str(Path.home())
     p = _safe_path(raw)
@@ -113,6 +115,7 @@ def browse():
 # ── Read ───────────────────────────────────────────────────────────────────────
 
 @bp.route("/api/fm/read")
+@require_auth
 def read_file():
     raw = request.args.get("path", "").strip()
     p   = _safe_path(raw)
@@ -221,6 +224,7 @@ def read_file():
 # ── Save ───────────────────────────────────────────────────────────────────────
 
 @bp.route("/api/fm/save", methods=["POST"])
+@require_auth
 def save_file():
     body = request.json or {}
     raw  = body.get("path", "").strip()

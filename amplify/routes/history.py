@@ -8,37 +8,33 @@ import json
 import time
 from pathlib import Path
 
-from amplify.config_reader import ConfigReader
+from amplify.storage import get_user_history_path
 
 # Fallback history file when no repo is known (tool root).
 _TOOL_HISTORY_FILE = Path(__file__).parent.parent.parent / "report_history.json"
 
 
-def _history_file(repo: str = "") -> Path:
-    """Return the history file path: {repo}/report_history.json or tool fallback."""
+def _history_file(repo: str = "", user_id: int = None) -> Path:
+    """Return the history file path — user-scoped when user_id is provided."""
+    if user_id:
+        return get_user_history_path(user_id)
     if repo:
         return Path(repo) / "report_history.json"
     return _TOOL_HISTORY_FILE
 
 
-def load_history(repo: str = "") -> list:
-    hf = _history_file(repo)
+def load_history(repo: str = "", user_id: int = None) -> list:
+    hf = _history_file(repo, user_id)
     if hf.exists():
         try:
             return json.loads(hf.read_text(encoding="utf-8"))
         except Exception:
             pass
-    # Migrate: if no repo-level file exists yet, try the old tool-level file
-    if repo and _TOOL_HISTORY_FILE.exists():
-        try:
-            return json.loads(_TOOL_HISTORY_FILE.read_text(encoding="utf-8"))
-        except Exception:
-            pass
     return []
 
 
-def save_history(records: list, repo: str = "") -> None:
-    _history_file(repo).write_text(json.dumps(records, indent=2), encoding="utf-8")
+def save_history(records: list, repo: str = "", user_id: int = None) -> None:
+    _history_file(repo, user_id).write_text(json.dumps(records, indent=2), encoding="utf-8")
 
 
 def parse_allure_results(results_dir: str) -> dict:
@@ -224,7 +220,8 @@ def _report_paths(repo: str, abs_path: str) -> tuple[str, str]:
 
 
 def record_run_history(
-    repo: str, status: str, cfg: dict, report_info: dict | None = None
+    repo: str, status: str, cfg: dict, report_info: dict | None = None,
+    user_id: int = None,
 ) -> None:
     """
     Append a run record to report_history.json.
@@ -310,6 +307,6 @@ def record_run_history(
         "report_path":     run_abs,
         "report_relpath":  run_rel,
     }
-    records = load_history(repo)
+    records = load_history(repo, user_id=user_id)
     records.insert(0, record)
-    save_history(records[:200], repo)
+    save_history(records[:200], repo, user_id=user_id)

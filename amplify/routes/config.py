@@ -185,7 +185,7 @@ def get_pip_ini_content():
     import sys
     from amplify.command_builder import resolve_python
 
-    cfg       = ConfigReader().load()
+    cfg       = UserConfigReader(g.user.id).load()
     repo_root = cfg.get("repo_root", "").strip()
     python    = resolve_python(repo_root, cfg.get("venv_path", "")) if repo_root else sys.executable
     venv_root = Path(python).parent.parent
@@ -241,7 +241,7 @@ def generate_jfrog_pip_ini():
     from amplify.command_builder import resolve_python
 
     body = request.json or {}
-    cfg = ConfigReader().load()
+    cfg = UserConfigReader(g.user.id).load()
 
     url   = (body.get("jfrog_url")   or cfg.get("jfrog_url",   "")).strip().rstrip("/")
     repo  = (body.get("jfrog_repo")  or cfg.get("jfrog_repo",  "")).strip()
