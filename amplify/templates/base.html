@@ -259,7 +259,7 @@ const UI_TAB_MAP = {
 };
 
 function applyUiTabs(tabs) {
-  const defaults = { executor: true, dashboard: true, zephyr: true, filemanager: true, studio: true, insights: true, cfg_git: true, cfg_tools: true, cfg_mapping: true, cfg_zephyr: true };
+  const defaults = { executor: true, dashboard: true, zephyr: true, filemanager: true, studio: true, insights: false, cfg_git: true, cfg_tools: true, cfg_mapping: true, cfg_zephyr: true };
   const t = Object.assign({}, defaults, tabs || {});
   Object.entries(UI_TAB_MAP).forEach(([key, ids]) => {
     const visible = !!t[key];
