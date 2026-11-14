@@ -9,7 +9,6 @@ and is embedded in the Jira Insights tab with an <iframe>.
 """
 from __future__ import annotations
 
-import os
 from flask import Blueprint, jsonify, g
 
 from amplify.jira_insights.launcher import process
@@ -21,16 +20,12 @@ bp = Blueprint("insights", __name__)
 @bp.route("/api/insights/status")
 @require_auth
 def insights_status():
-    # Pass user ID to Streamlit so it uses user-scoped workspace
-    os.environ["USER_ID"] = str(g.user.id)
     return jsonify(process.status())
 
 
 @bp.route("/api/insights/start", methods=["POST"])
 @require_auth
 def insights_start():
-    # Pass user ID to Streamlit so it uses user-scoped workspace
-    os.environ["USER_ID"] = str(g.user.id)
     result = process.start()
     return jsonify(result), (500 if result.get("error") else 200)
 
@@ -38,5 +33,4 @@ def insights_start():
 @bp.route("/api/insights/stop", methods=["POST"])
 @require_auth
 def insights_stop():
-    os.environ["USER_ID"] = str(g.user.id)
     return jsonify(process.stop())

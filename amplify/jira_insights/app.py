@@ -34,11 +34,11 @@ st.set_page_config(page_title="Jira Insights", page_icon="📈", layout="wide",
                    initial_sidebar_state="expanded")
 
 ss = st.session_state
-# Amplify QEA passes its current appearance as ?theme=light|dark; standalone runs default to light.
 ss.setdefault("ji_dark_mode", st.query_params.get("theme", "light") == "dark")
 inject_css()
 
-store = Store(workspace_dir())
+_user_id = st.query_params.get("user_id")
+store = Store(workspace_dir(_user_id))
 ss["ji_category_colors"] = store.get_setting("category_colors", {}) or {}   # 🎨 field defaults
 ds = data_source.render_sidebar(store)
 

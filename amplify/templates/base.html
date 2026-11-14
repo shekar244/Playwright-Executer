@@ -10,13 +10,13 @@
 </head>
 <body>
 <script>
-  // Set the theme class before first paint so dark mode never flashes light.
   (function () {
     try {
       var t = localStorage.getItem('amplify-theme');
       if (t ? t === 'dark' : window.matchMedia('(prefers-color-scheme: dark)').matches) document.body.classList.add('dark-theme');
     } catch (e) {}
   })();
+  {% if user %}window._amplifyUserId = {{ user.id }};{% endif %}
 </script>
 
 <header>

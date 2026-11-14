@@ -31,21 +31,31 @@ class JiraSettings:
         return bool(self.url and self.token)
 
 
-def workspace_dir() -> Path:
-    # Check explicit override first
+def workspace_dir(user_id: int | str | None = None) -> Path:
     if "JIRA_INSIGHTS_HOME" in os.environ:
         return Path(os.environ["JIRA_INSIGHTS_HOME"])
 
-    # In multi-tenant mode, use user-scoped workspace
-    if "USER_ID" in os.environ:
+    uid = user_id or _resolve_user_id()
+    if uid:
         from amplify.storage import get_user_workspace_dir
-        user_ws = get_user_workspace_dir(int(os.environ["USER_ID"]))
+        user_ws = get_user_workspace_dir(int(uid))
         insights_ws = user_ws / "jira_insights"
         insights_ws.mkdir(parents=True, exist_ok=True)
         return insights_ws
 
-    # Fallback to default
     return Path(_DEFAULT_WORKSPACE)
+
+
+def _resolve_user_id() -> str | None:
+    """Get user ID from Streamlit query params, then env var fallback."""
+    try:
+        import streamlit as st
+        uid = st.query_params.get("user_id")
+        if uid:
+            return uid
+    except Exception:
+        pass
+    return os.environ.get("USER_ID")
 
 
 def _truthy(value: str) -> bool:

@@ -21,7 +21,8 @@ function _insightsShowFrame(show) {
 
 function _insightsFrameUrl(url) {
   const t = document.body.classList.contains('dark-theme') ? 'dark' : 'light';
-  return `${url}/?embed=true&embed_options=${t}_theme&theme=${t}`;
+  const uid = window._amplifyUserId || '';
+  return `${url}/?embed=true&embed_options=${t}_theme&theme=${t}&user_id=${uid}`;
 }
 
 // Streamlit reads its theme at session start, so a theme change reloads the embed.
