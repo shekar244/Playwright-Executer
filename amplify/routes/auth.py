@@ -27,13 +27,17 @@ def register():
     if not password or len(password) < 6:
         return jsonify({"error": "Password must be at least 6 characters"}), 400
 
+    is_first_user = User.count() == 0
+
     try:
-        user = User.create(username, password, email)
+        user = User.create(username, password, email, is_admin=is_first_user)
     except ValueError as e:
         return jsonify({"error": str(e)}), 400
 
     initialize_user_workspace(user.id)
-    ActivityLog.record(user.id, "register", f"New account: {username}", request.remote_addr)
+    ActivityLog.record(user.id, "register",
+                       f"New account: {username}" + (" (auto-admin: first user)" if is_first_user else ""),
+                       request.remote_addr)
 
     token = generate_jwt(user.id)
 
