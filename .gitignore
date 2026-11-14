@@ -55,12 +55,5 @@ report_history.json
 config.json
 
 # Jira Insights workspace (pulled Jira data, saved reports, explorer specs)
-jira_insights/workspace/
-Jira_ReportBuilder/jira_insights/workspace/
-Jira_ReportBuilder/jira_insights/.cache/
-Jira_ReportBuilder/jira_insights/.pytest_cache/
-Jira_ReportBuilder/jira_insights/.mypy_cache/
-Jira_ReportBuilder/jira_insights/.coverage
-Jira_ReportBuilder/jira_insights/htmlcov/
-Jira_ReportBuilder/jira_insights/venv/
+**/jira_insights/workspace/
 
