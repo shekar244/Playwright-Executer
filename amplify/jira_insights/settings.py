@@ -32,7 +32,20 @@ class JiraSettings:
 
 
 def workspace_dir() -> Path:
-    return Path(os.environ.get("JIRA_INSIGHTS_HOME") or _DEFAULT_WORKSPACE)
+    # Check explicit override first
+    if "JIRA_INSIGHTS_HOME" in os.environ:
+        return Path(os.environ["JIRA_INSIGHTS_HOME"])
+
+    # In multi-tenant mode, use user-scoped workspace
+    if "USER_ID" in os.environ:
+        from amplify.storage import get_user_workspace_dir
+        user_ws = get_user_workspace_dir(int(os.environ["USER_ID"]))
+        insights_ws = user_ws / "jira_insights"
+        insights_ws.mkdir(parents=True, exist_ok=True)
+        return insights_ws
+
+    # Fallback to default
+    return Path(_DEFAULT_WORKSPACE)
 
 
 def _truthy(value: str) -> bool:
