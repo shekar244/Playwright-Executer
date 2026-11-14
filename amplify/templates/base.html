@@ -12,8 +12,10 @@
 <script>
   (function () {
     try {
-      var t = localStorage.getItem('amplify-theme');
-      if (t ? t === 'dark' : window.matchMedia('(prefers-color-scheme: dark)').matches) document.body.classList.add('dark-theme');
+      var t = localStorage.getItem('amplify-theme') || 'light';
+      var map = {dark:'dark-theme',midnight:'theme-midnight',nord:'theme-nord',solarized:'theme-solarized',rose:'theme-rose',forest:'theme-forest'};
+      if (map[t]) document.body.classList.add(map[t]);
+      else if (t === 'light' && window.matchMedia('(prefers-color-scheme: dark)').matches && !localStorage.getItem('amplify-theme')) document.body.classList.add('dark-theme');
     } catch (e) {}
   })();
   {% if user %}window._amplifyUserId = {{ user.id }};{% endif %}
@@ -28,11 +30,12 @@
   <div class="header-right">
     <span class="version-badge">v1.0.0</span>
     <a href="/readme" target="_blank" class="help-link" title="Open documentation">Docs</a>
-    <div class="theme-toggle" onclick="toggleTheme()" title="Toggle light / dark appearance">
-      <span class="theme-toggle-label" id="themeIcon">☀️</span>
-      <div class="theme-toggle-track" id="themeTrack">
-        <div class="theme-toggle-thumb"></div>
-      </div>
+    <div class="theme-picker" id="themePicker">
+      <button class="theme-picker-btn" onclick="toggleThemePicker()" title="Change theme">
+        <span class="tp-dot" id="themePickerDot"></span>
+        <span id="themePickerLabel">Light</span>
+      </button>
+      <div class="theme-dropdown" id="themeDropdown"></div>
     </div>
     {% if user %}
     <div class="user-menu">
@@ -277,31 +280,68 @@ function applyUiTabs(tabs) {
   });
 }
 
-// ── Theme toggle ─────────────────────────────────────────────────────────────
-function applyTheme(dark) {
-  document.body.classList.toggle('dark-theme', dark);
-  const track = document.getElementById('themeTrack');
-  const icon = document.getElementById('themeIcon');
-  if (track) track.classList.toggle('dark', dark);
-  if (icon) icon.textContent = dark ? '🌙' : '☀️';
-  // Canvas charts resolve their colours when drawn, so redraw the visible one.
+// ── Theme picker ─────────────────────────────────────────────────────────────
+const _THEMES = [
+  { id: 'light',     label: 'Light',     cls: '',               dot: '#f5f5f7', dark: false },
+  { id: 'dark',      label: 'Dark',      cls: 'dark-theme',     dot: '#1c1c1e', dark: true },
+  { id: 'midnight',  label: 'Midnight',  cls: 'theme-midnight', dot: '#12203a', dark: true },
+  { id: 'nord',      label: 'Nord',      cls: 'theme-nord',     dot: '#3b4252', dark: true },
+  { id: 'solarized', label: 'Solarized', cls: 'theme-solarized',dot: '#fdf6e3', dark: false },
+  { id: 'rose',      label: 'Rosé',      cls: 'theme-rose',     dot: '#261c24', dark: true },
+  { id: 'forest',    label: 'Forest',    cls: 'theme-forest',   dot: '#162419', dark: true },
+];
+
+function applyTheme(themeId) {
+  const theme = _THEMES.find(t => t.id === themeId) || _THEMES[0];
+  _THEMES.forEach(t => { if (t.cls) document.body.classList.remove(t.cls); });
+  if (theme.cls) document.body.classList.add(theme.cls);
+  const dot = document.getElementById('themePickerDot');
+  const label = document.getElementById('themePickerLabel');
+  if (dot) { dot.style.background = theme.dot; dot.style.borderColor = theme.dark ? 'rgba(255,255,255,0.3)' : 'rgba(0,0,0,0.15)'; }
+  if (label) label.textContent = theme.label;
+  _renderThemeDropdown(themeId);
   if (typeof loadDashboard === 'function' && document.getElementById('page-dashboard')?.classList.contains('active')) loadDashboard();
   if (typeof _insightsApplyTheme === 'function') _insightsApplyTheme();
 }
 
-function toggleTheme() {
-  const dark = !document.body.classList.contains('dark-theme');
-  applyTheme(dark);
-  try { localStorage.setItem('amplify-theme', dark ? 'dark' : 'light'); } catch(e) {}
+function setTheme(themeId) {
+  applyTheme(themeId);
+  try { localStorage.setItem('amplify-theme', themeId); } catch(e) {}
+  const dd = document.getElementById('themeDropdown');
+  if (dd) dd.classList.remove('active');
 }
 
+function toggleThemePicker() {
+  const dd = document.getElementById('themeDropdown');
+  if (dd) dd.classList.toggle('active');
+}
+
+function _renderThemeDropdown(currentId) {
+  const dd = document.getElementById('themeDropdown');
+  if (!dd) return;
+  dd.innerHTML = _THEMES.map(t => `
+    <button class="theme-option ${t.id === currentId ? 'active' : ''}" onclick="setTheme('${t.id}')">
+      <span class="to-dot" style="background:${t.dot};border-color:${t.dark ? 'rgba(255,255,255,0.25)' : 'rgba(0,0,0,0.12)'}"></span>
+      <span class="to-label">${t.label}</span>
+      ${t.id === currentId ? '<span class="to-check">✓</span>' : ''}
+    </button>
+  `).join('');
+}
+
+document.addEventListener('click', function(e) {
+  const picker = document.getElementById('themePicker');
+  if (picker && !picker.contains(e.target)) {
+    document.getElementById('themeDropdown')?.classList.remove('active');
+  }
+});
+
 (function() {
-  let dark = false;
+  let saved = 'light';
   try {
-    const saved = localStorage.getItem('amplify-theme');
-    dark = saved ? saved === 'dark' : window.matchMedia('(prefers-color-scheme: dark)').matches;
+    saved = localStorage.getItem('amplify-theme') || 'light';
+    if (saved === 'dark' && !_THEMES.find(t => t.id === saved)) saved = 'dark';
   } catch(e) {}
-  applyTheme(dark);
+  applyTheme(saved);
 })();
 
 function toggleUserMenu() {

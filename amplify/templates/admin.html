@@ -160,7 +160,7 @@
 </head>
 <body>
 <script>
-  (function(){try{var t=localStorage.getItem('amplify-theme');if(t?t==='dark':window.matchMedia('(prefers-color-scheme:dark)').matches)document.body.classList.add('dark-theme');}catch(e){}})();
+  (function(){try{var t=localStorage.getItem('amplify-theme')||'light';var m={dark:'dark-theme',midnight:'theme-midnight',nord:'theme-nord',solarized:'theme-solarized',rose:'theme-rose',forest:'theme-forest'};if(m[t])document.body.classList.add(m[t]);}catch(e){}})();
 </script>
 
 <!-- ── Topbar ── -->
@@ -172,7 +172,7 @@
   </div>
   <div class="spacer"></div>
   <div class="user-info">Signed in as <strong>{{ user.username }}</strong></div>
-  <span class="theme-toggle" onclick="toggleTheme()" id="themeIcon" title="Toggle theme">☀️</span>
+  <span style="cursor:pointer;font-size:14px;padding:4px 8px;border-radius:6px;" onclick="cycleTheme()" id="themeIcon" title="Cycle theme">☀️</span>
 </div>
 
 <!-- ── Body ── -->
@@ -250,14 +250,23 @@
 <script>
 let _resetId = null;
 
-function toggleTheme() {
-  const dark = !document.body.classList.contains('dark-theme');
-  document.body.classList.toggle('dark-theme', dark);
-  document.getElementById('themeIcon').textContent = dark ? '🌙' : '☀️';
-  try { localStorage.setItem('amplify-theme', dark ? 'dark' : 'light'); } catch(e) {}
+const _ADM_THEMES = ['light','dark','midnight','nord','solarized','rose','forest'];
+const _ADM_CLS = {dark:'dark-theme',midnight:'theme-midnight',nord:'theme-nord',solarized:'theme-solarized',rose:'theme-rose',forest:'theme-forest'};
+const _ADM_ICONS = {light:'☀️',dark:'🌙',midnight:'🌌',nord:'❄️',solarized:'🌅',rose:'🌸',forest:'🌲'};
+
+function cycleTheme() {
+  let cur = 'light';
+  try { cur = localStorage.getItem('amplify-theme') || 'light'; } catch(e){}
+  const idx = (_ADM_THEMES.indexOf(cur) + 1) % _ADM_THEMES.length;
+  const next = _ADM_THEMES[idx];
+  Object.values(_ADM_CLS).forEach(c => document.body.classList.remove(c));
+  if (_ADM_CLS[next]) document.body.classList.add(_ADM_CLS[next]);
+  document.getElementById('themeIcon').textContent = _ADM_ICONS[next] || '☀️';
+  try { localStorage.setItem('amplify-theme', next); } catch(e){}
 }
 (function() {
-  document.getElementById('themeIcon').textContent = document.body.classList.contains('dark-theme') ? '🌙' : '☀️';
+  let t = 'light'; try { t = localStorage.getItem('amplify-theme') || 'light'; } catch(e){}
+  document.getElementById('themeIcon').textContent = _ADM_ICONS[t] || '☀️';
 })();
 
 function fmtBytes(b) {
