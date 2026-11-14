@@ -438,14 +438,21 @@ def zephyr_config():
 
     server = load_zephyr_config()
     if server:
-        masked = _mask_secrets(server)
-        masked["_source"] = "server"
-        return jsonify(masked)
-    return jsonify({"_source": "none"})
+        if g.user.is_admin:
+            masked = _mask_secrets(server)
+            masked["_source"] = "server"
+            return jsonify(masked)
+        return jsonify({
+            "_source": "server",
+            "_configured": True,
+            "jira_url": server.get("jira_url", ""),
+            "project_key": server.get("project_key", ""),
+        })
+    return jsonify({"_source": "none", "_configured": False})
 
 
 def _mask_secrets(cfg: dict) -> dict:
-    """Return config with sensitive values masked for display."""
+    """Return config with sensitive values masked for display (admin only)."""
     out = dict(cfg)
     for key in ("api_token", "access_key", "secret_key"):
         val = out.get(key, "")
