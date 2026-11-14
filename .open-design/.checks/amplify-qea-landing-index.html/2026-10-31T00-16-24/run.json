@@ -1,0 +1,100 @@
+{
+  "entryPath": ".open-design/amplify-qea-landing/index.html",
+  "id": "2026-10-31T00-16-24",
+  "createdAt": "2026-10-31T00:16:24.699Z",
+  "mode": "page",
+  "errors": 0,
+  "warnings": 13,
+  "findings": [
+    {
+      "severity": "warning",
+      "check": "contrast",
+      "message": "button.btn \"Get Started Free\" has a contrast ratio of 3.67:1 against its background (needs 4.5:1 for body text)."
+    },
+    {
+      "severity": "warning",
+      "check": "emoji",
+      "message": "div.hero-image \"🚀\" contains emoji, which render from the exporting machine's fonts and can come out as empty boxes. Use inline SVG instead."
+    },
+    {
+      "severity": "warning",
+      "check": "emoji",
+      "message": "div.feature-icon \"⚙️\" contains emoji, which render from the exporting machine's fonts and can come out as empty boxes. Use inline SVG instead."
+    },
+    {
+      "severity": "warning",
+      "check": "emoji",
+      "message": "div.feature-icon \"📊\" contains emoji, which render from the exporting machine's fonts and can come out as empty boxes. Use inline SVG instead."
+    },
+    {
+      "severity": "warning",
+      "check": "emoji",
+      "message": "div.feature-icon \"🌐\" contains emoji, which render from the exporting machine's fonts and can come out as empty boxes. Use inline SVG instead."
+    },
+    {
+      "severity": "warning",
+      "check": "emoji",
+      "message": "div.feature-icon \"🔄\" contains emoji, which render from the exporting machine's fonts and can come out as empty boxes. Use inline SVG instead."
+    },
+    {
+      "severity": "warning",
+      "check": "emoji",
+      "message": "div.feature-icon \"🛡️\" contains emoji, which render from the exporting machine's fonts and can come out as empty boxes. Use inline SVG instead."
+    },
+    {
+      "severity": "warning",
+      "check": "emoji",
+      "message": "div.feature-icon \"📈\" contains emoji, which render from the exporting machine's fonts and can come out as empty boxes. Use inline SVG instead."
+    },
+    {
+      "severity": "warning",
+      "check": "contrast",
+      "message": "button.btn \"Choose Plan\" has a contrast ratio of 3.67:1 against its background (needs 4.5:1 for body text)."
+    },
+    {
+      "severity": "warning",
+      "check": "contrast",
+      "message": "button.btn \"Start Your Free Trial\" has a contrast ratio of 3.67:1 against its background (needs 4.5:1 for body text)."
+    },
+    {
+      "severity": "warning",
+      "check": "contrast",
+      "message": "a \"Twitter\" has a contrast ratio of 3.51:1 against its background (needs 4.5:1 for body text)."
+    },
+    {
+      "severity": "warning",
+      "check": "contrast",
+      "message": "a \"LinkedIn\" has a contrast ratio of 3.51:1 against its background (needs 4.5:1 for body text)."
+    },
+    {
+      "severity": "warning",
+      "check": "contrast",
+      "message": "a \"GitHub\" has a contrast ratio of 3.51:1 against its background (needs 4.5:1 for body text)."
+    },
+    {
+      "severity": "info",
+      "check": "contrast",
+      "message": "Contrast not checked for 9 text element(s) on gradient, image or translucent backgrounds — check those by eye."
+    }
+  ],
+  "images": [
+    {
+      "label": "desktop 1/5",
+      "file": "01-desktop-1-5.jpg",
+      "width": 1440,
+      "height": 900
+    },
+    {
+      "label": "mobile 1/9",
+      "file": "02-mobile-1-9.jpg",
+      "width": 390,
+      "height": 844
+    },
+    {
+      "label": "desktop 2/5",
+      "file": "03-desktop-2-5.jpg",
+      "width": 1440,
+      "height": 900
+    }
+  ]
+}

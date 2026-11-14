@@ -1,0 +1,103 @@
+{
+  "slug": "pme-p13n-mkt-2026-23",
+  "name": "PME P13N Mkt 2026.23",
+  "source": "sprint",
+  "jql": "",
+  "rows": 42,
+  "multi_value_cols": [
+    "Blocked By",
+    "Blocks",
+    "Depends on",
+    "Fix Version/s",
+    "Labels",
+    "Link Type",
+    "Linked Keys",
+    "Related (Bi-Drectional)",
+    "Related to",
+    "Sprint",
+    "is related to"
+  ],
+  "fetched_at": "2026-10-31T01:45:02+00:00",
+  "sprint": {
+    "id": 14635,
+    "self": "https://jira.sephora.com/rest/agile/1.0/sprint/14635",
+    "state": "active",
+    "name": "P13N Mkt 2026.23",
+    "startDate": "2026-10-29T14:34:00.000-07:00",
+    "endDate": "2026-11-12T14:34:00.000-08:00",
+    "activatedDate": "2026-10-29T10:56:22.284-07:00",
+    "originBoardId": 1578,
+    "goal": "",
+    "synced": false,
+    "autoStartStop": false,
+    "_board_id": 1578,
+    "_project": "PME",
+    "_board_name": "P13N Marketing Experiences"
+  },
+  "jira_url": "https://jira.sephora.com",
+  "velocity_history": [
+    {
+      "name": "P13N Mkt 2026.21",
+      "id": 14633,
+      "committed": 169.0,
+      "completed": 47.0,
+      "startDate": "01/Oct/26 3:03 AM",
+      "endDate": "15/Oct/26 3:03 AM",
+      "state": "CLOSED"
+    },
+    {
+      "name": "P13N Mkt 2026.19",
+      "id": 14147,
+      "committed": 264.0,
+      "completed": 139.0,
+      "startDate": "02/Sep/26 10:38 PM",
+      "endDate": "15/Sep/26 10:38 PM",
+      "state": "CLOSED"
+    },
+    {
+      "name": "P13N Mkt 2026.17",
+      "id": 14145,
+      "committed": 294.0,
+      "completed": 231.0,
+      "startDate": "05/Aug/26 10:38 PM",
+      "endDate": "18/Aug/26 10:38 PM",
+      "state": "CLOSED"
+    },
+    {
+      "name": "P13N Mkt 2026.22",
+      "id": 14634,
+      "committed": 180.0,
+      "completed": 108.0,
+      "startDate": "15/Oct/26 3:04 AM",
+      "endDate": "29/Oct/26 3:04 AM",
+      "state": "CLOSED"
+    },
+    {
+      "name": "P13N Mkt 2026.20",
+      "id": 14148,
+      "committed": 228.0,
+      "completed": 96.0,
+      "startDate": "16/Sep/26 10:38 PM",
+      "endDate": "29/Sep/26 10:38 PM",
+      "state": "CLOSED"
+    },
+    {
+      "name": "P13N Mkt 2026.18",
+      "id": 14146,
+      "committed": 203.0,
+      "completed": 169.0,
+      "startDate": "19/Aug/26 10:38 PM",
+      "endDate": "01/Sep/26 10:38 PM",
+      "state": "CLOSED"
+    },
+    {
+      "name": "P13N Mkt 2026.16",
+      "id": 14144,
+      "committed": 461.0,
+      "completed": 296.0,
+      "startDate": "22/Jul/26 10:38 PM",
+      "endDate": "04/Aug/26 10:38 PM",
+      "state": "CLOSED"
+    }
+  ]
+}

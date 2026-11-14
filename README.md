@@ -26,16 +26,18 @@ Amplify QEA **never modifies the framework**. All test logic, fixtures, page obj
 
 ## Quick Start
 
+For Docker builds, persistent configuration, browser execution, local tests, and deployment, see [the Docker guide](amplify/docs/DOCKER.md).
+
 ### macOS / Linux
 
 ```bash
-bash launch-ui.sh
+bash amplify.sh
 ```
 
 ### Windows
 
 ```bat
-launch-ui.bat    # run as Administrator on first launch
+amplify.bat    # run as Administrator on first launch
 ```
 
 The launcher:
@@ -78,40 +80,30 @@ pytest-xdist
 
 ```
 Amplify-QEA/
-├── server.py                    # Flask app factory — registers blueprints
-├── routes/
-│   ├── __init__.py
-│   ├── state.py                 # Shared run state + SSE broadcast
-│   ├── executor.py              # run / stop / stream / repos / tests / features / git / venv
-│   ├── config.py                # /api/config/* endpoints
-│   ├── dashboard.py             # /api/dashboard + /api/report
-│   ├── history.py               # Allure result parsing + per-repo run history
-│   ├── zephyr.py                # All /api/zephyr/* and /api/jira/* endpoints
-│   └── filemanager.py           # /api/fm/browse, read, save
-├── templates/
-│   ├── base.html                # HTML shell: head, CSS, nav, shared JS, includes
-│   └── partials/
-│       ├── executor.html        # Executor + Config page HTML
-│       ├── dashboard.html       # Reports Dashboard page HTML
-│       ├── testmanagement.html  # Test Management (Zephyr) page HTML
-│       └── filemanager.html     # File Manager page HTML + JS
-├── static/
-│   └── js/
-│       ├── executor.js          # Executor + Config JS
-│       ├── dashboard.js         # Dashboard charts + history table JS
-│       └── testmanagement.js    # Zephyr / Test Management JS
-├── ui_launcher/
-│   ├── command_builder.py       # Builds the pytest command; venv Python resolution
-│   ├── config_reader.py         # Config resolution chain (tool → override → repo)
-│   ├── report_resolver.py       # Finds the latest Allure HTML report
-│   ├── runner.py                # Spawns subprocess + SSE stream
-│   └── test_discovery.py        # Discovers suites and test files
+├── amplify.sh / amplify.bat     # Launchers (run `python -m amplify.server`)
 ├── config.json                  # Tool-level bootstrap config (repo_root, overrides)
-├── docs/
-│   └── EXTENDING.md
+├── report_history.json          # Tool-level run history
 ├── requirements.txt
-├── launch-ui.sh
-└── launch-ui.bat
+├── Dockerfile / Dockerfile.runner
+└── amplify/                     # The application package
+    ├── server.py                # Flask app factory — registers blueprints
+    ├── command_builder.py       # Builds the pytest command; venv Python resolution
+    ├── config_reader.py         # Config resolution chain (tool → override → repo)
+    ├── report_resolver.py       # Finds the latest Allure HTML report
+    ├── runner.py                # Spawns subprocess + SSE stream
+    ├── test_discovery.py        # Discovers suites and test files
+    ├── routes/                  # Flask blueprints (state, executor, config, dashboard,
+    │                            #   history, zephyr, filemanager, studio, insights)
+    ├── templates/
+    │   ├── base.html            # HTML shell: head, nav, shared JS, includes
+    │   └── partials/            # One HTML partial per tab
+    ├── static/
+    │   ├── css/amplify.css      # Apple-style design system (light + dark)
+    │   └── js/                  # Per-tab JavaScript
+    ├── jira_insights/           # Jira Insights Streamlit app (embedded in an iframe)
+    ├── .streamlit/config.toml   # Streamlit settings for Jira Insights
+    ├── tests/                   # Unit tests (run: python -m pytest amplify/tests)
+    └── docs/                    # DOCKER.md, EXTENDING.md
 ```
 
 ---

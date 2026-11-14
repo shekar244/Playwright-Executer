@@ -1,0 +1,352 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Amplify QEA</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" crossorigin>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
+  <link rel="stylesheet" href="/static/css/amplify.css" />
+</head>
+<body>
+<script>
+  // Set the theme class before first paint so dark mode never flashes light.
+  (function () {
+    try {
+      var t = localStorage.getItem('amplify-theme');
+      if (t ? t === 'dark' : window.matchMedia('(prefers-color-scheme: dark)').matches) document.body.classList.add('dark-theme');
+    } catch (e) {}
+  })();
+</script>
+
+<header>
+  <div class="header-logo">
+    <div class="logo-mark" aria-hidden="true">⚡</div>
+    <h1>Amplify <span>QEA</span></h1>
+  </div>
+  <div class="repo-subtitle" id="repoSubtitle">select a repo to begin</div>
+  <div class="header-right">
+    <span class="version-badge">v1.0.0</span>
+    <a href="/readme" target="_blank" class="help-link" title="Open documentation">Docs</a>
+    <div class="theme-toggle" onclick="toggleTheme()" title="Toggle light / dark appearance">
+      <span class="theme-toggle-label" id="themeIcon">☀️</span>
+      <div class="theme-toggle-track" id="themeTrack">
+        <div class="theme-toggle-thumb"></div>
+      </div>
+    </div>
+    {% if user %}
+    <div class="user-menu">
+      <button class="user-btn" onclick="toggleUserMenu()" title="User menu">
+        <span class="user-icon">👤</span>
+        <span class="user-name">{{ user.username }}</span>
+      </button>
+      <div class="user-dropdown" id="userDropdown">
+        <a href="javascript:logout()" class="user-logout">Logout</a>
+      </div>
+    </div>
+    {% endif %}
+  </div>
+</header>
+
+<nav class="tab-nav">
+  <button type="button" class="tab-btn active" id="navbtn-executor" onclick="switchTab('executor')"><span class="tab-icon">⚡</span>Executor</button>
+  <button type="button" class="tab-btn" id="navbtn-dashboard" onclick="switchTab('dashboard')"><span class="tab-icon">📊</span>Dashboard</button>
+  <button type="button" class="tab-btn" id="navbtn-zephyr" onclick="switchTab('zephyr')"><span class="tab-icon">🔷</span>Test Management</button>
+  <button type="button" class="tab-btn" id="navbtn-filemanager" onclick="switchTab('filemanager')"><span class="tab-icon">🗂️</span>File Manager</button>
+  <button type="button" class="tab-btn" id="navbtn-studio" onclick="switchTab('studio')"><span class="tab-icon">🔬</span>AI Studio</button>
+  <button type="button" class="tab-btn" id="navbtn-insights" onclick="switchTab('insights')"><span class="tab-icon">📈</span>Jira Insights</button>
+  <button type="button" class="tab-btn" id="navbtn-tools" onclick="switchTab('tools')"><span class="tab-icon">⚙️</span>Config</button>
+</nav>
+
+{% include 'partials/executor.html' %}
+{% include 'partials/dashboard.html' %}
+{% include 'partials/testmanagement.html' %}
+{% include 'partials/filemanager.html' %}
+{% include 'partials/studio.html' %}
+{% include 'partials/insights.html' %}
+
+<!-- Status bar -->
+<div class="statusbar">
+  <div class="status-dot" id="statusDot"></div>
+  <span class="status-label" id="statusLabel">IDLE</span>
+  <span class="status-cmd" id="statusCmd"></span>
+</div>
+
+<script>
+// ── Shared state ──────────────────────────────────────────────────────────────
+let testTree = {};
+let lastReport = null;
+let eventSource = null;
+let autoScroll = true;
+let _runContext = 'executor';
+let _selectedFeat = null;
+let _activeLogEl = null;  // Direct reference to target log div — set at run-start, never clobbered
+
+function escHtml(s) {
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+function _fmtDur(ms) {
+  if (!ms) return '0ms';
+  if (ms < 1000) return Math.round(ms) + 'ms';
+  if (ms < 60000) return (ms / 1000).toFixed(1) + 's';
+  return Math.floor(ms / 60000) + 'm ' + Math.round((ms % 60000) / 1000) + 's';
+}
+
+function classifyLine(line) {
+  const lo = line.toLowerCase();
+  if (/^passed/i.test(line)) return 'passed';
+  if (/^failed/i.test(line)) return 'failed';
+  if (/^error/i.test(line))  return 'failed';
+  if (lo.includes('passed') && !lo.includes('failed') && !lo.includes('error')) return 'highlight';
+  if (lo.includes('failed') || lo.includes('error') || lo.includes('traceback')) return 'failed';
+  if (lo.includes('warning') || lo.includes('warn')) return 'warning';
+  if (/^[=\-]/.test(line)) return 'sep';
+  return 'default';
+}
+
+function appendLine(text, cls) {
+  const log = _activeLogEl || document.getElementById(
+    _runContext === 'features' ? 'features-log' :
+    _runContext === 'git'      ? 'git-log'       :
+    _runContext === 'venv'     ? 'venv-log'      : 'log'
+  );
+  if (!log) return;
+  const span = document.createElement('span');
+  span.className = 'log-line log-' + (cls || 'default');
+  span.textContent = text;
+  log.appendChild(span);
+  if (autoScroll) log.scrollTop = log.scrollHeight;
+}
+
+function clearLog()     { autoScroll = true; const l = document.getElementById('log'); l.innerHTML = ''; l.scrollTop = 0; }
+function clearFeatLog() { document.getElementById('features-log').innerHTML = ''; }
+function clearVenvLog() { const l = document.getElementById('venv-log'); if (l) { l.innerHTML = ''; l.scrollTop = 0; } }
+function scrollToBottom()     { const l = document.getElementById('log');          l.scrollTop = l.scrollHeight; }
+function featScrollToBottom() { const l = document.getElementById('features-log'); l.scrollTop = l.scrollHeight; }
+
+function setStatus(state, label, cmd) {
+  document.getElementById('statusDot').className   = 'status-dot ' + state;
+  document.getElementById('statusLabel').textContent = label;
+  if (cmd !== undefined) document.getElementById('statusCmd').textContent = cmd.slice(0, 100);
+}
+
+function setRunning(running) {
+  document.getElementById('runBtn').disabled  = running;
+  document.getElementById('stopBtn').disabled = !running;
+  const fr = document.getElementById('featRunBtn');
+  const fs = document.getElementById('featStopBtn');
+  if (fr) fr.disabled = running || !_selectedFeat;
+  if (fs) fs.disabled = !running;
+}
+
+function switchTab(tab) {
+  const pages = ['executor','tools','dashboard','zephyr','filemanager','studio','insights'];
+  pages.forEach(p => {
+    const el = document.getElementById('page-' + p);
+    if (el) {
+      if (p === 'executor') { el.classList.toggle('hidden', p !== tab); }
+      else if (p === 'filemanager') { el.style.display = (p === tab) ? 'flex' : 'none'; }
+      else { el.classList.toggle('active', p === tab); }
+    }
+  });
+  document.querySelectorAll('.tab-btn').forEach(btn => {
+    const key = btn.id.replace('navbtn-', '');
+    btn.classList.toggle('active', key === tab);
+  });
+  if (tab === 'tools')       { switchCfgTab('features'); loadTools(); loadFeatures(); loadZephyrConfig(); loadMappingConfig(); }
+  if (tab === 'dashboard')   loadDashboard();
+  if (tab === 'zephyr')      { loadZephyrConfig(); _updateZephyrContextBanners(); loadZephyrStatuses(); }
+  if (tab === 'filemanager') initFileManager();
+  if (tab === 'studio')      studioRefresh();
+  if (tab === 'insights')    loadInsights();
+}
+
+// ── Status polling fallback (Windows SSE reliability) ─────────────────────────
+// Polls every 4 s; if server says idle but UI still shows running, resets UI.
+let _pollTimer = null;
+function _startStatusPoll() {
+  _stopStatusPoll();
+  _pollTimer = setInterval(async () => {
+    const s = await fetch('/api/status').then(r => r.json()).catch(() => ({}));
+    if (!s.running && document.getElementById('runBtn')?.disabled) {
+      setRunning(false);
+      _runContext  = 'executor';
+      _activeLogEl = null;
+      setStatus('idle', 'IDLE');
+    }
+  }, 4000);
+}
+function _stopStatusPoll() { if (_pollTimer) { clearInterval(_pollTimer); _pollTimer = null; } }
+
+function connectStream() {
+  if (eventSource) eventSource.close();
+  eventSource = new EventSource('/api/stream');
+  eventSource.addEventListener('cmd', e => {
+    const cmd = JSON.parse(e.data);
+    appendLine('$ ' + cmd, 'cmd');
+    appendLine('─'.repeat(60), 'sep');
+    setStatus('running', 'RUNNING', cmd);
+    document.getElementById('statusCmd').textContent = cmd.slice(0, 120);
+    _startStatusPoll();  // begin polling so UI recovers if SSE drops
+  });
+  eventSource.addEventListener('line', e => {
+    const text = JSON.parse(e.data);
+    appendLine(text, classifyLine(text));
+  });
+  eventSource.addEventListener('status', e => {
+    const s = JSON.parse(e.data);
+    appendLine('─'.repeat(60), 'sep');
+    if (s === 'passed') {
+      const msg = (_runContext === 'features' || _runContext === 'git') ? '✓  Done.'
+                : _runContext === 'venv' ? '✓  pip install completed successfully.'
+                : '✓  All tests passed!';
+      appendLine(msg, 'passed');
+      if (_runContext !== 'venv') setStatus('passed', 'PASSED');
+    } else if (s === 'cancelled') {
+      appendLine('⚠  Cancelled by user.', 'warning');
+      if (_runContext !== 'venv') setStatus('idle', 'CANCELLED');
+    } else {
+      const code = s.split(':')[1] || '?';
+      const msg = _runContext === 'venv'
+        ? `✗  pip install failed  (exit code ${code}).`
+        : `✗  Finished with failures  (exit code ${code}).`;
+      appendLine(msg, 'failed');
+      if (_runContext !== 'venv') setStatus('failed', 'FAILED');
+    }
+    setRunning(false);
+    _runContext  = 'executor';
+    _activeLogEl = null;
+    _stopStatusPoll();  // SSE confirmed completion — no need to poll
+  });
+  eventSource.addEventListener('done', e => {
+    refreshReport();
+    if (document.getElementById('auto_open').checked) openReport('individual');
+  });
+  eventSource.onerror = () => { eventSource.close(); setTimeout(connectStream, 1000); };
+}
+
+function refreshLog() {
+  // Reconnect SSE stream — the server replays recent buffered events on connect.
+  // Useful when logs stop appearing due to a dropped connection.
+  connectStream();
+  const btn = event?.currentTarget;
+  if (btn) {
+    const orig = btn.textContent;
+    btn.textContent = '↺ …';
+    btn.disabled = true;
+    setTimeout(() => { btn.textContent = orig; btn.disabled = false; }, 1200);
+  }
+}
+
+document.getElementById('log').addEventListener('scroll', function() {
+  autoScroll = this.scrollTop + this.clientHeight >= this.scrollHeight - 20;
+});
+
+// ── UI Tab kill-switch ────────────────────────────────────────────────────────
+// Maps tab key → { navBtn id, cfgBtn id (optional) }
+const UI_TAB_MAP = {
+  dashboard:    { nav: 'navbtn-dashboard' },
+  zephyr:       { nav: 'navbtn-zephyr' },
+  insights:     { nav: 'navbtn-insights' },
+  cfg_git:      { cfg: 'ctab-git' },
+  cfg_tools:    { cfg: 'ctab-tools' },
+  cfg_mapping:  { cfg: 'ctab-mapping' },
+  cfg_zephyr:   { cfg: 'ctab-zephyr' },
+};
+
+function applyUiTabs(tabs) {
+  const defaults = { dashboard: true, zephyr: true, insights: true, cfg_git: true, cfg_tools: true, cfg_mapping: true, cfg_zephyr: true };
+  const t = Object.assign({}, defaults, tabs || {});
+  Object.entries(UI_TAB_MAP).forEach(([key, ids]) => {
+    const visible = !!t[key];
+    if (ids.nav) {
+      const btn = document.getElementById(ids.nav);
+      if (btn) btn.style.display = visible ? '' : 'none';
+    }
+    if (ids.cfg) {
+      const btn = document.getElementById(ids.cfg);
+      if (btn) btn.style.display = visible ? '' : 'none';
+    }
+  });
+}
+
+// ── Theme toggle ─────────────────────────────────────────────────────────────
+function applyTheme(dark) {
+  document.body.classList.toggle('dark-theme', dark);
+  const track = document.getElementById('themeTrack');
+  const icon = document.getElementById('themeIcon');
+  if (track) track.classList.toggle('dark', dark);
+  if (icon) icon.textContent = dark ? '🌙' : '☀️';
+  // Canvas charts resolve their colours when drawn, so redraw the visible one.
+  if (typeof loadDashboard === 'function' && document.getElementById('page-dashboard')?.classList.contains('active')) loadDashboard();
+  if (typeof _insightsApplyTheme === 'function') _insightsApplyTheme();
+}
+
+function toggleTheme() {
+  const dark = !document.body.classList.contains('dark-theme');
+  applyTheme(dark);
+  try { localStorage.setItem('amplify-theme', dark ? 'dark' : 'light'); } catch(e) {}
+}
+
+(function() {
+  let dark = false;
+  try {
+    const saved = localStorage.getItem('amplify-theme');
+    dark = saved ? saved === 'dark' : window.matchMedia('(prefers-color-scheme: dark)').matches;
+  } catch(e) {}
+  applyTheme(dark);
+})();
+
+function toggleUserMenu() {
+  const dropdown = document.getElementById('userDropdown');
+  if (dropdown) dropdown.classList.toggle('active');
+}
+
+async function logout() {
+  try {
+    await fetch('/api/auth/logout', { method: 'POST' });
+    window.location.href = '/login';
+  } catch (error) {
+    console.error('Logout failed:', error);
+    window.location.href = '/login';
+  }
+}
+
+document.addEventListener('click', function(event) {
+  const userMenu = document.querySelector('.user-menu');
+  if (userMenu && !userMenu.contains(event.target)) {
+    const dropdown = document.getElementById('userDropdown');
+    if (dropdown) dropdown.classList.remove('active');
+  }
+});
+
+async function init() {
+  const cfg = await fetch('/api/config').then(r => r.json()).catch(() => ({}));
+  if (cfg.default_browser) document.getElementById('browser').value = cfg.default_browser;
+  if (cfg.browsers) {
+    const sel = document.getElementById('browser');
+    sel.innerHTML = cfg.browsers.map(b => `<option value="${b}">${b}</option>`).join('');
+    if (cfg.default_browser) sel.value = cfg.default_browser;
+  }
+  if (cfg.markers?.length) populateMarkers(cfg.markers);
+  renderExtraOptions(cfg.extra_options || []);
+  applyUiTabs(cfg.ui_tabs || {});
+  await scanRepos(cfg.repo_root || '');
+  loadPinnedRepos();  // populate pinned repos panel
+  connectStream();
+  loadConfigInfo();  // show active config file in the Config File panel
+  if (typeof checkVenvStatus === 'function') checkVenvStatus();
+  if (cfg.venv_path) { const el = document.getElementById('venvPathInput'); if (el) el.value = cfg.venv_path; }
+
+
+}
+
+init();
+</script>
+<script src="/static/js/executor.js"></script>
+<script src="/static/js/dashboard.js"></script>
+<script src="/static/js/testmanagement.js"></script>
+<script src="/static/js/insights.js"></script>
+</body>
+</html>

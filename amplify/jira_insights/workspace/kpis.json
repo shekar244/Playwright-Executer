@@ -1,0 +1,280 @@
+[
+  {
+    "label": "Issues",
+    "icon": "\ud83e\uddfe",
+    "accent": "#7ea8ff",
+    "metric": {
+      "value": "",
+      "agg": "Count",
+      "filters": {}
+    },
+    "divide_by": null,
+    "caption": "dataset",
+    "caption_text": "",
+    "caption_metric": null,
+    "as_percent": false,
+    "requires": [
+      "Open/Closed"
+    ],
+    "id": "6ecb0e2ebf"
+  },
+  {
+    "label": "Open",
+    "icon": "\ud83d\udd13",
+    "accent": "#f0a070",
+    "metric": {
+      "value": "",
+      "agg": "Count",
+      "filters": {
+        "Open/Closed": [
+          "Open"
+        ]
+      }
+    },
+    "divide_by": null,
+    "caption": "share",
+    "caption_text": "",
+    "caption_metric": null,
+    "as_percent": false,
+    "requires": [],
+    "id": "15e40d0616"
+  },
+  {
+    "label": "Stories",
+    "icon": "\ud83d\udcd8",
+    "accent": "#7ecdc0",
+    "metric": {
+      "value": "",
+      "agg": "Count",
+      "filters": {
+        "Issue Type": [
+          "Story"
+        ]
+      }
+    },
+    "divide_by": null,
+    "caption": "share",
+    "caption_text": "",
+    "caption_metric": null,
+    "as_percent": false,
+    "requires": [],
+    "id": "85149fb378"
+  },
+  {
+    "label": "Defects",
+    "icon": "\ud83d\udc1e",
+    "accent": "#f07090",
+    "metric": {
+      "value": "",
+      "agg": "Count",
+      "filters": {
+        "Issue Type": {
+          "contains": "bug|defect"
+        }
+      }
+    },
+    "divide_by": null,
+    "caption": "share",
+    "caption_text": "",
+    "caption_metric": null,
+    "as_percent": false,
+    "requires": [],
+    "id": "526322a557"
+  },
+  {
+    "label": "Defects per story",
+    "icon": "\u2696\ufe0f",
+    "accent": "#f0d080",
+    "metric": {
+      "value": "",
+      "agg": "Count",
+      "filters": {
+        "Issue Type": {
+          "contains": "bug|defect"
+        }
+      }
+    },
+    "divide_by": {
+      "value": "",
+      "agg": "Count",
+      "filters": {
+        "Issue Type": [
+          "Story"
+        ]
+      }
+    },
+    "caption": "text",
+    "caption_text": "defects \u00f7 stories",
+    "caption_metric": null,
+    "as_percent": false,
+    "requires": [],
+    "id": "980c73e8a2"
+  },
+  {
+    "label": "Story points",
+    "icon": "\ud83c\udfaf",
+    "accent": "#b898f5",
+    "metric": {
+      "value": "Story Points",
+      "agg": "Sum",
+      "filters": {}
+    },
+    "divide_by": null,
+    "caption": "metric",
+    "caption_text": "delivered",
+    "caption_metric": {
+      "value": "Story Points",
+      "agg": "Sum",
+      "filters": {
+        "Open/Closed": [
+          "Closed"
+        ]
+      }
+    },
+    "as_percent": false,
+    "requires": [],
+    "id": "223c693a03"
+  },
+  {
+    "label": "Sprint Items",
+    "icon": "\ud83c\udfc3",
+    "accent": "#7ea8ff",
+    "metric": {
+      "value": "",
+      "agg": "Count",
+      "filters": {}
+    },
+    "divide_by": null,
+    "caption": "dataset",
+    "caption_text": "",
+    "caption_metric": null,
+    "as_percent": false,
+    "requires": [
+      "Sprint Name"
+    ],
+    "id": "0e8fbe253e"
+  },
+  {
+    "label": "Completed",
+    "icon": "\u2705",
+    "accent": "#5fd4a0",
+    "metric": {
+      "value": "",
+      "agg": "Count",
+      "filters": {
+        "Status Category": [
+          "Done"
+        ]
+      }
+    },
+    "divide_by": null,
+    "caption": "share",
+    "caption_text": "",
+    "caption_metric": null,
+    "as_percent": false,
+    "requires": [
+      "Sprint Name"
+    ],
+    "id": "28248880a8"
+  },
+  {
+    "label": "In Progress",
+    "icon": "\ud83d\udd04",
+    "accent": "#f0d080",
+    "metric": {
+      "value": "",
+      "agg": "Count",
+      "filters": {
+        "Status Category": [
+          "In Progress"
+        ]
+      }
+    },
+    "divide_by": null,
+    "caption": "share",
+    "caption_text": "",
+    "caption_metric": null,
+    "as_percent": false,
+    "requires": [
+      "Sprint Name"
+    ],
+    "id": "8b00c763b3"
+  },
+  {
+    "label": "To Do",
+    "icon": "\ud83d\udccb",
+    "accent": "#8e98bc",
+    "metric": {
+      "value": "",
+      "agg": "Count",
+      "filters": {
+        "Status Category": [
+          "To Do"
+        ]
+      }
+    },
+    "divide_by": null,
+    "caption": "share",
+    "caption_text": "",
+    "caption_metric": null,
+    "as_percent": false,
+    "requires": [
+      "Sprint Name"
+    ],
+    "id": "948e46d2c2"
+  },
+  {
+    "label": "Completion %",
+    "icon": "\ud83c\udfaf",
+    "accent": "#7ecdc0",
+    "metric": {
+      "value": "",
+      "agg": "Count",
+      "filters": {
+        "Status Category": [
+          "Done"
+        ]
+      }
+    },
+    "divide_by": {
+      "value": "",
+      "agg": "Count",
+      "filters": {}
+    },
+    "caption": "text",
+    "caption_text": "of sprint items",
+    "caption_metric": null,
+    "as_percent": true,
+    "requires": [
+      "Sprint Name"
+    ],
+    "id": "dbb4695912"
+  },
+  {
+    "label": "Sprint Points",
+    "icon": "\u2b50",
+    "accent": "#b898f5",
+    "metric": {
+      "value": "Story Points",
+      "agg": "Sum",
+      "filters": {}
+    },
+    "divide_by": null,
+    "caption": "metric",
+    "caption_text": "completed",
+    "caption_metric": {
+      "value": "Story Points",
+      "agg": "Sum",
+      "filters": {
+        "Status Category": [
+          "Done"
+        ]
+      }
+    },
+    "as_percent": false,
+    "requires": [
+      "Sprint Name"
+    ],
+    "id": "638863d26d"
+  }
+]

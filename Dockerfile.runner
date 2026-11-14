@@ -1,0 +1,8 @@
+FROM amplify-qea:local
+
+ENV PLAYWRIGHT_BROWSERS_PATH=/opt/playwright-browsers
+
+RUN python -m venv /opt/test-venv \
+    && /opt/test-venv/bin/python -m pip install --no-cache-dir \
+        pytest pytest-playwright pytest-xdist allure-pytest \
+    && /opt/test-venv/bin/python -m playwright install --with-deps chromium

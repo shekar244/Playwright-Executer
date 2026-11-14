@@ -1,15 +1,17 @@
-# Playwright Test Executor — Python dependencies
+# Amplify QEA — Python dependencies
 #
 # Install:  pip install -r requirements.txt
-# Requires: Python 3.10+  (3.13 recommended, used by launch-ui.sh)
+# Requires: Python 3.10+  (3.13 recommended, used by amplify.sh)
 #
 # Runtime
 flask>=3.0.0          # Web server + SSE streaming
 openpyxl>=3.1.0       # Excel read/write for File Manager
 pyyaml>=6.0           # YAML read/write for File Manager
 gunicorn>=21.0.0      # Production WSGI server (used in Docker/OpenShift)
+bcrypt>=4.1.0         # Password hashing
+PyJWT>=2.8.0          # JWT token generation and verification
 
-# Jira Insights tab (jira_insights/ — Streamlit side-car app)
+# Jira Insights tab (amplify/jira_insights/ — Streamlit side-car app)
 streamlit>=1.45,<1.57 # App shell; PyGWalker's Streamlit bridge needs the Tornado server (<1.57)
 pygwalker>=0.4.9      # Drag-and-drop chart explorer
 plotly>=5.24.0        # Pivot report charts
@@ -26,5 +28,5 @@ streamlit-sortables>=0.3.1  # Drag-and-drop dashboard layout / tile order (✥ A
 #   allure-pytest
 #   pytest-xdist
 #
-# Optional — to run this tool's own unit tests (tests/):
+# Optional — to run this tool's own unit tests (amplify/tests/):
 #   pytest

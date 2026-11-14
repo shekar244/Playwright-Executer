@@ -19,6 +19,13 @@ env/
 .env
 *.env
 config.json
+**/jira_connection.json
+*.pem
+*.key
+
+.claude/
+.claude-flow/
+.firecrawl/
 
 # ── macOS junk ────────────────────────────────────────────────────────────────
 .DS_Store
@@ -31,16 +38,18 @@ config.json
 *.swo
 
 # ── Docs & local launchers (not needed in container) ─────────────────────────
-docs/
+amplify/docs/
 README.md
-launch-ui.sh
-launch-ui.bat
+amplify.sh
+amplify.bat
 
 # ── Test artifacts (keep image lean) ─────────────────────────────────────────
 allure/
 allure-results/
 .pytest_cache/
-tests/
+amplify/tests/
 
 # ── Jira Insights local workspace (pulled Jira data) ──────────────────────────
-jira_insights/workspace/
+amplify/jira_insights/workspace/
+Jira_ReportBuilder/workspace/
+report_history.json

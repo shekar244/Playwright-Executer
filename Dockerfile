@@ -34,7 +34,7 @@ COPY . .
 
 # ── Runtime configuration ─────────────────────────────────────────────────────
 # PORT=8080   : OpenShift routes external traffic to 8080 by default
-# CONTAINER=1 : tells server.py to skip browser launch and hosts-file edit
+# CONTAINER=1 : tells amplify/server.py to skip browser launch and hosts-file edit
 ENV PORT=8080
 ENV CONTAINER=1
 
@@ -49,15 +49,13 @@ EXPOSE 8501
 HEALTHCHECK --interval=30s --timeout=10s --start-period=15s --retries=3 \
     CMD curl -f http://localhost:8080/ || exit 1
 
+# ── Data and Database ─────────────────────────────────────────────────────
+# Persistent storage for user workspaces and SQLite database
+RUN mkdir -p /app/data /app/workspaces && chmod 777 /app/data /app/workspaces
+
 # ── Start command ─────────────────────────────────────────────────────────────
 # workers=1  : app uses in-process state (SSE stream, subprocess handle);
 #              multiple workers would not share that state.
 # threads=8  : handles concurrent SSE + API requests within the single worker.
 # timeout=300: long timeout for test runs that can take several minutes.
-CMD ["gunicorn", "server:app", \
-     "--bind", "0.0.0.0:8080", \
-     "--workers", "1", \
-     "--threads", "8", \
-     "--timeout", "300", \
-     "--access-logfile", "-", \
-     "--error-logfile", "-"]
+CMD ["sh", "-c", "python -m amplify.models.db && gunicorn amplify.server:app --bind 0.0.0.0:8080 --workers 1 --threads 8 --timeout 300 --access-logfile - --error-logfile -"]
