@@ -37,9 +37,7 @@ config.json
 *.swp
 *.swo
 
-# ── Docs & local launchers (not needed in container) ─────────────────────────
-amplify/docs/
-README.md
+# ── Local launchers (not needed in container) ────────────────────────────────
 amplify.sh
 amplify.bat
 
