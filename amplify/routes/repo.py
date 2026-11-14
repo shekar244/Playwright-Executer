@@ -14,6 +14,7 @@ Blueprint: Repository management routes (clone, pull, branch, venv, pip)
 from __future__ import annotations
 
 import os
+import shutil
 import subprocess
 import sys
 from pathlib import Path
@@ -55,17 +56,32 @@ def _run_git(args: list[str], cwd: str, timeout: int = 120) -> tuple[int, str]:
         return 1, "git is not installed"
 
 
+def _normalize_url(url: str) -> str:
+    """Ensure URL ends with .git for consistency."""
+    url = url.rstrip("/")
+    if not url.endswith(".git"):
+        url += ".git"
+    return url
+
+
 def _build_clone_url(url: str, token: str = "") -> str:
     if not token or not url.startswith("https://"):
         return url
+    import urllib.parse
+    safe_token = urllib.parse.quote(token, safe="")
     host = url.split("://", 1)[1]
     if "github.com" in url:
-        return f"https://x-access-token:{token}@{host}"
+        return f"https://x-access-token:{safe_token}@{host}"
     if "gitlab" in url:
-        return f"https://oauth2:{token}@{host}"
+        return f"https://oauth2:{safe_token}@{host}"
     if "bitbucket" in url:
-        return f"https://x-token-auth:{token}@{host}"
-    return f"https://x-access-token:{token}@{host}"
+        return f"https://x-token-auth:{safe_token}@{host}"
+    return f"https://x-access-token:{safe_token}@{host}"
+
+
+def _is_valid_git_repo(path: Path) -> bool:
+    """Check if directory is a valid git repo (has .git dir)."""
+    return (path / ".git").is_dir()
 
 
 @bp.route("/api/repo/clone", methods=["POST"])
@@ -80,26 +96,31 @@ def clone_repo():
     if not url:
         return jsonify({"error": "Repository URL required"}), 400
 
+    url = _normalize_url(url)
+
     if not name:
         name = url.rstrip("/").split("/")[-1].replace(".git", "")
 
     repo_dir = _repo_path(g.user.id, name)
 
     if repo_dir.exists():
-        code, out = _run_git(["pull"], str(repo_dir))
-        if code != 0:
-            return jsonify({"error": f"Pull failed: {out}"}), 500
-
-        if branch:
-            code, out = _run_git(["checkout", branch], str(repo_dir))
+        if not _is_valid_git_repo(repo_dir):
+            shutil.rmtree(repo_dir, ignore_errors=True)
+        else:
+            clone_url = _build_clone_url(url, token)
+            _run_git(["remote", "set-url", "origin", clone_url], str(repo_dir))
+            code, out = _run_git(["pull"], str(repo_dir))
             if code != 0:
-                return jsonify({"error": f"Checkout failed: {out}"}), 500
-
-        ActivityLog.record(g.user.id, "repo_pull", f"Pulled {name}", request.remote_addr)
-        return jsonify({
-            "ok": True, "action": "pulled", "name": name,
-            "path": str(repo_dir), "output": out
-        })
+                return jsonify({"error": f"Pull failed: {out}"}), 500
+            if branch:
+                code, out = _run_git(["checkout", branch], str(repo_dir))
+                if code != 0:
+                    return jsonify({"error": f"Checkout failed: {out}"}), 500
+            ActivityLog.record(g.user.id, "repo_pull", f"Pulled {name}", request.remote_addr)
+            return jsonify({
+                "ok": True, "action": "pulled", "name": name,
+                "path": str(repo_dir), "output": out
+            })
 
     clone_url = _build_clone_url(url, token)
     cmd = ["clone", "--progress"]
@@ -164,7 +185,7 @@ def list_branches():
         })
 
     if body_url:
-        clone_url = _build_clone_url(body_url, token)
+        clone_url = _build_clone_url(_normalize_url(body_url), token)
         code, out = _run_git(["ls-remote", "--heads", clone_url], "/tmp", timeout=30)
         if code != 0:
             return jsonify({"error": f"Could not list branches: {out}"}), 500
