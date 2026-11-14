@@ -4,33 +4,118 @@
 
 | Requirement | Details |
 |-------------|---------|
-| **OpenShift CLI** | `oc` installed and logged in (`oc login`) |
-| **Namespace/Project** | An OpenShift project to deploy into (`oc project myproject`) |
-| **Image Registry** | Access to push images (internal registry or external like Quay/Docker Hub) |
-| **PVC Support** | Storage class available for persistent volume claims |
-| **Git** | To clone this repository |
-| **Docker** (optional) | To build locally before pushing; or use OpenShift S2I/binary build |
+| **Docker** | Installed and running (`docker --version`) |
+| **OpenShift CLI** | `oc` installed and logged in (`oc login https://your-cluster`) |
+| **JFrog Artifactory** | Docker repository with push/pull access |
+| **OpenShift Project** | Namespace with permissions to create deployments, secrets, PVCs, routes |
 
-### Access Requirements
-- `oc` CLI authenticated with permissions to create deployments, services, routes, secrets, PVCs
-- If using internal registry: `oc registry login` or `podman login`
+### Credentials Needed
+
+| Credential | Where to get it |
+|------------|-----------------|
+| **JFrog Registry URL** | e.g. `yourcompany.jfrog.io` — JFrog Platform > Settings |
+| **JFrog Docker Repo** | e.g. `docker-local` — Artifactory > Repositories |
+| **JFrog Username** | Your JFrog login email |
+| **JFrog API Key** | User Profile > Generate API Key |
+| **Jira URL** | `https://yourcompany.atlassian.net` |
+| **Jira API Token** | `id.atlassian.com` > Security > API tokens |
+| **Zephyr Keys** | Jira > Zephyr app > API Keys |
 
 ---
 
-## Quick Deploy (5 Steps)
+## Architecture
 
-### Step 1: Create the Project
+```
+ Developer Machine               JFrog Artifactory              OpenShift Cluster
+┌──────────────────┐           ┌──────────────────┐          ┌─────────────────────────┐
+│                  │  docker   │                  │  oc pull  │                         │
+│  Source Code     │──push───→ │  docker-local/   │────────→ │  Pod: amplify-qea       │
+│  + Dockerfile    │           │  amplify-qea     │          │  ├── Flask :8080         │
+│                  │           │  :latest         │          │  └── Streamlit :8501     │
+└──────────────────┘           └──────────────────┘          │                         │
+                                                             │  PVC: /app/data (10Gi)  │
+                                                             │  ├── amplify.db         │
+                                                             │  ├── server_config.json  │
+                                                             │  └── workspaces/         │
+                                                             │      ├── user-1/         │
+                                                             │      ├── user-2/         │
+                                                             │      └── ...             │
+                                                             │                         │
+                                                             │  Secret: amplify-secrets │
+                                                             │  Secret: jfrog-pull      │
+                                                             │  Route: HTTPS            │
+                                                             └─────────────────────────┘
+```
+
+---
+
+## Deployment (Step by Step)
+
+### Step 1: Build the Docker Image
 
 ```bash
+cd /path/to/amplify
+
+docker build -t amplify-qea:latest .
+```
+
+Verify the build:
+```bash
+docker images | grep amplify-qea
+```
+
+### Step 2: Tag for JFrog Artifactory
+
+```bash
+# Format: <jfrog-registry>/<docker-repo>/amplify-qea:<tag>
+docker tag amplify-qea:latest yourcompany.jfrog.io/docker-local/amplify-qea:latest
+```
+
+Replace:
+- `yourcompany.jfrog.io` — your JFrog Artifactory hostname
+- `docker-local` — your Docker repository name in Artifactory
+
+### Step 3: Push to JFrog
+
+```bash
+# Login to JFrog
+docker login yourcompany.jfrog.io -u your-email@company.com
+
+# Enter your JFrog API key when prompted for password
+
+# Push the image
+docker push yourcompany.jfrog.io/docker-local/amplify-qea:latest
+```
+
+Verify in JFrog UI: Artifactory > docker-local > amplify-qea > latest
+
+### Step 4: Create OpenShift Project
+
+```bash
+oc login https://your-openshift-cluster
+
 oc new-project amplify-qea --display-name="Amplify QEA"
 # or switch to existing:
 oc project amplify-qea
 ```
 
-### Step 2: Create Secrets
+### Step 5: Create JFrog Pull Secret
+
+OpenShift needs credentials to pull the image from JFrog:
 
 ```bash
-# Generate a strong JWT secret and create the secret
+oc create secret docker-registry jfrog-pull-secret \
+  --docker-server=yourcompany.jfrog.io \
+  --docker-username=your-email@company.com \
+  --docker-password=YOUR_JFROG_API_KEY
+
+# Link to default service account so pods can use it
+oc secrets link default jfrog-pull-secret --for=pull
+```
+
+### Step 6: Create Application Secrets
+
+```bash
 oc create secret generic amplify-secrets \
   --from-literal=jwt-secret-key="$(openssl rand -base64 32)" \
   --from-literal=jira-url="https://yourcompany.atlassian.net" \
@@ -41,67 +126,124 @@ oc create secret generic amplify-secrets \
   --from-literal=zephyr-account-id="YOUR_ATLASSIAN_ACCOUNT_ID"
 ```
 
-**If you don't have Jira/Zephyr yet**, skip those — they're optional and can be added later from the Admin Panel:
+**Minimal (Jira/Zephyr can be configured later from Admin Panel):**
 ```bash
 oc create secret generic amplify-secrets \
   --from-literal=jwt-secret-key="$(openssl rand -base64 32)"
 ```
 
-### Step 3: Build & Push Image
+### Step 7: Update Deployment Image Reference
 
-**Option A: Binary build (from local source)**
-```bash
-cd /path/to/amplify
-oc new-build --binary --name=amplify-qea --strategy=docker
-oc start-build amplify-qea --from-dir=. --follow
+Edit `openshift/deployment.yaml` — change the image line to your JFrog path:
+
+```yaml
+# Find this line:
+image: image-registry.openshift-image-registry.svc:5000/${NAMESPACE}/amplify-qea:latest
+
+# Change to:
+image: yourcompany.jfrog.io/docker-local/amplify-qea:latest
 ```
 
-**Option B: Push to external registry**
-```bash
-# Build locally
-docker build -t quay.io/yourorg/amplify-qea:latest .
-docker push quay.io/yourorg/amplify-qea:latest
-
-# Update deployment.yaml image field to:
-#   image: quay.io/yourorg/amplify-qea:latest
+Add `imagePullSecrets` under `spec.template.spec`:
+```yaml
+spec:
+  template:
+    spec:
+      imagePullSecrets:
+        - name: jfrog-pull-secret
+      containers:
+        - name: amplify-qea
+          image: yourcompany.jfrog.io/docker-local/amplify-qea:latest
 ```
 
-**Option C: Build from Git repo**
-```bash
-oc new-build https://github.com/yourorg/amplify.git \
-  --name=amplify-qea --strategy=docker
-```
-
-### Step 4: Deploy
+### Step 8: Deploy All Resources
 
 ```bash
-# Apply manifests in order
+# Apply in order: storage → service → route → deployment
 oc apply -f openshift/pvc.yaml
 oc apply -f openshift/service.yaml
 oc apply -f openshift/route.yaml
-
-# For binary build, update the image reference first:
-NAMESPACE=$(oc project -q)
-sed "s/\${NAMESPACE}/$NAMESPACE/" openshift/deployment.yaml | oc apply -f -
-
-# Or for external registry, edit deployment.yaml image field and apply:
 oc apply -f openshift/deployment.yaml
+
+# Wait for rollout
+oc rollout status deployment/amplify-qea --timeout=120s
 ```
 
-### Step 5: Verify & Access
+### Step 9: Verify Deployment
 
 ```bash
-# Check pod is running
+# Check pod status
 oc get pods -l app=amplify-qea
 
-# Check route URL
+# Expected output:
+# NAME                           READY   STATUS    RESTARTS   AGE
+# amplify-qea-xxxxx-yyyyy        1/1     Running   0          30s
+
+# Get the route URL
 oc get route amplify-qea -o jsonpath='{.spec.host}'
 
-# View logs
+# Check logs
 oc logs -f deployment/amplify-qea
 
 # Open in browser
 open "https://$(oc get route amplify-qea -o jsonpath='{.spec.host}')"
+```
+
+### Step 10: Create Admin User
+
+```bash
+# 1. Register at https://<route-url>/register
+# 2. Promote to admin:
+oc exec deployment/amplify-qea -- \
+  sqlite3 /app/data/amplify.db \
+  "UPDATE users SET is_admin = 1 WHERE username = 'your-admin-username';"
+```
+
+---
+
+## Automated Deploy Script
+
+For a one-command deployment, use the included script:
+
+```bash
+JFROG_REGISTRY=yourcompany.jfrog.io \
+JFROG_REPO=docker-local \
+JFROG_USERNAME=your-email@company.com \
+JFROG_PASSWORD=your-api-key \
+./openshift/jfrog-deploy.sh
+```
+
+The script handles all steps: build, tag, push, create secrets, deploy, and verify.
+
+---
+
+## Updating the Deployment
+
+When you make code changes and need to redeploy:
+
+```bash
+# 1. Rebuild
+docker build -t amplify-qea:latest .
+docker tag amplify-qea:latest yourcompany.jfrog.io/docker-local/amplify-qea:latest
+
+# 2. Push new image
+docker push yourcompany.jfrog.io/docker-local/amplify-qea:latest
+
+# 3. Restart the deployment to pull the new image
+oc rollout restart deployment/amplify-qea
+
+# 4. Watch rollout
+oc rollout status deployment/amplify-qea
+```
+
+For versioned releases, use tags:
+```bash
+docker tag amplify-qea:latest yourcompany.jfrog.io/docker-local/amplify-qea:v1.2.0
+docker push yourcompany.jfrog.io/docker-local/amplify-qea:v1.2.0
+
+# Update deployment to use the new tag
+oc set image deployment/amplify-qea \
+  amplify-qea=yourcompany.jfrog.io/docker-local/amplify-qea:v1.2.0
 ```
 
 ---
@@ -109,36 +251,51 @@ open "https://$(oc get route amplify-qea -o jsonpath='{.spec.host}')"
 ## What Gets Deployed
 
 ```
-┌─────────────────────────────────────────────────┐
-│  OpenShift Project: amplify-qea                 │
-│                                                 │
-│  ┌──────────────────────────────────────────┐   │
-│  │  Pod: amplify-qea                        │   │
-│  │                                          │   │
-│  │  Flask (gunicorn) ──── port 8080         │   │
-│  │  Streamlit ─────────── port 8501         │   │
-│  │                                          │   │
-│  │  /app/data/ ← PVC (10Gi)                │   │
-│  │    ├── amplify.db        (SQLite)        │   │
-│  │    ├── server_config.json (Jira creds)   │   │
-│  │    └── workspaces/                       │   │
-│  │        ├── 1/  (user 1)                  │   │
-│  │        │   ├── config/config.json        │   │
-│  │        │   ├── history/                  │   │
-│  │        │   ├── repos/  (cloned repos)    │   │
-│  │        │   └── jira_insights/            │   │
-│  │        ├── 2/  (user 2)                  │   │
-│  │        └── ...                           │   │
-│  └──────────────────────────────────────────┘   │
-│                                                 │
-│  Secret: amplify-secrets                        │
-│    jwt-secret-key, jira-*, zephyr-*             │
-│                                                 │
-│  Service: amplify-qea (8080, 8501)              │
-│  Route: amplify-qea (HTTPS, edge TLS)           │
-│  PVC: amplify-data-pvc (10Gi)                   │
-└─────────────────────────────────────────────────┘
+┌──────────────────────────────────────────────────────┐
+│  OpenShift Project: amplify-qea                      │
+│                                                      │
+│  ┌───────────────────────────────────────────────┐   │
+│  │  Pod: amplify-qea                             │   │
+│  │  Image: jfrog.io/docker-local/amplify-qea     │   │
+│  │                                               │   │
+│  │  Flask (gunicorn) ──── port 8080              │   │
+│  │  Streamlit ─────────── port 8501              │   │
+│  │                                               │   │
+│  │  /app/data/ ← PVC (10Gi)                     │   │
+│  │    ├── amplify.db           (user database)   │   │
+│  │    ├── server_config.json   (Jira/Zephyr)     │   │
+│  │    └── workspaces/                            │   │
+│  │        ├── 1/  (user 1)                       │   │
+│  │        │   ├── config/config.json             │   │
+│  │        │   ├── history/report_history.json    │   │
+│  │        │   ├── repos/ (cloned git repos)      │   │
+│  │        │   └── jira_insights/ (datasets)      │   │
+│  │        ├── 2/  (user 2)                       │   │
+│  │        └── ...                                │   │
+│  └───────────────────────────────────────────────┘   │
+│                                                      │
+│  Secrets:                                            │
+│    amplify-secrets   (JWT key, Jira/Zephyr creds)    │
+│    jfrog-pull-secret (Docker registry auth)          │
+│                                                      │
+│  Service:  amplify-qea (ports 8080, 8501)            │
+│  Route:    amplify-qea (HTTPS, edge TLS)             │
+│  PVC:      amplify-data-pvc (10Gi ReadWriteOnce)     │
+└──────────────────────────────────────────────────────┘
 ```
+
+---
+
+## Manifest Files Reference
+
+| File | Resource | Purpose |
+|------|----------|---------|
+| `deployment.yaml` | Deployment | Pod spec, env vars from Secret, PVC mount, health probes, resource limits |
+| `service.yaml` | Service | ClusterIP service exposing ports 8080 (Flask) and 8501 (Streamlit) |
+| `route.yaml` | Route | HTTPS route with edge TLS termination |
+| `pvc.yaml` | PersistentVolumeClaim | 10Gi storage for database and user workspaces |
+| `secrets.yaml` | Secret (template) | Template for JWT key and Jira/Zephyr credentials |
+| `jfrog-deploy.sh` | Script | Automated build, push, and deploy |
 
 ---
 
@@ -146,71 +303,21 @@ open "https://$(oc get route amplify-qea -o jsonpath='{.spec.host}')"
 
 | Variable | Required | Default | Description |
 |----------|----------|---------|-------------|
-| `CONTAINER` | Yes | `1` | Set by Dockerfile; skips browser launch |
-| `PORT` | Yes | `8080` | Flask/gunicorn listen port |
-| `JWT_SECRET_KEY` | **Yes** | — | **Must be set**. Token signing key. Generate: `openssl rand -base64 32` |
-| `JIRA_URL` | No | — | Jira instance URL |
-| `JIRA_USERNAME` | No | — | Jira/Atlassian email |
-| `JIRA_API_TOKEN` | No | — | Jira API token |
+| `CONTAINER` | Auto | `1` | Set by Dockerfile — skips browser launch |
+| `PORT` | Auto | `8080` | Flask/gunicorn listen port |
+| `JWT_SECRET_KEY` | **Yes** | — | Token signing key. Generate: `openssl rand -base64 32` |
+| `JIRA_URL` | No | — | e.g. `https://yourcompany.atlassian.net` |
+| `JIRA_USERNAME` | No | — | Atlassian email |
+| `JIRA_API_TOKEN` | No | — | Atlassian API token |
 | `ZEPHYR_ACCESS_KEY` | No | — | Zephyr for Jira Cloud access key |
 | `ZEPHYR_SECRET_KEY` | No | — | Zephyr for Jira Cloud secret key |
 | `ZEPHYR_ACCOUNT_ID` | No | — | Atlassian account ID |
-| `JIRA_VERIFY_SSL` | No | `false` | Set to `true` for SSL verification |
+| `JIRA_VERIFY_SSL` | No | `false` | SSL certificate verification |
 | `INSIGHTS_PORT` | No | `8501` | Streamlit sidecar port |
-| `INSIGHTS_PUBLIC_URL` | No | — | Public URL for Streamlit if behind separate route |
-
----
-
-## Post-Deployment Setup
-
-### 1. Create Admin User
-
-The first user to register becomes a regular user. Promote them to admin:
-
-```bash
-# Option A: Via the database directly
-oc exec deployment/amplify-qea -- \
-  sqlite3 /app/data/amplify.db \
-  "UPDATE users SET is_admin = 1 WHERE username = 'your-admin-username';"
-
-# Option B: Register, then promote via API (after promoting one admin)
-# Use the admin panel at https://your-route/admin
-```
-
-### 2. Configure Jira/Zephyr (if not done via env vars)
-
-1. Login as admin
-2. Go to Admin Panel (user menu > Admin Panel)
-3. Fill in Server Secrets section
-4. Click Save
-
-### 3. Test the Deployment
-
-```bash
-# Register a user
-curl -X POST "https://$(oc get route amplify-qea -o jsonpath='{.spec.host}')/api/auth/register" \
-  -H "Content-Type: application/json" \
-  -d '{"username":"admin","password":"SecurePass123!"}'
-
-# Login
-curl -X POST "https://$(oc get route amplify-qea -o jsonpath='{.spec.host}')/api/auth/login" \
-  -H "Content-Type: application/json" \
-  -d '{"username":"admin","password":"SecurePass123!"}'
-```
 
 ---
 
 ## Day-2 Operations
-
-### Update the Image
-
-```bash
-# Binary build (from local changes)
-oc start-build amplify-qea --from-dir=. --follow
-
-# The deployment auto-rolls out after build completes
-oc rollout status deployment/amplify-qea
-```
 
 ### View Logs
 
@@ -228,84 +335,109 @@ oc exec deployment/amplify-qea -- \
 ### Backup Data
 
 ```bash
-# Copy the entire data directory locally
-oc rsync $(oc get pod -l app=amplify-qea -o name):/app/data/ ./backup/
+oc rsync $(oc get pod -l app=amplify-qea -o name):/app/data/ ./amplify-backup/
 ```
 
 ### Restore Data
 
 ```bash
-oc rsync ./backup/ $(oc get pod -l app=amplify-qea -o name):/app/data/
+oc rsync ./amplify-backup/ $(oc get pod -l app=amplify-qea -o name):/app/data/
+oc rollout restart deployment/amplify-qea
 ```
-
-### Scale (not recommended for SQLite)
-
-The app uses SQLite and in-process state, so **keep replicas at 1**. For multi-replica scaling, migrate to PostgreSQL first.
 
 ### Update Secrets
 
 ```bash
-# Update a single secret value
+# Update Jira API token
 oc patch secret amplify-secrets -p \
   '{"stringData":{"jira-api-token":"NEW_TOKEN_VALUE"}}'
 
-# Restart pod to pick up new secrets
+# Restart to pick up changes
 oc rollout restart deployment/amplify-qea
+```
+
+### Update JFrog Pull Secret
+
+```bash
+oc delete secret jfrog-pull-secret
+oc create secret docker-registry jfrog-pull-secret \
+  --docker-server=yourcompany.jfrog.io \
+  --docker-username=new-user@company.com \
+  --docker-password=NEW_API_KEY
+oc secrets link default jfrog-pull-secret --for=pull
 ```
 
 ### Delete Everything
 
 ```bash
 oc delete deployment,service,route,pvc,secret -l app=amplify-qea
+oc delete secret jfrog-pull-secret
 ```
 
 ---
 
 ## Troubleshooting
 
-### Pod not starting
+### ImagePullBackOff
 
 ```bash
-oc describe pod -l app=amplify-qea
+oc describe pod -l app=amplify-qea | grep -A5 "Events"
+```
+- Check JFrog pull secret exists: `oc get secret jfrog-pull-secret`
+- Check it's linked: `oc describe sa default | grep pull`
+- Verify image path matches JFrog: `oc get deployment amplify-qea -o jsonpath='{.spec.template.spec.containers[0].image}'`
+- Test pull manually: `docker pull yourcompany.jfrog.io/docker-local/amplify-qea:latest`
+
+### CrashLoopBackOff
+
+```bash
 oc logs deployment/amplify-qea --previous
 ```
+- Usually a Python import error or missing dependency
+- Check the Dockerfile built correctly
 
-Common issues:
-- **ImagePullBackOff**: Image not found in registry. Check `oc get builds`.
-- **CrashLoopBackOff**: Check logs for Python errors.
-- **Pending PVC**: No storage class available. Check `oc get sc`.
+### Pending PVC
 
-### Permission errors
+```bash
+oc get pvc amplify-data-pvc
+oc get sc   # list available storage classes
+```
+- If no default storage class, add `storageClassName` to pvc.yaml
 
-OpenShift runs as a random non-root UID. The Dockerfile sets `chmod g=u` on `/app` and `chmod 777` on `/app/data`, which handles this. If files are still inaccessible:
+### Permission Errors
+
+OpenShift runs containers as a random non-root UID (GID 0). The Dockerfile handles this with `chmod g=u` and `chmod 777` on data directories.
 
 ```bash
 oc exec deployment/amplify-qea -- ls -la /app/data/
 ```
 
-### Database locked
-
-SQLite can lock under concurrent writes. If you see "database is locked" errors, the app is receiving too many concurrent writes. Solutions:
-1. Restart the pod: `oc rollout restart deployment/amplify-qea`
-2. Migrate to PostgreSQL for high-concurrency use
-
-### Route not accessible
+### Route Not Accessible
 
 ```bash
-oc get route amplify-qea
-# Check TLS settings match your cluster
+oc get route amplify-qea -o yaml
 ```
+- Check TLS termination matches your cluster configuration
+- Try `insecureEdgeTerminationPolicy: Allow` for debugging
+
+### Database Locked
+
+SQLite under heavy concurrent writes. Solutions:
+1. `oc rollout restart deployment/amplify-qea`
+2. For high concurrency, migrate to PostgreSQL
 
 ---
 
 ## Production Hardening Checklist
 
-- [ ] **JWT_SECRET_KEY**: Generated with `openssl rand -base64 32` (not a default)
-- [ ] **TLS**: Route uses `edge` termination (HTTPS)
-- [ ] **PVC**: Adequate storage (10Gi default, increase for many users/repos)
-- [ ] **Resource limits**: CPU/memory set in deployment.yaml
-- [ ] **Backups**: Scheduled `oc rsync` of /app/data/ to backup storage
-- [ ] **Admin user**: At least one user promoted to admin
-- [ ] **Jira secrets**: Set via OpenShift Secret (not hardcoded)
-- [ ] **Network policy**: Restrict ingress to route only (if required)
-- [ ] **Image scanning**: Scan Docker image for CVEs before deploying
+- [ ] `JWT_SECRET_KEY` generated with `openssl rand -base64 32`
+- [ ] Route uses HTTPS (edge TLS termination)
+- [ ] PVC storage adequate (10Gi default — increase for many users/repos)
+- [ ] Resource limits set (default: 250m-2 CPU, 512Mi-2Gi memory)
+- [ ] JFrog pull secret created and linked
+- [ ] At least one admin user promoted
+- [ ] Jira/Zephyr secrets configured via OpenShift Secret or Admin Panel
+- [ ] Backup schedule configured for `/app/data/`
+- [ ] Network policy restricts access if required
+- [ ] Docker image scanned for CVEs
+- [ ] Non-admin users cannot view Jira credentials (verified)
