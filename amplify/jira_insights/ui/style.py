@@ -110,6 +110,13 @@ _CSS_DARK = "<style>" + """
   .stApp [data-baseweb="menu"] li { color: var(--ji-text) !important; }
   .stApp button[data-testid="stBaseButton-secondary"] { background: var(--ji-surface2) !important; border-color: var(--ji-border) !important; }
   .stApp button[data-testid="stBaseButton-secondary"] p { color: var(--ji-text) !important; }
+  /* Sidebar collapse/expand button */
+  .stApp [data-testid="collapsedControl"],
+  .stApp button[data-testid="stSidebarCollapseButton"],
+  .stApp [data-testid="stSidebarCollapsedControl"] { color: #f5f5f7 !important; background: rgba(255,255,255,0.12) !important; border: 0.5px solid rgba(255,255,255,0.2) !important; }
+  .stApp [data-testid="collapsedControl"] svg,
+  .stApp button[data-testid="stSidebarCollapseButton"] svg,
+  .stApp [data-testid="stSidebarCollapsedControl"] svg { fill: #f5f5f7 !important; stroke: #f5f5f7 !important; }
 """ + _COMPONENTS + "</style>"
 
 _CSS_LIGHT = "<style>" + """
