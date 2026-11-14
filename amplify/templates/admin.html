@@ -131,6 +131,31 @@
     .modal-card input { margin-bottom: 16px; }
     .modal-actions { display: flex; gap: 8px; justify-content: flex-end; }
     .modal-actions .btn { min-width: 90px; }
+
+    @media (max-width: 768px) {
+      .admin-topbar { padding: 0 12px; height: 46px; gap: 8px; }
+      .admin-topbar h1 { font-size: 14px; }
+      .admin-topbar .user-info { display: none; }
+      .admin-body { padding: 12px; }
+      .metrics-grid { grid-template-columns: repeat(2, 1fr); gap: 8px; }
+      .metric-card { padding: 12px 14px; }
+      .metric-value { font-size: 24px; }
+      .admin-section { border-radius: var(--radius); }
+      .admin-table-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+      .admin-table { min-width: 700px; }
+      .admin-table th, .admin-table td { padding: 7px 10px; font-size: 11px; }
+      .tbl-btn { padding: 3px 8px; font-size: 10px; }
+      .activity-item { flex-wrap: wrap; gap: 4px; padding: 8px 12px; }
+      .activity-item .ts { min-width: auto; font-size: 10px; }
+      .activity-item .who { min-width: auto; }
+      .activity-item .what { min-width: auto; }
+      .sc-grid { grid-template-columns: 1fr !important; }
+    }
+    @media (max-width: 480px) {
+      .metrics-grid { grid-template-columns: 1fr 1fr; }
+      .metric-value { font-size: 20px; }
+      .back-link { font-size: 12px; padding: 4px 8px; }
+    }
   </style>
 </head>
 <body>
@@ -161,6 +186,7 @@
     <div class="admin-section-header">
       Users <span class="count-badge" id="userCount">0</span>
     </div>
+    <div class="admin-table-wrap" style="overflow-x:auto;-webkit-overflow-scrolling:touch;">
     <table class="admin-table">
       <thead><tr>
         <th>ID</th><th>Username</th><th>Email</th><th>Role</th><th>Status</th>
@@ -170,6 +196,7 @@
         <tr><td colspan="9" class="admin-empty">Loading...</td></tr>
       </tbody>
     </table>
+    </div>
   </div>
 
   <!-- Server Secrets (Jira / Zephyr) -->
@@ -180,7 +207,7 @@
     </div>
     <div style="padding:16px 18px;display:flex;flex-direction:column;gap:12px;">
       <div class="hint">Shared credentials for all users. Set via environment variables or edit here. Tokens are masked in the UI.</div>
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
+      <div class="sc-grid" style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
         <div class="field"><label style="font-size:11px;font-weight:600;">Jira URL</label><input type="text" id="sc_jira_url" placeholder="https://company.atlassian.net"></div>
         <div class="field"><label style="font-size:11px;font-weight:600;">Username</label><input type="text" id="sc_username" placeholder="user@company.com"></div>
         <div class="field"><label style="font-size:11px;font-weight:600;">Jira API Token</label><input type="password" id="sc_api_token" placeholder="Atlassian API token"></div>

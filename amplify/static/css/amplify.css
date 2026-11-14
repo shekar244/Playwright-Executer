@@ -387,3 +387,96 @@ table.history-tbl tbody tr:hover td { background: var(--accent-glow); }
 .user-logout:last-child { border-radius: 0 0 var(--radius) var(--radius); }
 ::-webkit-scrollbar-corner { background: transparent; }
 .dash-title { flex-wrap: wrap; }
+
+/* ══════════════════════════════════════════════════════════════════════
+   Mobile / Responsive
+   ══════════════════════════════════════════════════════════════════════ */
+
+@media (max-width: 768px) {
+  body { overflow: auto; height: auto; min-height: 100vh; }
+
+  /* ── Header ── */
+  header { padding: 0 12px; height: 46px; gap: 8px; }
+  header h1 { font-size: 14px; }
+  .repo-subtitle { display: none; }
+  .version-badge { display: none; }
+  .help-link { display: none; }
+  .user-name { display: none; }
+  .theme-toggle-label { display: none; }
+  .theme-toggle-track { width: 36px; height: 22px; }
+  .theme-toggle-thumb { width: 18px; height: 18px; }
+  .theme-toggle-track.dark .theme-toggle-thumb { transform: translateX(14px); }
+
+  /* ── Tab navigation: horizontal scroll ── */
+  .tab-nav { padding: 6px 8px 4px; gap: 1px; }
+  .tab-btn { padding: 5px 10px; font-size: 11px; gap: 4px; }
+  .tab-icon { font-size: 11px; }
+
+  /* ── Executor: stack panels vertically ── */
+  .body { flex-direction: column; overflow: auto; }
+  .panel-left { width: 100%; border-right: none; border-bottom: 0.5px solid var(--border); padding: 10px 12px 14px; overflow-y: visible; max-height: none; }
+  .panel-right { min-height: 300px; }
+  #log { font-size: 11px; padding: 10px 12px; }
+
+  /* ── Section blocks ── */
+  .section-block { border-radius: var(--radius); }
+  .section-content { padding: 6px 12px 12px; }
+  .section-title { padding: 9px 12px 5px; font-size: 10px; }
+
+  /* ── Inputs & buttons ── */
+  input[type="text"], input[type="number"], input[type="password"], input[type="email"], select { font-size: 16px; padding: 10px 12px; }
+  .btn { padding: 10px 16px; font-size: 14px; }
+  .btn-sm { padding: 6px 12px; font-size: 12px; }
+  .action-row { flex-wrap: wrap; }
+  .field-row { flex-wrap: wrap; }
+
+  /* ── Config page: single column ── */
+  #page-tools .features-left, .features-left { width: 100% !important; }
+  .features-right, #feat-log-panel, #git-log-panel { display: none !important; }
+  .cfg-tab-btn { padding: 5px 8px; font-size: 10.5px; }
+  .tool-form-grid { grid-template-columns: 1fr; }
+  .vtab-layout { flex-direction: column; }
+  .vtab-nav { width: 100%; flex-direction: row; overflow-x: auto; border-right: none; border-bottom: 0.5px solid var(--border); padding: 6px; }
+  .vtab-btn { padding: 6px 10px; font-size: 11px; white-space: nowrap; }
+  .vtab-panel { padding: 10px 12px; }
+
+  /* ── Dashboard: stack cards ── */
+  .dash-body { padding: 12px; gap: 12px; }
+  .dash-title { font-size: 18px; }
+  .dash-stats { flex-direction: column; gap: 8px; }
+  .stat-pill { min-width: auto; }
+  .dash-row { flex-direction: column; gap: 12px; }
+  .dash-card { border-radius: var(--radius); }
+  .dash-chart-wrap { height: 160px; }
+
+  /* ── Tables: horizontal scroll ── */
+  .dash-table-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+  .dash-table-wrap table { min-width: 600px; }
+  th, td { padding: 7px 10px; font-size: 12px; }
+
+  /* ── Zephyr / Test Management ── */
+  .z-panel { padding: 12px; }
+  .drop-zone { padding: 20px 12px; }
+
+  /* ── File Manager ── */
+  #page-filemanager { overflow: auto; }
+
+  /* ── Status bar ── */
+  .statusbar { padding: 0 10px; height: 26px; font-size: 10px; }
+  .status-cmd { max-width: 50vw; }
+
+  /* ── Pinned / saved repos ── */
+  .pinned-repo-card { padding: 6px 8px !important; }
+}
+
+@media (max-width: 480px) {
+  header { gap: 6px; }
+  .logo-mark { width: 24px; height: 24px; font-size: 12px; border-radius: 6px; }
+  header h1 span { display: none; }
+  .tab-nav { padding: 4px 6px 3px; }
+  .tab-btn { padding: 4px 8px; font-size: 10.5px; }
+  .tab-btn .tab-icon { display: none; }
+  .panel-left { padding: 8px 10px 12px; gap: 10px; }
+  .dash-body { padding: 10px; }
+  .btn { padding: 10px 14px; }
+}

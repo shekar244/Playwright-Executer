@@ -48,6 +48,11 @@
       box-shadow: var(--shadow-sm); transition: background var(--tr);
     }
     .theme-switch:hover { background: var(--surface2); }
+    @media (max-width: 480px) {
+      .auth-card { padding: 28px 20px 24px; margin: 12px; border-radius: var(--radius-lg); }
+      .auth-header h1 { font-size: 20px; }
+      .auth-logo { width: 42px; height: 42px; font-size: 20px; }
+    }
   </style>
 </head>
 <body>
