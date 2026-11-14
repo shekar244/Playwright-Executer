@@ -164,6 +164,230 @@ async function _savePinnedRepos() {
   }).catch(() => {});
 }
 
+// ── Git Repo Management ──────────────────────────────────────────────────────
+
+async function loadRepoStatus() {
+  const s = await fetch('/api/repo/status').then(r => r.json()).catch(() => ({}));
+  const banner  = document.getElementById('activeRepoBanner');
+  const nameEl  = document.getElementById('activeRepoName');
+  const pathEl  = document.getElementById('activeRepoPath');
+  const brEl    = document.getElementById('activeRepoBranch');
+  const venvSec = document.getElementById('venvSection');
+  const brSec   = document.getElementById('branchSection');
+
+  if (s.has_repo) {
+    banner.style.display = '';
+    nameEl.textContent = s.repo_name;
+    pathEl.textContent = s.repo_path;
+    brEl.textContent = s.branch ? '⎇ ' + s.branch : '';
+    document.getElementById('repo').value = s.repo_path;
+    document.getElementById('repoSubtitle').textContent = '📁 ' + s.repo_name;
+    document.title = 'Amplify QEA — ' + s.repo_name;
+
+    // Venv section
+    venvSec.style.display = 'flex';
+    const vs = document.getElementById('venvStatus');
+    if (s.has_venv) {
+      vs.innerHTML = '<span style="color:var(--green);">● venv active</span>';
+      document.getElementById('createVenvBtn').style.display = 'none';
+      document.getElementById('installDepsBtn').style.display = '';
+    } else {
+      vs.innerHTML = '<span style="color:var(--yellow);">○ no venv</span>';
+      document.getElementById('createVenvBtn').style.display = '';
+      document.getElementById('installDepsBtn').style.display = 'none';
+    }
+
+    // Requirements dropdown
+    const reqSel = document.getElementById('reqFileSelect');
+    reqSel.innerHTML = (s.requirements || []).map(r =>
+      `<option value="${r}">${r}</option>`
+    ).join('') || '<option value="">no requirements found</option>';
+
+    // Branch section
+    brSec.style.display = 'flex';
+    loadBranches();
+
+    // Close clone panel if repo is loaded
+    document.getElementById('cloneDetails').removeAttribute('open');
+  } else {
+    banner.style.display = 'none';
+    venvSec.style.display = 'none';
+    brSec.style.display = 'none';
+  }
+  loadSavedRepos();
+}
+
+async function loadBranches() {
+  const data = await fetch('/api/repo/branches').then(r => r.json()).catch(() => ({}));
+  const sel = document.getElementById('branchSelect');
+  if (!sel || !data.branches?.length) return;
+  sel.innerHTML = data.branches.map(b =>
+    `<option value="${b}" ${b === data.current ? 'selected' : ''}>${b}</option>`
+  ).join('');
+}
+
+async function fetchBranches() {
+  const url = document.getElementById('cloneUrl').value.trim();
+  const token = document.getElementById('cloneToken').value.trim();
+  if (!url) return;
+  const sel = document.getElementById('cloneBranch');
+  sel.innerHTML = '<option value="">loading...</option>';
+  const params = new URLSearchParams({ url });
+  if (token) params.set('token', token);
+  const data = await fetch('/api/repo/branches?' + params).then(r => r.json()).catch(() => ({}));
+  if (data.error) { sel.innerHTML = '<option value="">default</option>'; return; }
+  sel.innerHTML = '<option value="">default</option>' +
+    (data.branches || []).map(b => `<option value="${b}">${b}</option>`).join('');
+}
+
+async function cloneRepo() {
+  const url    = document.getElementById('cloneUrl').value.trim();
+  const branch = document.getElementById('cloneBranch').value;
+  const token  = document.getElementById('cloneToken').value.trim();
+  if (!url) return alert('Git URL is required');
+
+  const btn    = document.getElementById('cloneBtn');
+  const status = document.getElementById('cloneStatus');
+  btn.disabled = true;
+  btn.textContent = 'Cloning…';
+  status.style.display = 'block';
+  status.textContent = 'Cloning repository…';
+  status.style.color = 'var(--accent)';
+
+  try {
+    const r = await fetch('/api/repo/clone', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ url, branch, token }),
+    });
+    const d = await r.json();
+    if (r.ok) {
+      status.textContent = d.action === 'cloned' ? 'Cloned successfully' : 'Pulled latest';
+      status.style.color = 'var(--green)';
+      applyRepo(d.path, false);
+      await loadRepoStatus();
+      discoverTests();
+    } else {
+      status.textContent = d.error || 'Clone failed';
+      status.style.color = 'var(--red)';
+    }
+  } catch (e) {
+    status.textContent = 'Network error';
+    status.style.color = 'var(--red)';
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Clone & Setup';
+  }
+}
+
+async function pullRepo() {
+  appendLine('⟳  Pulling latest…', 'info');
+  const r = await fetch('/api/repo/pull', { method: 'POST' }).then(r => r.json()).catch(() => ({}));
+  if (r.ok) {
+    appendLine('✓  ' + (r.output || 'Up to date'), 'passed');
+    loadRepoStatus();
+  } else {
+    appendLine('✗  ' + (r.error || 'Pull failed'), 'failed');
+  }
+}
+
+async function switchBranch() {
+  const branch = document.getElementById('branchSelect').value;
+  if (!branch) return;
+  appendLine('⟳  Switching to ' + branch + '…', 'info');
+  const r = await fetch('/api/repo/checkout', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ branch }),
+  }).then(r => r.json()).catch(() => ({}));
+  if (r.ok) {
+    appendLine('✓  On branch ' + branch, 'passed');
+    loadRepoStatus();
+    discoverTests();
+  } else {
+    appendLine('✗  ' + (r.error || 'Checkout failed'), 'failed');
+  }
+}
+
+async function createVenv() {
+  const btn = document.getElementById('createVenvBtn');
+  btn.disabled = true; btn.textContent = 'Creating…';
+  appendLine('⟳  Creating .venv…', 'info');
+  const r = await fetch('/api/repo/venv/create', { method: 'POST' }).then(r => r.json()).catch(() => ({}));
+  btn.disabled = false; btn.textContent = 'Create .venv';
+  if (r.ok) {
+    appendLine('✓  venv created at ' + r.path, 'passed');
+    loadRepoStatus();
+  } else {
+    appendLine('✗  ' + (r.error || 'Failed'), 'failed');
+  }
+}
+
+async function installDeps() {
+  const reqFile = document.getElementById('reqFileSelect').value;
+  appendLine('⟳  Installing dependencies…', 'info');
+  const r = await fetch('/api/repo/venv/install', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ requirements_file: reqFile }),
+  }).then(r => r.json()).catch(() => ({}));
+  if (r.error) {
+    appendLine('✗  ' + r.error, 'failed');
+  }
+}
+
+async function loadSavedRepos() {
+  const configs = await fetch('/api/repo/configs').then(r => r.json()).catch(() => []);
+  const section = document.getElementById('savedReposSection');
+  const list    = document.getElementById('savedReposList');
+  if (!section || !list) return;
+  if (!configs.length) { section.style.display = 'none'; return; }
+  section.style.display = 'flex';
+  list.innerHTML = configs.map(c => `
+    <div style="display:flex;align-items:center;gap:8px;padding:6px 10px;border-radius:var(--radius);
+                border:0.5px solid var(--border);background:var(--surface2);cursor:pointer;transition:all .12s;"
+         onclick="applySavedRepo('${escHtml(c.url)}','${escHtml(c.branch||'')}','${escHtml(c.token||'')}')"
+         title="${escHtml(c.url)}">
+      <span style="font-size:12px;flex-shrink:0;">📦</span>
+      <span style="flex:1;font-size:12px;font-weight:600;color:var(--text-muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escHtml(c.name)}</span>
+      <span style="font-size:10px;color:var(--text-dim);">${escHtml(c.branch||'default')}</span>
+      <button onclick="event.stopPropagation();deleteSavedRepo('${escHtml(c.name)}')"
+              title="Remove" style="background:none;border:none;color:var(--text-dim);cursor:pointer;font-size:11px;padding:2px 4px;opacity:.5"
+              onmouseover="this.style.opacity='1';this.style.color='var(--red)'"
+              onmouseout="this.style.opacity='.5';this.style.color='var(--text-dim)'">✕</button>
+    </div>
+  `).join('');
+}
+
+function applySavedRepo(url, branch, token) {
+  document.getElementById('cloneUrl').value = url;
+  document.getElementById('cloneToken').value = token;
+  document.getElementById('cloneDetails').setAttribute('open', '');
+  if (branch) {
+    const sel = document.getElementById('cloneBranch');
+    sel.innerHTML = `<option value="">default</option><option value="${branch}" selected>${branch}</option>`;
+  }
+  cloneRepo();
+}
+
+async function saveRepoConfig() {
+  const url = document.getElementById('cloneUrl').value.trim();
+  if (!url) return alert('Enter a Git URL first');
+  const name = url.split('/').filter(Boolean).pop().replace('.git', '');
+  const branch = document.getElementById('cloneBranch').value;
+  const token = document.getElementById('cloneToken').value.trim();
+  await fetch('/api/repo/configs', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ name, url, branch, token }),
+  });
+  loadSavedRepos();
+}
+
+async function deleteSavedRepo(name) {
+  await fetch('/api/repo/configs', {
+    method: 'DELETE', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ name }),
+  });
+  loadSavedRepos();
+}
+
 // ── Test discovery ─────────────────────────────────────────────────────────────
 async function discoverTests() {
   const repo = document.getElementById('repo').value.trim();
@@ -767,7 +991,7 @@ async function persistTools() {
 
 // ── Config sub-tabs ────────────────────────────────────────────────────────────
 function switchCfgTab(tab) {
-  const panels = { features: 'cfgFeatures', git: 'cfgGit', tools: 'cfgTools', allure: 'cfgAllure', jfrog: 'cfgJfrog', mapping: 'cfgMapping', zephyr: 'cfgZephyr', uitabs: 'cfgUiTabs' };
+  const panels = { features: 'cfgFeatures', repo: 'cfgRepo', git: 'cfgGit', tools: 'cfgTools', allure: 'cfgAllure', jfrog: 'cfgJfrog', mapping: 'cfgMapping', zephyr: 'cfgZephyr', uitabs: 'cfgUiTabs' };
   Object.entries(panels).forEach(([key, id]) => {
     const panel = document.getElementById(id);
     if (panel) panel.style.display = key === tab ? 'flex' : 'none';
@@ -784,6 +1008,7 @@ function switchCfgTab(tab) {
   if (tab === 'uitabs')    loadUiTabs();
   if (tab === 'allure')    loadAllureConfig();
   if (tab === 'jfrog')     loadJfrogConfig();
+  if (tab === 'repo')      loadCfgRepoList();
 }
 
 // ── UI Tab kill-switch ────────────────────────────────────────────────────────
@@ -1144,4 +1369,68 @@ async function testZephyrConnection() {
     if (dot) dot.innerHTML = '<span class="connect-dot err"></span> Failed';
     zLog('✗  Connection failed: ' + JSON.stringify(err.error || err), 'failed');
   }
+}
+
+// ── Config > Repo management ────────────────────────────────────────────────
+async function loadCfgRepoList() {
+  const configs = await fetch('/api/repo/configs').then(r => r.json()).catch(() => []);
+  const list = document.getElementById('cfgRepoList');
+  if (!list) return;
+  if (!configs.length) {
+    list.innerHTML = '<div style="color:var(--text-dim);font-size:12px;padding:8px 0;">No saved repositories. Add one above.</div>';
+    return;
+  }
+  list.innerHTML = configs.map(c => `
+    <div style="display:flex;align-items:center;gap:10px;padding:10px 12px;border-radius:var(--radius);
+                border:0.5px solid var(--border);background:var(--surface2);transition:background .15s;">
+      <span style="font-size:14px;flex-shrink:0;">📦</span>
+      <div style="flex:1;min-width:0;">
+        <div style="font-weight:600;font-size:13px;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escHtml(c.name)}</div>
+        <div style="font-size:10px;color:var(--text-dim);font-family:var(--mono);word-break:break-all;margin-top:2px;">${escHtml(c.url)}</div>
+        <div style="font-size:10px;color:var(--green);margin-top:1px;">⎇ ${escHtml(c.branch || 'default')}</div>
+      </div>
+      <button class="btn btn-sm" onclick="cfgCloneRepo('${escHtml(c.url)}','${escHtml(c.branch||'')}','${escHtml(c.token||'')}')"
+              title="Clone this repo to workspace">Clone</button>
+      <button onclick="cfgDeleteRepo('${escHtml(c.name)}')"
+              title="Remove" style="background:none;border:none;color:var(--text-dim);cursor:pointer;font-size:13px;padding:4px;opacity:.5"
+              onmouseover="this.style.opacity='1';this.style.color='var(--red)'"
+              onmouseout="this.style.opacity='.5';this.style.color='var(--text-dim)'">✕</button>
+    </div>
+  `).join('');
+}
+
+async function cfgSaveRepo() {
+  const url    = document.getElementById('cfgRepoUrl').value.trim();
+  const branch = document.getElementById('cfgRepoBranch').value.trim();
+  const token  = document.getElementById('cfgRepoToken').value.trim();
+  if (!url) return alert('Git URL is required');
+  const name = url.split('/').filter(Boolean).pop().replace('.git', '');
+  await fetch('/api/repo/configs', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ name, url, branch, token }),
+  });
+  document.getElementById('cfgRepoUrl').value = '';
+  document.getElementById('cfgRepoBranch').value = '';
+  document.getElementById('cfgRepoToken').value = '';
+  loadCfgRepoList();
+  loadSavedRepos();
+}
+
+async function cfgDeleteRepo(name) {
+  await fetch('/api/repo/configs', {
+    method: 'DELETE', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ name }),
+  });
+  loadCfgRepoList();
+  loadSavedRepos();
+}
+
+async function cfgCloneRepo(url, branch, token) {
+  document.getElementById('cloneUrl').value = url;
+  document.getElementById('cloneToken').value = token;
+  if (branch) {
+    document.getElementById('cloneBranch').innerHTML = `<option value="">default</option><option value="${branch}" selected>${branch}</option>`;
+  }
+  switchTab('executor');
+  cloneRepo();
 }

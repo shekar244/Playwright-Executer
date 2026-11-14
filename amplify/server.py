@@ -28,6 +28,7 @@ from amplify.routes.studio      import bp as studio_bp
 from amplify.routes.insights    import bp as insights_bp
 from amplify.routes.auth        import bp as auth_bp
 from amplify.routes.admin       import bp as admin_bp
+from amplify.routes.repo        import bp as repo_bp
 from amplify.auth_utils import verify_jwt
 from amplify.models.db import init_db
 from amplify.models.user import User
@@ -46,6 +47,7 @@ app.register_blueprint(studio_bp)
 app.register_blueprint(insights_bp)
 app.register_blueprint(auth_bp)
 app.register_blueprint(admin_bp)
+app.register_blueprint(repo_bp)
 
 @app.before_request
 def before_request():

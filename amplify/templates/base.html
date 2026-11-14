@@ -339,9 +339,10 @@ async function init() {
   renderExtraOptions(cfg.extra_options || []);
   applyUiTabs(cfg.ui_tabs || {});
   await scanRepos(cfg.repo_root || '');
-  loadPinnedRepos();  // populate pinned repos panel
+  loadPinnedRepos();
   connectStream();
-  loadConfigInfo();  // show active config file in the Config File panel
+  loadConfigInfo();
+  if (typeof loadRepoStatus === 'function') loadRepoStatus();
   if (typeof checkVenvStatus === 'function') checkVenvStatus();
   if (cfg.venv_path) { const el = document.getElementById('venvPathInput'); if (el) el.value = cfg.venv_path; }
 
