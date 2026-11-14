@@ -1,0 +1,96 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: amplify-qea
+  labels:
+    app: amplify-qea
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: amplify-qea
+  template:
+    metadata:
+      labels:
+        app: amplify-qea
+    spec:
+      containers:
+        - name: amplify-qea
+          image: image-registry.openshift-image-registry.svc:5000/${NAMESPACE}/amplify-qea:latest
+          ports:
+            - containerPort: 8080
+              name: http
+            - containerPort: 8501
+              name: streamlit
+          env:
+            - name: CONTAINER
+              value: "1"
+            - name: PORT
+              value: "8080"
+            - name: JWT_SECRET_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: amplify-secrets
+                  key: jwt-secret-key
+            - name: JIRA_URL
+              valueFrom:
+                secretKeyRef:
+                  name: amplify-secrets
+                  key: jira-url
+                  optional: true
+            - name: JIRA_USERNAME
+              valueFrom:
+                secretKeyRef:
+                  name: amplify-secrets
+                  key: jira-username
+                  optional: true
+            - name: JIRA_API_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: amplify-secrets
+                  key: jira-api-token
+                  optional: true
+            - name: ZEPHYR_ACCESS_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: amplify-secrets
+                  key: zephyr-access-key
+                  optional: true
+            - name: ZEPHYR_SECRET_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: amplify-secrets
+                  key: zephyr-secret-key
+                  optional: true
+            - name: ZEPHYR_ACCOUNT_ID
+              valueFrom:
+                secretKeyRef:
+                  name: amplify-secrets
+                  key: zephyr-account-id
+                  optional: true
+          volumeMounts:
+            - name: amplify-data
+              mountPath: /app/data
+          resources:
+            requests:
+              cpu: 250m
+              memory: 512Mi
+            limits:
+              cpu: "2"
+              memory: 2Gi
+          readinessProbe:
+            httpGet:
+              path: /login
+              port: 8080
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /login
+              port: 8080
+            initialDelaySeconds: 15
+            periodSeconds: 30
+      volumes:
+        - name: amplify-data
+          persistentVolumeClaim:
+            claimName: amplify-data-pvc
