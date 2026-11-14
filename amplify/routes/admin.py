@@ -136,6 +136,31 @@ def get_activity():
     return jsonify(ActivityLog.recent(limit=min(limit, 500)))
 
 
+@bp.route("/api/admin/server-config", methods=["GET", "POST"])
+@require_admin
+def server_config():
+    """View or update server-level secrets (Jira/Zephyr credentials)."""
+    from amplify.server_secrets import load_zephyr_config, save_server_config, _load_server_file
+    if request.method == "POST":
+        body = request.json or {}
+        server_data = _load_server_file()
+        server_data["zephyr"] = body.get("zephyr", body)
+        try:
+            save_server_config(server_data)
+        except OSError as exc:
+            return jsonify({"error": str(exc)}), 500
+        ActivityLog.record(g.user.id, "admin_update_secrets",
+                           "Updated server Jira/Zephyr config", request.remote_addr)
+        return jsonify({"ok": True})
+
+    cfg = load_zephyr_config()
+    for key in ("api_token", "access_key", "secret_key"):
+        val = cfg.get(key, "")
+        if val and len(val) > 6:
+            cfg[key] = val[:3] + "•" * (len(val) - 6) + val[-3:]
+    return jsonify({"zephyr": cfg})
+
+
 def _dir_size(path: Path) -> int:
     if not path.exists():
         return 0

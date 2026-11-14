@@ -172,6 +172,30 @@
     </table>
   </div>
 
+  <!-- Server Secrets (Jira / Zephyr) -->
+  <div class="admin-section">
+    <div class="admin-section-header">
+      Server Secrets — Jira / Zephyr
+      <span class="count-badge" id="secretsSource">loading</span>
+    </div>
+    <div style="padding:16px 18px;display:flex;flex-direction:column;gap:12px;">
+      <div class="hint">Shared credentials for all users. Set via environment variables or edit here. Tokens are masked in the UI.</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
+        <div class="field"><label style="font-size:11px;font-weight:600;">Jira URL</label><input type="text" id="sc_jira_url" placeholder="https://company.atlassian.net"></div>
+        <div class="field"><label style="font-size:11px;font-weight:600;">Username</label><input type="text" id="sc_username" placeholder="user@company.com"></div>
+        <div class="field"><label style="font-size:11px;font-weight:600;">Jira API Token</label><input type="password" id="sc_api_token" placeholder="Atlassian API token"></div>
+        <div class="field"><label style="font-size:11px;font-weight:600;">Account ID</label><input type="text" id="sc_account_id" placeholder="Atlassian account ID"></div>
+        <div class="field"><label style="font-size:11px;font-weight:600;">Zephyr Access Key</label><input type="password" id="sc_access_key" placeholder="Zephyr access key"></div>
+        <div class="field"><label style="font-size:11px;font-weight:600;">Zephyr Secret Key</label><input type="password" id="sc_secret_key" placeholder="Zephyr secret key"></div>
+        <div class="field"><label style="font-size:11px;font-weight:600;">Default Project Key</label><input type="text" id="sc_project_key" placeholder="PROJ"></div>
+        <div class="field" style="display:flex;align-items:flex-end;">
+          <button class="btn btn-accent" onclick="saveServerSecrets()" style="width:100%;">Save Server Config</button>
+        </div>
+      </div>
+      <div id="secretsStatus" class="hint" style="display:none;"></div>
+    </div>
+  </div>
+
   <!-- Activity feed -->
   <div class="admin-section">
     <div class="admin-section-header">
@@ -336,9 +360,66 @@ async function deleteUser(id, name) {
   loadUsers(); loadMetrics(); loadActivity();
 }
 
+async function loadServerSecrets() {
+  const data = await api('/api/admin/server-config');
+  const z = data.zephyr || {};
+  const badge = document.getElementById('secretsSource');
+  if (z.jira_url || z.access_key) {
+    badge.textContent = 'configured';
+    badge.style.background = 'var(--green)';
+  } else {
+    badge.textContent = 'not set';
+    badge.style.background = 'var(--red)';
+  }
+  const set = (id, val) => { const el = document.getElementById(id); if (el) el.value = val || ''; };
+  set('sc_jira_url', z.jira_url);
+  set('sc_username', z.username);
+  set('sc_api_token', z.api_token);
+  set('sc_account_id', z.account_id);
+  set('sc_access_key', z.access_key);
+  set('sc_secret_key', z.secret_key);
+  set('sc_project_key', z.project_key);
+}
+
+async function saveServerSecrets() {
+  const get = id => (document.getElementById(id)?.value || '').trim();
+  const zephyr = {
+    jira_url: get('sc_jira_url'),
+    username: get('sc_username'),
+    account_id: get('sc_account_id'),
+    project_key: get('sc_project_key'),
+  };
+  const apiToken = get('sc_api_token');
+  const accessKey = get('sc_access_key');
+  const secretKey = get('sc_secret_key');
+  if (apiToken && !apiToken.includes('•')) zephyr.api_token = apiToken;
+  if (accessKey && !accessKey.includes('•')) zephyr.access_key = accessKey;
+  if (secretKey && !secretKey.includes('•')) zephyr.secret_key = secretKey;
+
+  const status = document.getElementById('secretsStatus');
+  status.style.display = 'block';
+  status.textContent = 'Saving...';
+  status.style.color = 'var(--accent)';
+
+  const r = await api('/api/admin/server-config', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ zephyr }),
+  });
+  if (r.ok) {
+    status.textContent = 'Server config saved';
+    status.style.color = 'var(--green)';
+    loadServerSecrets();
+    loadActivity();
+  } else {
+    status.textContent = r.error || 'Save failed';
+    status.style.color = 'var(--red)';
+  }
+}
+
 loadMetrics();
 loadUsers();
 loadActivity();
+loadServerSecrets();
 </script>
 </body>
 </html>

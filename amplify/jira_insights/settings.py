@@ -54,16 +54,21 @@ def _truthy(value: str) -> bool:
 
 def load_jira_settings() -> JiraSettings:
     try:
-        from amplify.config_reader import ConfigReader
-        zephyr = ConfigReader().load().get("zephyr", {}) or {}
+        from amplify.server_secrets import load_zephyr_config
+        cfg = load_zephyr_config()
     except Exception:
-        zephyr = {}
+        cfg = {}
 
-    env = os.environ.get
-    verify = env("JIRA_VERIFY_SSL")
+    if not cfg:
+        try:
+            from amplify.config_reader import ConfigReader
+            cfg = ConfigReader().load().get("zephyr", {}) or {}
+        except Exception:
+            cfg = {}
+
     return JiraSettings(
-        url=(env("JIRA_URL") or zephyr.get("jira_url", "")).strip().rstrip("/"),
-        username=(env("JIRA_USERNAME") or zephyr.get("username", "")).strip(),
-        token=(env("JIRA_API_TOKEN") or zephyr.get("api_token", "")).strip(),
-        verify_ssl=_truthy(verify) if verify is not None else bool(zephyr.get("verify_ssl", False)),
+        url=cfg.get("jira_url", "").strip().rstrip("/"),
+        username=cfg.get("username", "").strip(),
+        token=cfg.get("api_token", "").strip(),
+        verify_ssl=bool(cfg.get("verify_ssl", False)),
     )

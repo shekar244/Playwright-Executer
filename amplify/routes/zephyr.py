@@ -23,6 +23,7 @@ from flask import Blueprint, jsonify, request, g
 
 from amplify.user_config_reader import UserConfigReader
 from amplify.auth_utils import require_auth
+from amplify.server_secrets import load_zephyr_config
 
 bp = Blueprint("zephyr", __name__)
 
@@ -143,6 +144,10 @@ def _zephyr_jwt(access_key: str, secret_key: str, account_id: str,
 
 
 def _z_cfg() -> dict:
+    """Resolve Zephyr config: server secrets (env/file) → user config fallback."""
+    server = load_zephyr_config()
+    if server:
+        return server
     return UserConfigReader(g.user.id).load().get(ZEPHYR_CONFIG_KEY, {})
 
 
@@ -417,17 +422,36 @@ def test_jira():
 @bp.route("/api/zephyr/config", methods=["GET", "POST"])
 @require_auth
 def zephyr_config():
-    reader = UserConfigReader(g.user.id)
-    cfg = reader.load()
+    from amplify.server_secrets import load_zephyr_config, save_server_config, _load_server_file
     if request.method == "POST":
         body = request.json or {}
-        cfg[ZEPHYR_CONFIG_KEY] = body
-        try:
-            reader.save(cfg)
-        except OSError as exc:
-            return jsonify({"error": str(exc)}), 500
-        return jsonify({"ok": True})
-    return jsonify(cfg.get(ZEPHYR_CONFIG_KEY, {}))
+        if g.user.is_admin:
+            server_data = _load_server_file()
+            server_data["zephyr"] = body
+            try:
+                save_server_config(server_data)
+            except OSError as exc:
+                return jsonify({"error": str(exc)}), 500
+            return jsonify({"ok": True, "source": "server"})
+        else:
+            return jsonify({"error": "Only admins can update Jira/Zephyr credentials"}), 403
+
+    server = load_zephyr_config()
+    if server:
+        masked = _mask_secrets(server)
+        masked["_source"] = "server"
+        return jsonify(masked)
+    return jsonify({"_source": "none"})
+
+
+def _mask_secrets(cfg: dict) -> dict:
+    """Return config with sensitive values masked for display."""
+    out = dict(cfg)
+    for key in ("api_token", "access_key", "secret_key"):
+        val = out.get(key, "")
+        if val and len(val) > 6:
+            out[key] = val[:3] + "•" * (len(val) - 6) + val[-3:]
+    return out
 
 
 @bp.route("/api/zephyr/projects")
