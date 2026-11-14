@@ -123,16 +123,16 @@ body.dark-theme .tab-btn.active { background: var(--surface2); }
 .hint { font-size: 11px; color: var(--text-dim); margin-top: 2px; line-height: 1.45; }
 
 /* ── Inputs ── */
-input[type="text"], input[type="number"], input[type="password"], select {
+input[type="text"], input[type="number"], input[type="password"], input[type="email"], select {
   background: var(--input-bg); border: 0.5px solid var(--input-border); border-radius: var(--radius);
   color: var(--text); padding: 8px 11px; font-size: 13px; width: 100%; outline: none;
   transition: border-color var(--tr), box-shadow var(--tr);
 }
-input[type="text"]:focus, input[type="number"]:focus, input[type="password"]:focus, select:focus {
+input[type="text"]:focus, input[type="number"]:focus, input[type="password"]:focus, input[type="email"]:focus, select:focus {
   border-color: var(--border-focus); box-shadow: 0 0 0 4px var(--accent-glow);
 }
 input[type="text"]:hover:not(:focus), input[type="number"]:hover:not(:focus),
-input[type="password"]:hover:not(:focus), select:hover:not(:focus) { border-color: var(--border-hover); }
+input[type="password"]:hover:not(:focus), input[type="email"]:hover:not(:focus), select:hover:not(:focus) { border-color: var(--border-hover); }
 select option { background: var(--surface); color: var(--text); }
 input[type="number"] { width: 72px; }
 .checkboxes { display: flex; gap: 14px; flex-wrap: wrap; }
