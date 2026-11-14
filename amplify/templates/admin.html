@@ -4,139 +4,276 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Amplify QEA — Admin</title>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/static/css/amplify.css">
   <style>
-    *{margin:0;padding:0;box-sizing:border-box}
-    :root{--bg:#f5f5f7;--surface:#fff;--surface2:#f0f0f2;--border:rgba(0,0,0,.1);--text:#1d1d1f;--text-muted:#6e6e73;--accent:#0071e3;--green:#248a3d;--red:#d70015;--yellow:#b25000;--radius:10px;--shadow:0 2px 8px rgba(0,0,0,.06)}
-    body{font-family:Inter,-apple-system,sans-serif;background:var(--bg);color:var(--text);font-size:13px}
-    .topbar{background:var(--surface);border-bottom:1px solid var(--border);padding:12px 24px;display:flex;align-items:center;gap:16px;position:sticky;top:0;z-index:10}
-    .topbar h1{font-size:18px;font-weight:700;color:var(--accent)}
-    .topbar .back{color:var(--accent);text-decoration:none;font-weight:500;font-size:13px}
-    .topbar .spacer{flex:1}
-    .topbar .user-info{font-size:12px;color:var(--text-muted)}
-    .container{max-width:1200px;margin:0 auto;padding:20px 24px}
-    .metrics{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;margin-bottom:24px}
-    .metric-card{background:var(--surface);border-radius:var(--radius);padding:16px 18px;box-shadow:var(--shadow)}
-    .metric-card .label{font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.05em;color:var(--text-muted);margin-bottom:6px}
-    .metric-card .value{font-size:28px;font-weight:700}
-    .metric-card .sub{font-size:11px;color:var(--text-muted);margin-top:4px}
-    .section{background:var(--surface);border-radius:var(--radius);box-shadow:var(--shadow);margin-bottom:20px;overflow:hidden}
-    .section-header{padding:14px 18px;font-size:14px;font-weight:600;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:10px}
-    .section-header .badge{background:var(--accent);color:#fff;font-size:10px;padding:2px 8px;border-radius:20px;font-weight:600}
-    table{width:100%;border-collapse:collapse}
-    th{text-align:left;padding:10px 14px;font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.04em;color:var(--text-muted);background:var(--surface2);border-bottom:1px solid var(--border)}
-    td{padding:10px 14px;border-bottom:1px solid var(--border);font-size:13px;vertical-align:middle}
-    tr:last-child td{border-bottom:none}
-    .badge-admin{background:var(--accent);color:#fff;padding:2px 8px;border-radius:12px;font-size:10px;font-weight:600}
-    .badge-active{background:rgba(36,138,61,.15);color:var(--green);padding:2px 8px;border-radius:12px;font-size:10px;font-weight:600}
-    .badge-disabled{background:rgba(215,0,21,.12);color:var(--red);padding:2px 8px;border-radius:12px;font-size:10px;font-weight:600}
-    .btn{padding:5px 12px;border:1px solid var(--border);border-radius:6px;background:var(--surface);cursor:pointer;font-size:11px;font-weight:500;transition:all .15s}
-    .btn:hover{background:var(--surface2)}
-    .btn-danger{color:var(--red);border-color:rgba(215,0,21,.3)}
-    .btn-danger:hover{background:rgba(215,0,21,.08)}
-    .btn-accent{background:var(--accent);color:#fff;border-color:var(--accent)}
-    .btn-accent:hover{opacity:.9}
-    .actions{display:flex;gap:4px;flex-wrap:wrap}
-    .modal-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.4);z-index:100;justify-content:center;align-items:center}
-    .modal-overlay.active{display:flex}
-    .modal{background:var(--surface);border-radius:14px;padding:24px;max-width:420px;width:90%;box-shadow:0 20px 60px rgba(0,0,0,.3)}
-    .modal h3{margin-bottom:14px;font-size:16px}
-    .modal input{width:100%;padding:10px 12px;border:1px solid var(--border);border-radius:6px;font-size:13px;margin-bottom:12px}
-    .modal .modal-actions{display:flex;gap:8px;justify-content:flex-end}
-    .activity-row{display:flex;gap:12px;padding:8px 14px;border-bottom:1px solid var(--border);font-size:12px;align-items:baseline}
-    .activity-row:last-child{border-bottom:none}
-    .activity-row .time{color:var(--text-muted);min-width:140px;font-size:11px}
-    .activity-row .user{font-weight:600;min-width:80px}
-    .activity-row .action{color:var(--accent);font-weight:500;min-width:120px}
-    .empty{padding:40px;text-align:center;color:var(--text-muted)}
-    .disk{font-family:ui-monospace,monospace;font-size:11px;color:var(--text-muted)}
+    body { overflow: auto; flex-direction: column; }
+
+    /* ── Topbar ── */
+    .admin-topbar {
+      background: var(--header-bg); backdrop-filter: saturate(180%) blur(24px);
+      -webkit-backdrop-filter: saturate(180%) blur(24px);
+      padding: 0 20px; height: 52px; display: flex; align-items: center; gap: 14px;
+      border-bottom: 0.5px solid var(--border); flex-shrink: 0; position: sticky; top: 0; z-index: 100;
+    }
+    .admin-topbar .back-link {
+      color: var(--accent); text-decoration: none; font-size: 13px; font-weight: 500;
+      padding: 5px 12px; border-radius: 980px; transition: background var(--tr);
+    }
+    .admin-topbar .back-link:hover { background: var(--accent-glow); }
+    .admin-topbar h1 { font-size: 15px; font-weight: 600; letter-spacing: -0.02em; }
+    .admin-topbar h1 span { color: var(--text-dim); font-weight: 500; }
+    .admin-topbar .spacer { flex: 1; }
+    .admin-topbar .user-info { font-size: 12px; color: var(--text-dim); }
+    .admin-topbar .user-info strong { color: var(--text); }
+    .admin-topbar .theme-toggle { cursor: pointer; font-size: 14px; padding: 4px 8px; border-radius: 6px; }
+    .admin-topbar .theme-toggle:hover { background: var(--surface3); }
+
+    /* ── Content container ── */
+    .admin-body { max-width: 1200px; margin: 0 auto; padding: 20px 24px; }
+
+    /* ── Metric cards ── */
+    .metrics-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px; margin-bottom: 20px; }
+    .metric-card {
+      background: var(--surface); border: 0.5px solid var(--border); border-radius: var(--radius-lg);
+      padding: 18px 20px; box-shadow: var(--shadow-sm); transition: box-shadow var(--tr);
+    }
+    .metric-card:hover { box-shadow: var(--shadow-md); }
+    .metric-label { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-dim); margin-bottom: 8px; }
+    .metric-value { font-size: 32px; font-weight: 700; letter-spacing: -0.02em; }
+    .metric-sub { font-size: 11px; color: var(--text-dim); margin-top: 4px; }
+
+    /* ── Section blocks ── */
+    .admin-section {
+      background: var(--surface); border: 0.5px solid var(--border); border-radius: var(--radius-lg);
+      box-shadow: var(--shadow-sm); margin-bottom: 16px; overflow: hidden;
+    }
+    .admin-section-header {
+      padding: 12px 18px; font-size: 11px; font-weight: 600; text-transform: uppercase;
+      letter-spacing: 0.05em; color: var(--text-dim); border-bottom: 0.5px solid var(--border);
+      display: flex; align-items: center; gap: 8px; background: var(--surface);
+    }
+    .admin-section-header .count-badge {
+      background: var(--accent); color: var(--on-accent); font-size: 10px;
+      padding: 2px 8px; border-radius: 980px; font-weight: 600;
+    }
+
+    /* ── Table ── */
+    .admin-table { width: 100%; border-collapse: collapse; }
+    .admin-table th {
+      text-align: left; padding: 9px 14px; font-size: 10px; font-weight: 600;
+      text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-dim);
+      background: var(--surface2); border-bottom: 0.5px solid var(--border);
+    }
+    .admin-table td {
+      padding: 9px 14px; border-bottom: 0.5px solid var(--border); font-size: 13px; vertical-align: middle;
+    }
+    .admin-table tr:last-child td { border-bottom: none; }
+    .admin-table tr:hover td { background: var(--accent-glow); }
+    .admin-table .user-primary { font-weight: 600; }
+    .admin-table .mono { font-family: var(--mono); font-size: 11px; color: var(--text-dim); }
+
+    /* ── Badges ── */
+    .badge-role {
+      display: inline-block; padding: 2px 8px; border-radius: 980px; font-size: 10px; font-weight: 600;
+    }
+    .badge-role.admin { background: var(--accent-glow); color: var(--accent); border: 0.5px solid var(--accent-border); }
+    .badge-role.user { background: var(--surface2); color: var(--text-dim); }
+    .badge-status {
+      display: inline-block; padding: 2px 8px; border-radius: 980px; font-size: 10px; font-weight: 600;
+    }
+    .badge-status.active { background: var(--green-glow); color: var(--green); }
+    .badge-status.disabled { background: var(--red-glow); color: var(--red); }
+
+    /* ── Action buttons (pill style) ── */
+    .tbl-actions { display: flex; gap: 4px; flex-wrap: wrap; }
+    .tbl-btn {
+      padding: 4px 10px; font-size: 11px; font-weight: 500; border: 0.5px solid var(--border);
+      background: var(--surface); border-radius: 980px; cursor: pointer;
+      transition: background var(--tr), color var(--tr), border-color var(--tr);
+    }
+    .tbl-btn:hover { background: var(--accent-glow); color: var(--accent); border-color: var(--accent-border); }
+    .tbl-btn.danger { color: var(--red); }
+    .tbl-btn.danger:hover { background: var(--red-glow); border-color: rgba(215,0,21,.3); color: var(--red); }
+
+    /* ── Activity feed ── */
+    .activity-feed { max-height: 420px; overflow-y: auto; }
+    .activity-item {
+      display: flex; gap: 12px; padding: 8px 18px; border-bottom: 0.5px solid var(--border);
+      font-size: 12px; align-items: baseline; transition: background var(--tr);
+    }
+    .activity-item:last-child { border-bottom: none; }
+    .activity-item:hover { background: var(--accent-glow); }
+    .activity-item .ts { color: var(--text-dim); min-width: 130px; font-size: 11px; font-family: var(--mono); }
+    .activity-item .who { font-weight: 600; min-width: 90px; }
+    .activity-item .what {
+      color: var(--accent); font-weight: 500; min-width: 130px;
+      padding: 1px 6px; background: var(--accent-glow); border-radius: 4px; font-size: 11px;
+    }
+    .activity-item .detail { color: var(--text-muted); }
+
+    /* ── Empty state ── */
+    .admin-empty { padding: 40px; text-align: center; color: var(--text-dim); font-size: 13px; }
+
+    /* ── Modal ── */
+    .modal-overlay {
+      display: none; position: fixed; inset: 0; background: rgba(0,0,0,.45); z-index: 200;
+      justify-content: center; align-items: center;
+      backdrop-filter: blur(4px); -webkit-backdrop-filter: blur(4px);
+    }
+    .modal-overlay.active { display: flex; }
+    .modal-card {
+      background: var(--surface); border: 0.5px solid var(--border);
+      border-radius: var(--radius-xl); padding: 28px 24px 24px;
+      max-width: 400px; width: 90%; box-shadow: var(--shadow-lg);
+    }
+    .modal-card h3 { font-size: 17px; font-weight: 700; letter-spacing: -0.02em; margin-bottom: 6px; }
+    .modal-card .modal-sub { font-size: 12px; color: var(--text-dim); margin-bottom: 16px; }
+    .modal-card input { margin-bottom: 16px; }
+    .modal-actions { display: flex; gap: 8px; justify-content: flex-end; }
+    .modal-actions .btn { min-width: 90px; }
   </style>
 </head>
 <body>
-  <div class="topbar">
-    <a href="/" class="back">← Back to App</a>
-    <h1>Admin Panel</h1>
-    <div class="spacer"></div>
-    <div class="user-info">Logged in as <strong>{{ user.username }}</strong></div>
+<script>
+  (function(){try{var t=localStorage.getItem('amplify-theme');if(t?t==='dark':window.matchMedia('(prefers-color-scheme:dark)').matches)document.body.classList.add('dark-theme');}catch(e){}})();
+</script>
+
+<!-- ── Topbar ── -->
+<div class="admin-topbar">
+  <a href="/" class="back-link">← App</a>
+  <div class="header-logo">
+    <div class="logo-mark" aria-hidden="true" style="width:24px;height:24px;font-size:12px;border-radius:6px;">⚡</div>
+    <h1>Admin <span>Panel</span></h1>
+  </div>
+  <div class="spacer"></div>
+  <div class="user-info">Signed in as <strong>{{ user.username }}</strong></div>
+  <span class="theme-toggle" onclick="toggleTheme()" id="themeIcon" title="Toggle theme">☀️</span>
+</div>
+
+<!-- ── Body ── -->
+<div class="admin-body">
+
+  <!-- Metrics -->
+  <div class="metrics-grid" id="metricsGrid"></div>
+
+  <!-- Users table -->
+  <div class="admin-section">
+    <div class="admin-section-header">
+      Users <span class="count-badge" id="userCount">0</span>
+    </div>
+    <table class="admin-table">
+      <thead><tr>
+        <th>ID</th><th>Username</th><th>Email</th><th>Role</th><th>Status</th>
+        <th>Last Login</th><th>Created</th><th>Disk</th><th>Actions</th>
+      </tr></thead>
+      <tbody id="usersBody">
+        <tr><td colspan="9" class="admin-empty">Loading...</td></tr>
+      </tbody>
+    </table>
   </div>
 
-  <div class="container">
-    <div class="metrics" id="metricsGrid"></div>
-
-    <div class="section">
-      <div class="section-header">Users <span class="badge" id="userCount">0</span></div>
-      <table>
-        <thead><tr><th>ID</th><th>Username</th><th>Email</th><th>Role</th><th>Status</th><th>Last Login</th><th>Created</th><th>Disk</th><th>Actions</th></tr></thead>
-        <tbody id="usersBody"><tr><td colspan="9" class="empty">Loading...</td></tr></tbody>
-      </table>
+  <!-- Activity feed -->
+  <div class="admin-section">
+    <div class="admin-section-header">
+      Recent Activity <span class="count-badge" id="activityCount">0</span>
     </div>
-
-    <div class="section">
-      <div class="section-header">Recent Activity <span class="badge" id="activityCount">0</span></div>
-      <div id="activityList" style="max-height:400px;overflow-y:auto"><div class="empty">Loading...</div></div>
+    <div class="activity-feed" id="activityList">
+      <div class="admin-empty">Loading...</div>
     </div>
   </div>
+</div>
 
-  <div class="modal-overlay" id="resetModal">
-    <div class="modal">
-      <h3>Reset Password</h3>
-      <p style="font-size:12px;color:var(--text-muted);margin-bottom:12px">User: <strong id="resetUser"></strong></p>
-      <input type="password" id="resetPw" placeholder="New password (min 6 chars)">
-      <div class="modal-actions">
-        <button class="btn" onclick="closeReset()">Cancel</button>
-        <button class="btn btn-accent" onclick="doReset()">Reset Password</button>
-      </div>
+<!-- ── Reset Password Modal ── -->
+<div class="modal-overlay" id="resetModal">
+  <div class="modal-card">
+    <h3>Reset Password</h3>
+    <div class="modal-sub">User: <strong id="resetUser"></strong></div>
+    <input type="password" id="resetPw" placeholder="New password (min 6 characters)">
+    <div class="modal-actions">
+      <button class="btn btn-sm" onclick="closeReset()">Cancel</button>
+      <button class="btn btn-accent" onclick="doReset()">Reset</button>
     </div>
   </div>
+</div>
 
 <script>
 let _resetId = null;
 
+function toggleTheme() {
+  const dark = !document.body.classList.contains('dark-theme');
+  document.body.classList.toggle('dark-theme', dark);
+  document.getElementById('themeIcon').textContent = dark ? '🌙' : '☀️';
+  try { localStorage.setItem('amplify-theme', dark ? 'dark' : 'light'); } catch(e) {}
+}
+(function() {
+  document.getElementById('themeIcon').textContent = document.body.classList.contains('dark-theme') ? '🌙' : '☀️';
+})();
+
 function fmtBytes(b) {
   if (b < 1024) return b + ' B';
-  if (b < 1048576) return (b/1024).toFixed(1) + ' KB';
-  return (b/1048576).toFixed(1) + ' MB';
+  if (b < 1048576) return (b / 1024).toFixed(1) + ' KB';
+  return (b / 1048576).toFixed(1) + ' MB';
 }
 
 function fmtDate(d) {
-  if (!d) return '—';
-  return new Date(d + 'Z').toLocaleString(undefined, {month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'});
+  if (!d) return '<span style="color:var(--text-dim)">—</span>';
+  return new Date(d + 'Z').toLocaleString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
 }
 
 async function api(url, opts) {
-  const r = await fetch(url, opts);
-  return r.json();
+  return fetch(url, opts).then(r => r.json());
 }
 
 async function loadMetrics() {
   const m = await api('/api/admin/metrics');
   document.getElementById('metricsGrid').innerHTML = `
-    <div class="metric-card"><div class="label">Total Users</div><div class="value">${m.total_users}</div><div class="sub">${m.active_accounts} active · ${m.admin_count} admin</div></div>
-    <div class="metric-card"><div class="label">Active Today</div><div class="value">${m.active_users_today}</div><div class="sub">${m.active_users_week} this week</div></div>
-    <div class="metric-card"><div class="label">Events Today</div><div class="value">${m.events_today}</div><div class="sub">${m.total_events} total</div></div>
-    <div class="metric-card"><div class="label">Total Disk</div><div class="value">${fmtBytes(m.total_workspace_bytes)}</div><div class="sub">all workspaces</div></div>
+    <div class="metric-card">
+      <div class="metric-label">Total Users</div>
+      <div class="metric-value">${m.total_users}</div>
+      <div class="metric-sub">${m.active_accounts} active &middot; ${m.admin_count} admin</div>
+    </div>
+    <div class="metric-card">
+      <div class="metric-label">Active Today</div>
+      <div class="metric-value">${m.active_users_today}</div>
+      <div class="metric-sub">${m.active_users_week} this week</div>
+    </div>
+    <div class="metric-card">
+      <div class="metric-label">Events Today</div>
+      <div class="metric-value">${m.events_today}</div>
+      <div class="metric-sub">${m.total_events} total</div>
+    </div>
+    <div class="metric-card">
+      <div class="metric-label">Total Disk</div>
+      <div class="metric-value">${fmtBytes(m.total_workspace_bytes)}</div>
+      <div class="metric-sub">all workspaces</div>
+    </div>
   `;
 }
 
 async function loadUsers() {
   const users = await api('/api/admin/users');
   document.getElementById('userCount').textContent = users.length;
-  if (!users.length) { document.getElementById('usersBody').innerHTML = '<tr><td colspan="9" class="empty">No users</td></tr>'; return; }
+  if (!users.length) {
+    document.getElementById('usersBody').innerHTML = '<tr><td colspan="9" class="admin-empty">No users</td></tr>';
+    return;
+  }
   document.getElementById('usersBody').innerHTML = users.map(u => `
     <tr>
       <td>${u.id}</td>
-      <td><strong>${u.username}</strong></td>
-      <td>${u.email || '—'}</td>
-      <td>${u.is_admin ? '<span class="badge-admin">admin</span>' : 'user'}</td>
-      <td>${u.is_active ? '<span class="badge-active">active</span>' : '<span class="badge-disabled">disabled</span>'}</td>
+      <td class="user-primary">${u.username}</td>
+      <td>${u.email || '<span style="color:var(--text-dim)">—</span>'}</td>
+      <td><span class="badge-role ${u.is_admin ? 'admin' : 'user'}">${u.is_admin ? 'Admin' : 'User'}</span></td>
+      <td><span class="badge-status ${u.is_active ? 'active' : 'disabled'}">${u.is_active ? 'Active' : 'Disabled'}</span></td>
       <td>${fmtDate(u.last_login_at)}</td>
       <td>${fmtDate(u.created_at)}</td>
-      <td class="disk">${fmtBytes(u.workspace_bytes)}</td>
-      <td class="actions">
-        <button class="btn" onclick="openReset(${u.id},'${u.username}')">Reset PW</button>
-        <button class="btn" onclick="toggleUser(${u.id})">${u.is_active ? 'Disable' : 'Enable'}</button>
-        <button class="btn" onclick="promoteUser(${u.id})">${u.is_admin ? 'Demote' : 'Promote'}</button>
-        <button class="btn btn-danger" onclick="deleteUser(${u.id},'${u.username}')">Delete</button>
+      <td class="mono">${fmtBytes(u.workspace_bytes)}</td>
+      <td>
+        <div class="tbl-actions">
+          <button class="tbl-btn" onclick="openReset(${u.id},'${u.username}')">Reset PW</button>
+          <button class="tbl-btn" onclick="toggleUser(${u.id})">${u.is_active ? 'Disable' : 'Enable'}</button>
+          <button class="tbl-btn" onclick="promoteUser(${u.id})">${u.is_admin ? 'Demote' : 'Promote'}</button>
+          <button class="tbl-btn danger" onclick="deleteUser(${u.id},'${u.username}')">Delete</button>
+        </div>
       </td>
     </tr>
   `).join('');
@@ -145,13 +282,16 @@ async function loadUsers() {
 async function loadActivity() {
   const items = await api('/api/admin/activity?limit=100');
   document.getElementById('activityCount').textContent = items.length;
-  if (!items.length) { document.getElementById('activityList').innerHTML = '<div class="empty">No activity yet</div>'; return; }
+  if (!items.length) {
+    document.getElementById('activityList').innerHTML = '<div class="admin-empty">No activity yet</div>';
+    return;
+  }
   document.getElementById('activityList').innerHTML = items.map(a => `
-    <div class="activity-row">
-      <span class="time">${fmtDate(a.created_at)}</span>
-      <span class="user">${a.username}</span>
-      <span class="action">${a.action}</span>
-      <span>${a.detail || ''}</span>
+    <div class="activity-item">
+      <span class="ts">${fmtDate(a.created_at)}</span>
+      <span class="who">${a.username}</span>
+      <span class="what">${a.action}</span>
+      <span class="detail">${a.detail || ''}</span>
     </div>
   `).join('');
 }
@@ -161,6 +301,7 @@ function openReset(id, name) {
   document.getElementById('resetUser').textContent = name;
   document.getElementById('resetPw').value = '';
   document.getElementById('resetModal').classList.add('active');
+  document.getElementById('resetPw').focus();
 }
 
 function closeReset() {
@@ -171,28 +312,33 @@ function closeReset() {
 async function doReset() {
   const pw = document.getElementById('resetPw').value;
   if (pw.length < 6) return alert('Password must be at least 6 characters');
-  await api(`/api/admin/users/${_resetId}/reset`, {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({password:pw})});
+  await api(`/api/admin/users/${_resetId}/reset`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ password: pw })
+  });
   closeReset();
   loadActivity();
 }
 
 async function toggleUser(id) {
-  await api(`/api/admin/users/${id}/toggle`, {method:'POST'});
+  await api(`/api/admin/users/${id}/toggle`, { method: 'POST' });
   loadUsers(); loadActivity();
 }
 
 async function promoteUser(id) {
-  await api(`/api/admin/users/${id}/promote`, {method:'POST'});
+  await api(`/api/admin/users/${id}/promote`, { method: 'POST' });
   loadUsers(); loadActivity();
 }
 
 async function deleteUser(id, name) {
-  if (!confirm(`Delete user "${name}" and their entire workspace? This cannot be undone.`)) return;
-  await api(`/api/admin/users/${id}`, {method:'DELETE'});
+  if (!confirm(`Delete user "${name}" and their entire workspace?\nThis cannot be undone.`)) return;
+  await api(`/api/admin/users/${id}`, { method: 'DELETE' });
   loadUsers(); loadMetrics(); loadActivity();
 }
 
-loadMetrics(); loadUsers(); loadActivity();
+loadMetrics();
+loadUsers();
+loadActivity();
 </script>
 </body>
 </html>

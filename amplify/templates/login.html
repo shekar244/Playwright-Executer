@@ -1,208 +1,131 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Amplify QEA — Login</title>
-    <style>
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-        }
-
-        body {
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            min-height: 100vh;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-        }
-
-        .container {
-            width: 100%;
-            max-width: 400px;
-            background: white;
-            border-radius: 12px;
-            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
-            padding: 40px;
-        }
-
-        .header {
-            text-align: center;
-            margin-bottom: 30px;
-        }
-
-        .logo {
-            font-size: 32px;
-            font-weight: 700;
-            color: #667eea;
-            margin-bottom: 10px;
-        }
-
-        .subtitle {
-            color: #666;
-            font-size: 14px;
-        }
-
-        .form-group {
-            margin-bottom: 20px;
-        }
-
-        label {
-            display: block;
-            font-size: 14px;
-            font-weight: 500;
-            color: #333;
-            margin-bottom: 8px;
-        }
-
-        input {
-            width: 100%;
-            padding: 12px;
-            border: 1px solid #ddd;
-            border-radius: 6px;
-            font-size: 14px;
-            transition: border-color 0.3s;
-        }
-
-        input:focus {
-            outline: none;
-            border-color: #667eea;
-            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
-        }
-
-        .error {
-            color: #e53e3e;
-            font-size: 13px;
-            margin-top: 6px;
-            display: none;
-        }
-
-        button {
-            width: 100%;
-            padding: 12px;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            color: white;
-            border: none;
-            border-radius: 6px;
-            font-size: 14px;
-            font-weight: 600;
-            cursor: pointer;
-            margin-top: 10px;
-            transition: transform 0.2s, box-shadow 0.2s;
-        }
-
-        button:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 10px 20px rgba(102, 126, 234, 0.3);
-        }
-
-        button:active {
-            transform: translateY(0);
-        }
-
-        .divider {
-            text-align: center;
-            margin: 25px 0;
-            font-size: 14px;
-            color: #999;
-        }
-
-        .register-link {
-            text-align: center;
-            margin-top: 20px;
-        }
-
-        .register-link a {
-            color: #667eea;
-            text-decoration: none;
-            font-weight: 500;
-        }
-
-        .register-link a:hover {
-            text-decoration: underline;
-        }
-
-        .loading {
-            display: none;
-            text-align: center;
-            padding: 10px;
-            color: #667eea;
-            font-size: 12px;
-        }
-    </style>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Amplify QEA — Sign In</title>
+  <link rel="stylesheet" href="/static/css/amplify.css">
+  <style>
+    body { justify-content: center; align-items: center; overflow: auto; }
+    .auth-card {
+      width: 100%; max-width: 380px; background: var(--surface);
+      border: 0.5px solid var(--border); border-radius: var(--radius-xl);
+      box-shadow: var(--shadow-lg); padding: 36px 32px 32px;
+    }
+    .auth-header { text-align: center; margin-bottom: 28px; }
+    .auth-logo {
+      width: 48px; height: 48px; border-radius: 13px; margin: 0 auto 14px;
+      background: linear-gradient(180deg, #4da3ff 0%, #0071e3 100%);
+      color: #fff; display: flex; align-items: center; justify-content: center; font-size: 22px;
+      box-shadow: 0 2px 8px rgba(0,113,227,0.30), inset 0 0.5px 0 rgba(255,255,255,0.4);
+    }
+    .auth-header h1 { font-size: 22px; font-weight: 700; letter-spacing: -0.02em; }
+    .auth-header h1 span { color: var(--text-dim); font-weight: 500; }
+    .auth-header .subtitle { color: var(--text-dim); font-size: 13px; margin-top: 6px; }
+    .auth-form { display: flex; flex-direction: column; gap: 16px; }
+    .auth-form .field label { font-size: 12px; font-weight: 600; color: var(--text-muted); }
+    .auth-error {
+      font-size: 12px; color: var(--red); background: var(--red-glow);
+      padding: 8px 12px; border-radius: var(--radius); display: none; text-align: center;
+    }
+    .auth-error.visible { display: block; }
+    .auth-submit {
+      width: 100%; padding: 11px; background: var(--accent); color: var(--on-accent);
+      border: none; border-radius: 980px; font-size: 14px; font-weight: 600; cursor: pointer;
+      transition: filter var(--tr), transform var(--tr); margin-top: 4px;
+    }
+    .auth-submit:hover { filter: brightness(1.08); }
+    .auth-submit:active { transform: scale(0.98); }
+    .auth-submit:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
+    .auth-footer { text-align: center; margin-top: 20px; font-size: 13px; color: var(--text-dim); }
+    .auth-footer a { color: var(--accent); text-decoration: none; font-weight: 500; }
+    .auth-footer a:hover { text-decoration: underline; }
+    .auth-loading { display: none; text-align: center; color: var(--accent); font-size: 12px; padding: 4px; }
+    .theme-switch {
+      position: fixed; top: 16px; right: 16px; background: var(--surface);
+      border: 0.5px solid var(--border); border-radius: 980px; padding: 6px 12px;
+      cursor: pointer; font-size: 14px; display: flex; align-items: center; gap: 6px;
+      box-shadow: var(--shadow-sm); transition: background var(--tr);
+    }
+    .theme-switch:hover { background: var(--surface2); }
+  </style>
 </head>
 <body>
-    <div class="container">
-        <div class="header">
-            <div class="logo">Amplify QEA</div>
-            <div class="subtitle">Test Execution Platform</div>
-        </div>
+<script>
+  (function(){try{var t=localStorage.getItem('amplify-theme');if(t?t==='dark':window.matchMedia('(prefers-color-scheme:dark)').matches)document.body.classList.add('dark-theme');}catch(e){}})();
+</script>
 
-        <form id="loginForm">
-            <div class="form-group">
-                <label for="username">Username</label>
-                <input type="text" id="username" name="username" required autofocus>
-                <div class="error" id="usernameError"></div>
-            </div>
+<button class="theme-switch" onclick="toggleTheme()" title="Toggle theme">
+  <span id="themeIcon">☀️</span>
+</button>
 
-            <div class="form-group">
-                <label for="password">Password</label>
-                <input type="password" id="password" name="password" required>
-                <div class="error" id="passwordError"></div>
-            </div>
+<div class="auth-card">
+  <div class="auth-header">
+    <div class="auth-logo" aria-hidden="true">⚡</div>
+    <h1>Amplify <span>QEA</span></h1>
+    <div class="subtitle">Sign in to your workspace</div>
+  </div>
 
-            <div class="error" id="generalError"></div>
-
-            <button type="submit">Sign In</button>
-            <div class="loading" id="loading">Signing in...</div>
-        </form>
-
-        <div class="register-link">
-            Don't have an account? <a href="/register">Create one</a>
-        </div>
+  <form class="auth-form" id="loginForm">
+    <div class="field">
+      <label for="username">Username</label>
+      <input type="text" id="username" name="username" required autofocus autocomplete="username">
     </div>
+    <div class="field">
+      <label for="password">Password</label>
+      <input type="password" id="password" name="password" required autocomplete="current-password">
+    </div>
+    <div class="auth-error" id="errorMsg"></div>
+    <button type="submit" class="auth-submit" id="submitBtn">Sign In</button>
+    <div class="auth-loading" id="loading">Signing in...</div>
+  </form>
 
-    <script>
-        const form = document.getElementById("loginForm");
-        const usernameInput = document.getElementById("username");
-        const passwordInput = document.getElementById("password");
-        const generalError = document.getElementById("generalError");
-        const loading = document.getElementById("loading");
+  <div class="auth-footer">
+    Don't have an account? <a href="/register">Create one</a>
+  </div>
+</div>
 
-        form.addEventListener("submit", async (e) => {
-            e.preventDefault();
+<script>
+function toggleTheme() {
+  const dark = !document.body.classList.contains('dark-theme');
+  document.body.classList.toggle('dark-theme', dark);
+  document.getElementById('themeIcon').textContent = dark ? '🌙' : '☀️';
+  try { localStorage.setItem('amplify-theme', dark ? 'dark' : 'light'); } catch(e) {}
+}
+(function() {
+  const dark = document.body.classList.contains('dark-theme');
+  document.getElementById('themeIcon').textContent = dark ? '🌙' : '☀️';
+})();
 
-            generalError.style.display = "none";
-            generalError.textContent = "";
-            loading.style.display = "block";
-
-            try {
-                const response = await fetch("/api/auth/login", {
-                    method: "POST",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({
-                        username: usernameInput.value,
-                        password: passwordInput.value
-                    })
-                });
-
-                if (response.ok) {
-                    window.location.href = "/";
-                } else {
-                    const data = await response.json();
-                    generalError.textContent = data.error || "Login failed";
-                    generalError.style.display = "block";
-                }
-            } catch (error) {
-                generalError.textContent = "Network error: " + error.message;
-                generalError.style.display = "block";
-            } finally {
-                loading.style.display = "none";
-            }
-        });
-    </script>
+document.getElementById('loginForm').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const err = document.getElementById('errorMsg');
+  const btn = document.getElementById('submitBtn');
+  const loading = document.getElementById('loading');
+  err.classList.remove('visible');
+  btn.disabled = true;
+  loading.style.display = 'block';
+  try {
+    const r = await fetch('/api/auth/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        username: document.getElementById('username').value,
+        password: document.getElementById('password').value
+      })
+    });
+    if (r.ok) { window.location.href = '/'; return; }
+    const d = await r.json();
+    err.textContent = d.error || 'Login failed';
+    err.classList.add('visible');
+  } catch (ex) {
+    err.textContent = 'Network error';
+    err.classList.add('visible');
+  } finally {
+    btn.disabled = false;
+    loading.style.display = 'none';
+  }
+});
+</script>
 </body>
 </html>
