@@ -144,11 +144,8 @@ def _zephyr_jwt(access_key: str, secret_key: str, account_id: str,
 
 
 def _z_cfg() -> dict:
-    """Resolve Zephyr config: server secrets (env/file) → user config fallback."""
-    server = load_zephyr_config()
-    if server:
-        return server
-    return UserConfigReader(g.user.id).load().get(ZEPHYR_CONFIG_KEY, {})
+    """Resolve Zephyr config from server secrets only (env vars → server_config.json)."""
+    return load_zephyr_config()
 
 
 def _z_call(method: str, path: str, params: dict | None = None, body=None) -> tuple:

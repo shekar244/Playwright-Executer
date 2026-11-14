@@ -1315,44 +1315,31 @@ async function saveResultsMapping() {
 
 async function saveMappingConfig() { await saveTcMapping(); await saveResultsMapping(); }
 
-// ── Zephyr config (Config tab panel) ──────────────────────────────────────────
+// ── Zephyr config (Config tab panel — read-only, server-managed) ─────────────
 async function loadZephyrConfig() {
   const cfg = await fetch('/api/zephyr/config').then(r => r.json()).catch(() => ({}));
+  const dot = document.getElementById('zCfgDot');
+  const label = document.getElementById('zCfgLabel');
+  const details = document.getElementById('zCfgDetails');
   const set = (id, val) => { const el = document.getElementById(id); if (el) el.value = val || ''; };
-  set('z_jira_url',     cfg.jira_url     || '');
-  set('z_username',     cfg.username     || '');
-  set('z_api_token',    cfg.api_token    || '');
-  set('z_access_key',   cfg.access_key   || '');
-  set('z_secret_key',   cfg.secret_key   || '');
-  set('z_account_id',   cfg.account_id   || '');
-  set('z_project_key',  cfg.project_key  || '');
-  set('z_project_name', cfg.project_name || '');
-  _zProjectName = cfg.project_name || '';
-  const sslEl = document.getElementById('z_verify_ssl');
-  if (sslEl) sslEl.checked = cfg.verify_ssl === true;
-  _syncProjectDisplay(cfg.project_key || '');
-  if (cfg.access_key) {
-    const dot = document.getElementById('zConnectStatus');
-    if (dot) dot.innerHTML = '<span class="connect-dot" style="background:var(--green);width:7px;height:7px;border-radius:50%;display:inline-block;margin-right:3px;"></span>Configured';
-  }
-}
 
-async function saveZephyrConfig() {
-  const val        = id => { const el = document.getElementById(id); return el ? el.value.trim() : ''; };
-  const projectKey = val('z_project_key').toUpperCase();
-  const sslEl      = document.getElementById('z_verify_ssl');
-  const cfg = {
-    jira_url: val('z_jira_url'), username: val('z_username'), api_token: val('z_api_token'),
-    access_key: val('z_access_key'), secret_key: val('z_secret_key'), account_id: val('z_account_id'),
-    project_key: projectKey, project_name: val('z_project_name'),
-    verify_ssl: sslEl ? sslEl.checked : false,
-  };
-  try {
-    const res  = await fetch('/api/zephyr/config', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(cfg) });
-    const data = await res.json();
-    if (res.ok && data.ok) { zLog(`✓  Config saved — project: ${projectKey || '(none)'}`, 'passed'); _zProjectName = cfg.project_name; _syncProjectDisplay(projectKey); }
-    else zLog('✗  Save failed: ' + JSON.stringify(data), 'failed');
-  } catch (err) { zLog('✗  Save error: ' + err.message, 'failed'); }
+  set('z_project_key', cfg.project_key || '');
+  set('z_jira_url', cfg.jira_url || '');
+  _zProjectName = cfg.project_name || '';
+  _syncProjectDisplay(cfg.project_key || '');
+
+  if (cfg._configured || cfg._source === 'server') {
+    if (dot) dot.className = 'connect-dot ok';
+    if (label) label.textContent = 'Jira / Zephyr Configured';
+    if (details) details.innerHTML =
+      `<div>Jira URL: <strong>${cfg.jira_url || '(set)'}</strong></div>` +
+      (cfg.project_key ? `<div>Project: <strong>${cfg.project_key}</strong></div>` : '') +
+      `<div style="margin-top:4px;font-size:11px;">Source: server configuration</div>`;
+  } else {
+    if (dot) dot.className = 'connect-dot err';
+    if (label) label.textContent = 'Not Configured';
+    if (details) details.textContent = 'Ask an admin to configure Jira/Zephyr credentials in the Admin Panel.';
+  }
 }
 
 async function testZephyrConnection() {

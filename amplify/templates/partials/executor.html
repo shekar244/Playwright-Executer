@@ -497,7 +497,7 @@
             <div class="field">
               <label>Issue Type ID <span style="font-weight:400;color:var(--green);">(paste numeric ID — most reliable)</span></label>
               <input type="text" id="m_issue_type_id" placeholder="e.g. 19100" style="font-family:var(--mono);" />
-              <div class="hint">Get from: /rest/api/latest/project/BBX → issueTypes[].id</div>
+              <div class="hint">Get from: /rest/api/latest/project/YOUR_KEY → issueTypes[].id</div>
             </div>
           </div>
           <div class="mapping-group-title">Zephyr Test Steps</div>
@@ -559,35 +559,29 @@
       </div>
     </div>
 
-    <!-- Panel: Zephyr Config -->
+    <!-- Panel: Zephyr Config (server-managed credentials) -->
     <div id="cfgZephyr" style="display:none;flex-direction:column;gap:10px;">
-      <div class="field"><label>Jira Base URL</label><input type="text" id="z_jira_url" placeholder="https://yourcompany.atlassian.net" /></div>
-      <div class="field"><label>Jira Username (email)</label><input type="text" id="z_username" placeholder="you@company.com — leave empty for a Personal Access Token" /></div>
-      <div class="field"><label>Jira API Token</label><input type="password" id="z_api_token" placeholder="Jira API token or Personal Access Token" /></div>
-      <div class="field"><label>Zephyr Access Key</label><input type="password" id="z_access_key" placeholder="zapiAccessKey from Zephyr app" /></div>
-      <div class="field"><label>Zephyr Secret Key</label><input type="password" id="z_secret_key" placeholder="Secret key from Zephyr app" /></div>
-      <div class="field"><label>Atlassian Account ID</label><input type="text" id="z_account_id" placeholder="e.g. 5b10a2844c20165700ede21g" /></div>
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
-        <div class="field">
-          <label>Project Key</label>
-          <input type="text" id="z_project_key" placeholder="e.g. BBX, PROJ, QA" style="text-transform:uppercase;" />
-          <div class="hint">Short key — used in Zephyr API &amp; issue creation</div>
+      <div class="hint">Jira and Zephyr credentials are managed at the server level by an admin. Contact your admin to update credentials.</div>
+
+      <div id="zephyrServerStatus" style="padding:12px;border-radius:var(--radius);border:0.5px solid var(--border);background:var(--surface2);">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">
+          <span class="connect-dot" id="zCfgDot"></span>
+          <span style="font-size:12px;font-weight:600;" id="zCfgLabel">Checking...</span>
         </div>
-        <div class="field">
-          <label>Project Name</label>
-          <input type="text" id="z_project_name" placeholder="e.g. BBX QA Automation" />
-          <div class="hint">Full display name shown in context banners</div>
-        </div>
+        <div id="zCfgDetails" style="font-size:12px;color:var(--text-dim);"></div>
       </div>
-      <div class="field">
-        <label class="checkbox-label" style="gap:8px;"><input type="checkbox" id="z_verify_ssl" /> Verify SSL certificate</label>
-        <div class="hint">Uncheck if you get SSL certificate errors</div>
-      </div>
+
       <div class="action-row">
-        <button class="btn btn-run" onclick="saveZephyrConfig()">💾 Save</button>
         <button class="btn btn-sm" onclick="testZephyrConnection()">⚡ Test Connection</button>
         <span id="zConnectStatus" style="font-size:11px;color:var(--text-dim);margin-left:4px;"></span>
       </div>
+
+      <!-- Hidden inputs kept for backward compat with JS that reads z_project_key -->
+      <input type="hidden" id="z_jira_url" /><input type="hidden" id="z_username" />
+      <input type="hidden" id="z_api_token" /><input type="hidden" id="z_access_key" />
+      <input type="hidden" id="z_secret_key" /><input type="hidden" id="z_account_id" />
+      <input type="hidden" id="z_project_key" /><input type="hidden" id="z_project_name" />
+      <input type="hidden" id="z_verify_ssl" />
     </div>
 
     <!-- Panel: UI Tab Visibility -->
