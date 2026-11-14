@@ -246,8 +246,11 @@ document.getElementById('log').addEventListener('scroll', function() {
 // ── UI Tab kill-switch ────────────────────────────────────────────────────────
 // Maps tab key → { navBtn id, cfgBtn id (optional) }
 const UI_TAB_MAP = {
+  executor:     { nav: 'navbtn-executor' },
   dashboard:    { nav: 'navbtn-dashboard' },
   zephyr:       { nav: 'navbtn-zephyr' },
+  filemanager:  { nav: 'navbtn-filemanager' },
+  studio:       { nav: 'navbtn-studio' },
   insights:     { nav: 'navbtn-insights' },
   cfg_git:      { cfg: 'ctab-git' },
   cfg_tools:    { cfg: 'ctab-tools' },
@@ -256,7 +259,7 @@ const UI_TAB_MAP = {
 };
 
 function applyUiTabs(tabs) {
-  const defaults = { dashboard: true, zephyr: true, insights: true, cfg_git: true, cfg_tools: true, cfg_mapping: true, cfg_zephyr: true };
+  const defaults = { executor: true, dashboard: true, zephyr: true, filemanager: true, studio: true, insights: true, cfg_git: true, cfg_tools: true, cfg_mapping: true, cfg_zephyr: true };
   const t = Object.assign({}, defaults, tabs || {});
   Object.entries(UI_TAB_MAP).forEach(([key, ids]) => {
     const visible = !!t[key];

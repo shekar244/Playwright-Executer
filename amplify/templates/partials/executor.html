@@ -520,15 +520,27 @@
     <div id="cfgUiTabs" style="display:none;flex-direction:column;gap:14px;">
       <div class="hint">Show or hide tabs and config sections. Changes apply instantly and are saved to config.</div>
 
-      <div style="font-size:11px;font-weight:600;color:var(--text-dim);text-transform:uppercase;letter-spacing:.05em;">Main Navigation</div>
+      <div style="font-size:11px;font-weight:600;color:var(--text-dim);text-transform:uppercase;letter-spacing:.05em;">Main Navigation Tabs</div>
       <div style="display:flex;flex-direction:column;gap:8px;">
         <label class="checkbox-label" style="gap:10px;cursor:pointer;">
+          <input type="checkbox" id="uitab_executor" onchange="saveUiTabs()" />
+          <span>⚡ Executor</span>
+        </label>
+        <label class="checkbox-label" style="gap:10px;cursor:pointer;">
           <input type="checkbox" id="uitab_dashboard" onchange="saveUiTabs()" />
-          <span>📊 Reports Dashboard</span>
+          <span>📊 Dashboard</span>
         </label>
         <label class="checkbox-label" style="gap:10px;cursor:pointer;">
           <input type="checkbox" id="uitab_zephyr" onchange="saveUiTabs()" />
           <span>🔷 Test Management</span>
+        </label>
+        <label class="checkbox-label" style="gap:10px;cursor:pointer;">
+          <input type="checkbox" id="uitab_filemanager" onchange="saveUiTabs()" />
+          <span>🗂️ File Manager</span>
+        </label>
+        <label class="checkbox-label" style="gap:10px;cursor:pointer;">
+          <input type="checkbox" id="uitab_studio" onchange="saveUiTabs()" />
+          <span>🔬 AI Studio</span>
         </label>
         <label class="checkbox-label" style="gap:10px;cursor:pointer;">
           <input type="checkbox" id="uitab_insights" onchange="saveUiTabs()" />
@@ -555,7 +567,7 @@
           <span>🔷 Zephyr Config</span>
         </label>
       </div>
-      <div style="font-size:11px;color:var(--text-dim);">Executor and Config are always visible and cannot be hidden.</div>
+      <div style="font-size:11px;color:var(--text-dim);">Executor and Config tabs are always visible and cannot be hidden.</div>
     </div>
 
   </div><!-- end features-left -->
