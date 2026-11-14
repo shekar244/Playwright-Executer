@@ -41,8 +41,10 @@ class SprintClient:
             start += len(batch)
         return boards
 
+    _STATE_ORDER = {"active": 0, "future": 1, "closed": 2}
+
     def sprints(self, board_id: int, state: str = "") -> list[dict]:
-        """Sprints on a board. state: active | closed | future | '' (all)."""
+        """Sprints on a board, sorted: active first, then future, then closed (newest first)."""
         sprints: list[dict] = []
         start = 0
         params: dict = {"startAt": start, "maxResults": 50}
@@ -61,6 +63,10 @@ class SprintClient:
             if data.get("isLast", True) or not batch:
                 break
             start += len(batch)
+        sprints.sort(key=lambda s: (
+            self._STATE_ORDER.get(s.get("state", "closed"), 2),
+            -(s.get("id", 0)),
+        ))
         return sprints
 
     def sprint(self, sprint_id: int) -> dict:
