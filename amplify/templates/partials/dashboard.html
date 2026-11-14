@@ -6,22 +6,22 @@
     <div class="dash-title">
       <span>📊</span> Test Dashboard
       <span class="dash-sub" id="dashSubtitle">— select a repo and run tests to see results</span>
-      <div style="margin-left:auto;display:flex;gap:8px;align-items:center;">
-        <input type="text" id="dashSearch" placeholder="Search tests…" oninput="filterTests()" style="width:180px;font-size:12px;" />
-        <select id="dashStatusFilter" onchange="filterTests()" style="width:110px;font-size:12px;">
-          <option value="">All Status</option>
-          <option value="passed">Passed</option>
-          <option value="failed">Failed</option>
-          <option value="broken">Broken</option>
-          <option value="skipped">Skipped</option>
-        </select>
-        <button class="btn btn-sm" onclick="loadDashboard()">⟳ Refresh</button>
-        <button class="btn btn-sm" style="color:var(--red);border-color:var(--red);" onclick="clearHistory()">Clear History</button>
-      </div>
+    </div>
+    <div class="dash-toolbar">
+      <input type="text" id="dashSearch" placeholder="Search tests…" oninput="filterTests()" style="flex:1;min-width:120px;max-width:200px;font-size:12px;" />
+      <select id="dashStatusFilter" onchange="filterTests()" style="width:110px;font-size:12px;">
+        <option value="">All Status</option>
+        <option value="passed">Passed</option>
+        <option value="failed">Failed</option>
+        <option value="broken">Broken</option>
+        <option value="skipped">Skipped</option>
+      </select>
+      <button class="btn btn-sm" onclick="loadDashboard()">⟳ Refresh</button>
+      <button class="btn btn-sm" style="color:var(--red);border-color:var(--red);" onclick="clearHistory()">Clear History</button>
     </div>
 
     <!-- ── Section 1: Current Run — 4 columns ──────────────────────────────── -->
-    <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:14px;">
+    <div class="dash-grid-4">
 
       <!-- Col 1: Donut — number in centre, % on hover -->
       <div class="dash-card">
@@ -146,7 +146,7 @@
     </div>
 
     <!-- ── Section 3: Tests Run by Day + Run History Trend ───────────────── -->
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;">
+    <div class="dash-grid-2">
       <div class="dash-card">
         <div class="dash-card-title" id="dailyChartTitle">Tests Run by Day — Last 7 Days</div>
         <div class="dash-chart-wrap" style="height:200px;"><canvas id="chartDailyRuns"></canvas></div>
@@ -185,6 +185,35 @@
 </div>
 
 <style>
+/* ── Dashboard layout grids ── */
+.dash-grid-4 { display:grid; grid-template-columns:1fr 1fr 1fr 1fr; gap:14px; }
+.dash-grid-2 { display:grid; grid-template-columns:1fr 1fr; gap:16px; }
+.dash-toolbar { display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
+.dash-table-header { display:flex; align-items:center; gap:8px; padding:12px 16px; border-bottom:0.5px solid var(--border); flex-wrap:wrap; }
+.dash-table-header h3 { font-size:13px; font-weight:600; }
+
+@media (max-width: 768px) {
+  .dash-grid-4 { grid-template-columns: 1fr 1fr; }
+  .dash-grid-2 { grid-template-columns: 1fr; }
+  .dash-toolbar { gap: 6px; }
+  .dash-toolbar input { max-width: none !important; }
+  .dash-table-header { padding: 10px 12px; }
+  .sui-stat-val { font-size: 18px; }
+  .sui-icon { width: 32px; height: 32px; font-size: 14px; }
+  .sui-stat-row { padding: 7px 10px; }
+  .dash-chart-wrap { height: 140px !important; }
+  #dashTestTable { min-width: 550px; }
+  .history-tbl { min-width: 650px; }
+  #historyPagination { justify-content: center; }
+}
+@media (max-width: 480px) {
+  .dash-grid-4 { grid-template-columns: 1fr; }
+  .dash-title { font-size: 16px; }
+  .dash-toolbar { flex-direction: column; align-items: stretch; }
+  .dash-toolbar input, .dash-toolbar select { max-width: none !important; width: 100% !important; }
+  .sui-stat-val { font-size: 16px; }
+}
+
 /* Soft UI stat row — icon badge style inspired by Soft UI Dashboard */
 .sui-stat-row {
   display:flex;justify-content:space-between;align-items:center;
