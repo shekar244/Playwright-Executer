@@ -56,10 +56,16 @@ def _run_git(args: list[str], cwd: str, timeout: int = 120) -> tuple[int, str]:
 
 
 def _build_clone_url(url: str, token: str = "") -> str:
-    if token and url.startswith("https://"):
-        parts = url.split("://", 1)
-        return f"https://oauth2:{token}@{parts[1]}"
-    return url
+    if not token or not url.startswith("https://"):
+        return url
+    host = url.split("://", 1)[1]
+    if "github.com" in url:
+        return f"https://x-access-token:{token}@{host}"
+    if "gitlab" in url:
+        return f"https://oauth2:{token}@{host}"
+    if "bitbucket" in url:
+        return f"https://x-token-auth:{token}@{host}"
+    return f"https://x-access-token:{token}@{host}"
 
 
 @bp.route("/api/repo/clone", methods=["POST"])
