@@ -13,7 +13,7 @@
   (function () {
     try {
       var t = localStorage.getItem('amplify-theme') || 'light';
-      var map = {dark:'dark-theme',midnight:'theme-midnight',nord:'theme-nord',solarized:'theme-solarized',rose:'theme-rose',forest:'theme-forest'};
+      var map = {dark:'dark-theme',midnight:'theme-midnight',nord:'theme-nord',solarized:'theme-solarized',rose:'theme-rose',forest:'theme-forest',ocean:'theme-ocean'};
       if (map[t]) document.body.classList.add(map[t]);
       else if (t === 'light' && window.matchMedia('(prefers-color-scheme: dark)').matches && !localStorage.getItem('amplify-theme')) document.body.classList.add('dark-theme');
     } catch (e) {}
@@ -289,6 +289,7 @@ const _THEMES = [
   { id: 'solarized', label: 'Solarized', cls: 'theme-solarized',dot: '#fdf6e3', dark: false },
   { id: 'rose',      label: 'Rosé',      cls: 'theme-rose',     dot: '#261c24', dark: true },
   { id: 'forest',    label: 'Forest',    cls: 'theme-forest',   dot: '#162419', dark: true },
+  { id: 'ocean',     label: 'Ocean Blue', cls: 'theme-ocean',   dot: '#1971c2', dark: false },
 ];
 
 function applyTheme(themeId) {

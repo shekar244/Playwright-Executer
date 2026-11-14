@@ -160,7 +160,7 @@
 </head>
 <body>
 <script>
-  (function(){try{var t=localStorage.getItem('amplify-theme')||'light';var m={dark:'dark-theme',midnight:'theme-midnight',nord:'theme-nord',solarized:'theme-solarized',rose:'theme-rose',forest:'theme-forest'};if(m[t])document.body.classList.add(m[t]);}catch(e){}})();
+  (function(){try{var t=localStorage.getItem('amplify-theme')||'light';var m={dark:'dark-theme',midnight:'theme-midnight',nord:'theme-nord',solarized:'theme-solarized',rose:'theme-rose',forest:'theme-forest',ocean:'theme-ocean'};if(m[t])document.body.classList.add(m[t]);}catch(e){}})();
 </script>
 
 <!-- ── Topbar ── -->
@@ -250,9 +250,9 @@
 <script>
 let _resetId = null;
 
-const _ADM_THEMES = ['light','dark','midnight','nord','solarized','rose','forest'];
-const _ADM_CLS = {dark:'dark-theme',midnight:'theme-midnight',nord:'theme-nord',solarized:'theme-solarized',rose:'theme-rose',forest:'theme-forest'};
-const _ADM_ICONS = {light:'☀️',dark:'🌙',midnight:'🌌',nord:'❄️',solarized:'🌅',rose:'🌸',forest:'🌲'};
+const _ADM_THEMES = ['light','dark','midnight','nord','solarized','rose','forest','ocean'];
+const _ADM_CLS = {dark:'dark-theme',midnight:'theme-midnight',nord:'theme-nord',solarized:'theme-solarized',rose:'theme-rose',forest:'theme-forest',ocean:'theme-ocean'};
+const _ADM_ICONS = {light:'☀️',dark:'🌙',midnight:'🌌',nord:'❄️',solarized:'🌅',rose:'🌸',forest:'🌲',ocean:'🌊'};
 
 function cycleTheme() {
   let cur = 'light';

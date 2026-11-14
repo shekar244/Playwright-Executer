@@ -122,6 +122,22 @@ body.theme-forest {
   --shadow-sm: 0 1px 3px rgba(0,0,0,0.5); --shadow-md: 0 4px 16px rgba(0,0,0,0.5); --shadow-lg: 0 8px 40px rgba(0,0,0,0.6);
 }
 
+/* ── Ocean Blue ── */
+body.theme-ocean {
+  --bg: #e8f0fe; --surface: #ffffff; --surface2: #dce8f8; --surface3: #c8d8ef;
+  --border: rgba(30,80,160,0.14); --border-hover: rgba(30,80,160,0.28); --border-focus: rgba(25,113,194,0.55);
+  --text: #0d2137; --text-muted: #3a5a7c; --text-dim: #6889a8;
+  --accent: #1971c2; --accent-glow: rgba(25,113,194,0.12); --accent-border: rgba(25,113,194,0.30);
+  --on-accent: #ffffff;
+  --green: #2b8a3e; --green-glow: rgba(43,138,62,0.14);
+  --red: #c92a2a; --red-glow: rgba(201,42,42,0.12);
+  --yellow: #e67700; --yellow-glow: rgba(230,119,0,0.14);
+  --teal: #0c8599; --purple: #7048e8; --peach: #d9480f;
+  --header-bg: rgba(232,240,254,0.88); --input-bg: #ffffff; --input-border: rgba(30,80,160,0.18);
+  --log-bg: #f0f5ff; --chart-grid: rgba(30,80,160,0.08);
+  --shadow-sm: 0 1px 2px rgba(25,113,194,0.06); --shadow-md: 0 2px 8px rgba(25,113,194,0.08); --shadow-lg: 0 8px 30px rgba(25,113,194,0.14);
+}
+
 html { color-scheme: light; }
 html:has(body.dark-theme), html:has(body.theme-midnight), html:has(body.theme-nord),
 html:has(body.theme-rose), html:has(body.theme-forest) { color-scheme: dark; }
