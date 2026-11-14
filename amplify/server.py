@@ -27,6 +27,7 @@ from amplify.routes.filemanager import bp as filemanager_bp
 from amplify.routes.studio      import bp as studio_bp
 from amplify.routes.insights    import bp as insights_bp
 from amplify.routes.auth        import bp as auth_bp
+from amplify.routes.admin       import bp as admin_bp
 from amplify.auth_utils import verify_jwt
 from amplify.models.db import init_db
 from amplify.models.user import User
@@ -44,6 +45,7 @@ app.register_blueprint(filemanager_bp)
 app.register_blueprint(studio_bp)
 app.register_blueprint(insights_bp)
 app.register_blueprint(auth_bp)
+app.register_blueprint(admin_bp)
 
 @app.before_request
 def before_request():
@@ -75,6 +77,14 @@ def login():
 @app.route("/register")
 def register():
     return render_template("register.html")
+
+@app.route("/admin")
+def admin_page():
+    if not hasattr(g, "user"):
+        return redirect("/login")
+    if not g.user.is_admin:
+        return redirect("/")
+    return render_template("admin.html", user=g.user)
 
 @app.route("/static/<path:path>")
 def static_files(path):

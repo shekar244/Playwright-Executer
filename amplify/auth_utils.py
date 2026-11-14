@@ -54,7 +54,21 @@ def require_auth(f):
         if not user:
             return jsonify({"error": "User not found"}), 401
 
+        if not user.is_active:
+            return jsonify({"error": "Account is disabled"}), 403
+
         g.user = user
         return f(*args, **kwargs)
 
+    return decorated_function
+
+
+def require_admin(f):
+    """Decorator to restrict routes to admin users only."""
+    @wraps(f)
+    @require_auth
+    def decorated_function(*args, **kwargs):
+        if not g.user.is_admin:
+            return jsonify({"error": "Admin access required"}), 403
+        return f(*args, **kwargs)
     return decorated_function

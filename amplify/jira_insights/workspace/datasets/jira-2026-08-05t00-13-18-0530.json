@@ -1,0 +1,13 @@
+{
+  "slug": "jira-2026-08-05t00-13-18-0530",
+  "name": "Jira 2026-08-05T00_13_18+0530",
+  "source": "upload",
+  "jql": "",
+  "rows": 168,
+  "multi_value_cols": [
+    "Labels"
+  ],
+  "fetched_at": "2026-10-03T21:57:15+00:00",
+  "file_name": "Jira 2026-08-05T00_13_18+0530.csv",
+  "jira_url": ""
+}

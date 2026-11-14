@@ -7,7 +7,7 @@
 """
 import json
 from flask import Blueprint, request, jsonify, g, make_response
-from amplify.models.user import User
+from amplify.models.user import User, ActivityLog
 from amplify.auth_utils import generate_jwt, require_auth
 from amplify.storage import initialize_user_workspace
 
@@ -33,6 +33,7 @@ def register():
         return jsonify({"error": str(e)}), 400
 
     initialize_user_workspace(user.id)
+    ActivityLog.record(user.id, "register", f"New account: {username}", request.remote_addr)
 
     token = generate_jwt(user.id)
 
@@ -59,11 +60,15 @@ def login():
     if not user:
         return jsonify({"error": "Invalid credentials"}), 401
 
+    User.update_last_login(user.id)
+    ActivityLog.record(user.id, "login", None, request.remote_addr)
+
     token = generate_jwt(user.id)
 
     response = make_response(jsonify({
         "ok": True,
-        "user": {"id": user.id, "username": user.username, "email": user.email},
+        "user": {"id": user.id, "username": user.username, "email": user.email,
+                 "is_admin": user.is_admin},
         "access_token": token
     }))
     response.set_cookie("access_token", token, httponly=True, secure=False, samesite="Lax", max_age=86400)
@@ -86,7 +91,8 @@ def get_me():
     return jsonify({
         "id": user.id,
         "username": user.username,
-        "email": user.email
+        "email": user.email,
+        "is_admin": user.is_admin,
     }), 200
 
 @bp.route("/api/auth/refresh", methods=["POST"])

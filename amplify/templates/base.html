@@ -41,6 +41,9 @@
         <span class="user-name">{{ user.username }}</span>
       </button>
       <div class="user-dropdown" id="userDropdown">
+        {% if user.is_admin %}
+        <a href="/admin" class="user-logout">Admin Panel</a>
+        {% endif %}
         <a href="javascript:logout()" class="user-logout">Logout</a>
       </div>
     </div>
