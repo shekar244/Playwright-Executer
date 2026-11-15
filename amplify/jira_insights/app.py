@@ -44,12 +44,15 @@ _user_id = st.query_params.get("user_id")
 _is_embedded = st.query_params.get("embed") == "true"
 
 if not _user_id and not _is_embedded:
-    if "ji_auth_user_id" not in ss:
-        st.markdown("""<style>
-        section[data-testid="stSidebar"] { display:none !important; }
-        [data-testid="stHeader"] { display:none !important; }
-        .stForm div[data-testid="InputInstructions"] { display:none !important; }
-        </style>""", unsafe_allow_html=True)
+    _logged_in = "ji_auth_user_id" in ss
+    # Toggle sidebar/header visibility based on login state
+    st.markdown(f"""<style>
+    section[data-testid="stSidebar"] {{ display:{'block' if _logged_in else 'none'} !important; }}
+    [data-testid="stHeader"] {{ display:{'block' if _logged_in else 'none'} !important; }}
+    .stForm div[data-testid="InputInstructions"] {{ display:none !important; }}
+    </style>""", unsafe_allow_html=True)
+
+    if not _logged_in:
         _sp1, _login_col, _sp2 = st.columns([1, 1, 1])
         with _login_col:
             st.markdown("""
