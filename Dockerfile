@@ -1,12 +1,12 @@
 # ── Amplify QEA — OpenShift / Docker Image ────────────────────────────────────
 #
-# Build:   docker build -t amplify-qea .
-# Run:     docker run -p 8080:8080 amplify-qea
-# OpenShift: oc new-build --binary --name=amplify-qea --strategy=docker
-#            oc start-build amplify-qea --from-dir=. --follow
+# Build (public):   docker build -t amplify-qea .
+# Build (JFrog):    docker build --build-arg BASE_REGISTRY=yourcompany.jfrog.io/docker-remote/ -t amplify-qea .
+# Run:              docker run -p 8080:8080 amplify-qea
 # ─────────────────────────────────────────────────────────────────────────────
 
-FROM python:3.13-slim
+ARG BASE_REGISTRY=
+FROM ${BASE_REGISTRY}python:3.13-slim
 
 # ── System dependencies ───────────────────────────────────────────────────────
 # git  : needed if the app clones/pulls repos at runtime

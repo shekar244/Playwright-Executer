@@ -13,6 +13,7 @@ variables:
   # JFrog Artifactory
   JFROG_REGISTRY: 'yourcompany.jfrog.io'
   JFROG_REPO: 'docker-local'
+  JFROG_REMOTE_REPO: 'docker-remote'      # remote proxy repo that mirrors Docker Hub
   IMAGE_NAME: 'amplify-qea'
   IMAGE_TAG: '$(Build.BuildId)'
 
@@ -52,10 +53,10 @@ stages:
           #     echo $(JFROG_PASSWORD) | docker login $(JFROG_REGISTRY) -u $(JFROG_USERNAME) --password-stdin
           #   displayName: 'Login to JFrog (CLI)'
 
-          # Step 3: Build for linux/amd64
+          # Step 3: Build for linux/amd64 (base image pulled from JFrog remote proxy)
           - script: |
               docker build \
-                --platform linux/amd64 \
+                --build-arg BASE_REGISTRY=$(JFROG_REGISTRY)/$(JFROG_REMOTE_REPO)/ \
                 -t $(JFROG_REGISTRY)/$(JFROG_REPO)/$(IMAGE_NAME):$(IMAGE_TAG) \
                 -t $(JFROG_REGISTRY)/$(JFROG_REPO)/$(IMAGE_NAME):latest \
                 .
