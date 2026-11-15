@@ -47,23 +47,33 @@ def insights_stop():
 @bp.route("/insights-app/<path:path>", methods=["GET", "POST", "PUT", "DELETE"])
 def insights_proxy(path):
     """Reverse proxy to Streamlit on localhost:{INSIGHTS_PORT}."""
+    import gzip
     target = f"http://127.0.0.1:{insights_port()}/{path}"
     qs = request.query_string.decode()
     if qs:
         target += "?" + qs
 
-    headers = {k: v for k, v in request.headers if k.lower() not in ("host", "content-length")}
+    headers = {}
+    for k, v in request.headers:
+        kl = k.lower()
+        if kl not in ("host", "content-length", "accept-encoding"):
+            headers[k] = v
+
     data = request.get_data() if request.method in ("POST", "PUT") else None
 
     try:
         req = urllib.request.Request(target, data=data, headers=headers, method=request.method)
         with urllib.request.urlopen(req, timeout=30) as resp:
             body = resp.read()
-            resp_headers = dict(resp.getheaders())
-            resp_headers.pop("Transfer-Encoding", None)
-            resp_headers.pop("Content-Encoding", None)
+            encoding = resp.getheader("Content-Encoding", "")
+            if encoding == "gzip":
+                body = gzip.decompress(body)
+            resp_headers = {}
+            for k, v in resp.getheaders():
+                if k.lower() not in ("transfer-encoding", "content-encoding", "content-length"):
+                    resp_headers[k] = v
             return Response(body, status=resp.status, headers=resp_headers)
     except urllib.error.HTTPError as e:
         return Response(e.read(), status=e.code)
-    except Exception:
-        return Response("Streamlit not reachable", status=502)
+    except Exception as ex:
+        return Response(f"Streamlit not reachable: {ex}", status=502)
