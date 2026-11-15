@@ -47,15 +47,16 @@ if not _user_id and not _is_embedded:
     if "ji_auth_user_id" not in ss:
         _login_css = """
         <style>
-        [data-testid="stAppViewContainer"] { display:flex; justify-content:center; align-items:center; min-height:80vh; }
-        [data-testid="stVerticalBlock"] { max-width:400px; width:100%; }
-        section[data-testid="stSidebar"] { display:none; }
-        [data-testid="stHeader"] { display:none; }
+        [data-testid="stAppViewContainer"] > div { display:flex; justify-content:center; align-items:center; min-height:85vh; }
+        [data-testid="stAppViewContainer"] > div > div { max-width:380px; width:100%; }
+        section[data-testid="stSidebar"] { display:none !important; }
+        [data-testid="stHeader"] { display:none !important; }
+        [data-testid="stMainBlockContainer"] { max-width:380px; margin:0 auto; padding-top:15vh; }
         </style>
         """
         st.markdown(_login_css, unsafe_allow_html=True)
         st.markdown("""
-        <div style="text-align:center;margin-bottom:24px;">
+        <div style="text-align:center;margin-bottom:28px;">
             <div style="width:48px;height:48px;border-radius:13px;margin:0 auto 14px;
                  background:linear-gradient(135deg,#0071e3,#0a7f99);color:#fff;
                  display:flex;align-items:center;justify-content:center;font-size:22px;
