@@ -75,8 +75,7 @@ def _ssl_ctx(verify: bool = True) -> _ssl.SSLContext:
 
 
 def _urlopen(req: urllib.request.Request, timeout: int = 20):
-    verify = _z_cfg().get("verify_ssl", False)
-    return urllib.request.urlopen(req, timeout=timeout, context=_ssl_ctx(verify))
+    return urllib.request.urlopen(req, timeout=timeout, context=_ssl_ctx(False))
 
 
 def _parse_response(raw: bytes, status: int) -> tuple:
