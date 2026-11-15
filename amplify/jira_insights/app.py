@@ -14,6 +14,7 @@ Started from the Jira Insights tab, or standalone from the tool root:
 """
 from __future__ import annotations
 
+import os
 import sys
 from pathlib import Path
 
