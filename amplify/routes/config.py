@@ -182,13 +182,12 @@ def save_allure_config():
 @bp.route("/api/config/jfrog/pip-ini-content", methods=["GET"])
 def get_pip_ini_content():
     """Return the raw, unmasked contents of the venv pip.ini file."""
-    import sys
-    from amplify.command_builder import resolve_python
-
     cfg       = UserConfigReader(g.user.id).load()
     repo_root = cfg.get("repo_root", "").strip()
-    python    = resolve_python(repo_root, cfg.get("venv_path", "")) if repo_root else sys.executable
-    venv_root = Path(python).parent.parent
+    if not repo_root:
+        return jsonify({"found": False, "path": ""})
+    venv_path = cfg.get("venv_path", ".venv").strip() or ".venv"
+    venv_root = Path(repo_root) / venv_path
     pip_ini_path = venv_root / "pip.ini"
 
     if not pip_ini_path.exists():
@@ -267,10 +266,15 @@ def generate_jfrog_pip_ini():
         f"index-url = {index_url}\n"
     )
 
-    # Locate venv
+    # Locate venv — write pip.ini into the repo's .venv, not system Python
     repo_root = cfg.get("repo_root", "").strip()
-    python    = resolve_python(repo_root, cfg.get("venv_path", "")) if repo_root else sys.executable
-    venv_root = Path(python).parent.parent
+    venv_path = cfg.get("venv_path", ".venv").strip() or ".venv"
+    if repo_root:
+        venv_root = Path(repo_root) / venv_path
+    else:
+        return jsonify({"error": "No repo configured — clone a repo first"}), 400
+    if not venv_root.exists():
+        return jsonify({"error": f"Venv not found at {venv_root} — create it first"}), 400
 
     pip_ini_path = venv_root / "pip.ini"
 
