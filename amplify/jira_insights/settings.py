@@ -16,7 +16,12 @@ from dataclasses import dataclass
 from pathlib import Path
 
 TOOL_ROOT = Path(__file__).resolve().parent.parent
-_DEFAULT_WORKSPACE = TOOL_ROOT / "jira_insights" / "workspace"
+
+_IN_CONTAINER = os.environ.get("CONTAINER", "0") == "1"
+_DEFAULT_WORKSPACE = (
+    Path("/app/data/jira_insights_default") if _IN_CONTAINER
+    else TOOL_ROOT / "jira_insights" / "workspace"
+)
 
 
 @dataclass(frozen=True)
