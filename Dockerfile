@@ -34,7 +34,7 @@ RUN chown -R 0:0 /app && chmod -R g=u /app
 # Copy requirements first so Docker layer-caches the pip install step.
 # The layer is only rebuilt when requirements.txt changes.
 COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+RUN pip install --no-cache-dir --trusted-host pypi.org --trusted-host pypi.python.org --trusted-host files.pythonhosted.org -r requirements.txt
 
 # ── Application source ────────────────────────────────────────────────────────
 COPY . .
