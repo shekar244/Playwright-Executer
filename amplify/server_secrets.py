@@ -61,7 +61,7 @@ def save_server_config(data: dict) -> None:
 
 
 def load_zephyr_config() -> dict:
-    """Load Zephyr/Jira config from env vars → server file → empty dict."""
+    """Load Zephyr/Jira config: server file wins → env vars as fallback."""
     env = os.environ.get
 
     env_cfg = {}
@@ -79,18 +79,11 @@ def load_zephyr_config() -> dict:
         env_cfg["account_id"] = env("ZEPHYR_ACCOUNT_ID", "").strip()
     if env("ZEPHYR_PROJECT_KEY"):
         env_cfg["project_key"] = env("ZEPHYR_PROJECT_KEY", "").strip()
-    if env("JIRA_VERIFY_SSL") is not None:
-        env_cfg["verify_ssl"] = env("JIRA_VERIFY_SSL", "").strip().lower() in ("1", "true", "yes")
-
-    if env_cfg:
-        file_cfg = _load_server_file().get("zephyr", {})
-        merged = {**file_cfg, **env_cfg}
-        merged.setdefault("verify_ssl", False)
-        return merged
 
     file_cfg = _load_server_file().get("zephyr", {})
-    if file_cfg:
-        file_cfg.setdefault("verify_ssl", False)
-        return file_cfg
 
-    return {}
+    # Server config file wins over env vars (admin panel saves here)
+    merged = {**env_cfg, **file_cfg}
+    merged.setdefault("verify_ssl", False)
+
+    return merged if merged else {}
