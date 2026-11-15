@@ -53,8 +53,6 @@ app.register_blueprint(repo_bp)
 def before_request():
     """Check authentication for protected routes."""
     public_routes = {"/login", "/register", "/api/auth/register", "/api/auth/login", "/api/admin/bootstrap"}
-    if request.path.startswith("/insights-app"):
-        return
     if request.path not in public_routes and not request.path.startswith("/static"):
         token = request.cookies.get("access_token")
         if token:
