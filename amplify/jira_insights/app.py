@@ -48,6 +48,7 @@ if not _user_id and not _is_embedded:
         st.markdown("""<style>
         section[data-testid="stSidebar"] { display:none !important; }
         [data-testid="stHeader"] { display:none !important; }
+        .stForm div[data-testid="InputInstructions"] { display:none !important; }
         </style>""", unsafe_allow_html=True)
         _sp1, _login_col, _sp2 = st.columns([1, 1, 1])
         with _login_col:
