@@ -1,0 +1,15 @@
+apiVersion: route.openshift.io/v1
+kind: Route
+metadata:
+  name: amplify-qea-insights
+  labels:
+    app: amplify-qea
+spec:
+  to:
+    kind: Service
+    name: amplify-qea
+  port:
+    targetPort: streamlit
+  tls:
+    termination: edge
+    insecureEdgeTerminationPolicy: Redirect
