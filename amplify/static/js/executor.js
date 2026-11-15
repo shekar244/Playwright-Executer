@@ -191,10 +191,13 @@ async function loadRepoStatus() {
       vs.innerHTML = '<span style="color:var(--green);">● venv active</span>';
       document.getElementById('createVenvBtn').style.display = 'none';
       document.getElementById('installDepsBtn').style.display = '';
+      _showJfrogPipSection();
     } else {
       vs.innerHTML = '<span style="color:var(--yellow);">○ no venv</span>';
       document.getElementById('createVenvBtn').style.display = '';
       document.getElementById('installDepsBtn').style.display = 'none';
+      const jfSec = document.getElementById('jfrogPipSection');
+      if (jfSec) jfSec.style.display = 'none';
     }
 
     // Requirements dropdown
@@ -312,13 +315,76 @@ async function createVenv() {
   btn.disabled = true; btn.textContent = 'Creating…';
   appendLine('⟳  Creating .venv…', 'info');
   const r = await fetch('/api/repo/venv/create', { method: 'POST' }).then(r => r.json()).catch(() => ({}));
-  btn.disabled = false; btn.textContent = 'Create .venv';
+  btn.disabled = false; btn.textContent = '1. Create .venv';
   if (r.ok) {
     appendLine('✓  venv created at ' + r.path, 'passed');
     loadRepoStatus();
+    _showJfrogPipSection();
   } else {
     appendLine('✗  ' + (r.error || 'Failed'), 'failed');
   }
+}
+
+function _showJfrogPipSection() {
+  const sec = document.getElementById('jfrogPipSection');
+  if (sec) sec.style.display = 'flex';
+  _checkPipIniStatus();
+}
+
+async function _checkPipIniStatus() {
+  const status = document.getElementById('pipIniStatus');
+  try {
+    const r = await fetch('/api/config/jfrog/pip-ini-content').then(r => r.json()).catch(() => ({}));
+    if (r.found) {
+      if (status) status.innerHTML = '<span style="color:var(--green);">● pip.ini configured</span>';
+    } else {
+      if (status) status.innerHTML = '<span style="color:var(--text-dim);">○ not configured</span>';
+    }
+  } catch(e) {}
+}
+
+async function generatePipIni() {
+  const url   = document.getElementById('env_jfrog_url')?.value.trim();
+  const email = document.getElementById('env_jfrog_email')?.value.trim();
+  const repo  = document.getElementById('env_jfrog_repo')?.value.trim() || 'pypi-remote';
+  const token = document.getElementById('env_jfrog_token')?.value.trim();
+  const result = document.getElementById('pipIniResult');
+
+  if (!url || !email || !token) {
+    if (result) { result.style.display = 'block'; result.textContent = 'URL, email, and token are required'; result.style.color = 'var(--red)'; }
+    return;
+  }
+
+  // Save to user config first
+  await fetch('/api/config/jfrog', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ jfrog_url: url, jfrog_repo: repo, jfrog_email: email, jfrog_token: token }),
+  });
+
+  // Generate pip.ini in the venv
+  const r = await fetch('/api/config/jfrog/generate', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ jfrog_url: url, jfrog_repo: repo, jfrog_email: email, jfrog_token: token }),
+  }).then(r => r.json()).catch(() => ({}));
+
+  if (result) {
+    result.style.display = 'block';
+    if (r.ok) {
+      result.textContent = '✓ pip.ini created at ' + r.path;
+      result.style.color = 'var(--green)';
+      appendLine('✓  pip.ini generated — packages will download from JFrog', 'passed');
+      _checkPipIniStatus();
+    } else {
+      result.textContent = r.error || 'Failed to generate pip.ini';
+      result.style.color = 'var(--red)';
+    }
+  }
+}
+
+function skipJfrog() {
+  const sec = document.getElementById('jfrogPipSection');
+  if (sec) sec.style.display = 'none';
+  appendLine('→  Skipped JFrog — using public PyPI', 'info');
 }
 
 async function installDeps() {

@@ -56,11 +56,53 @@
         <!-- Venv & Dependencies -->
         <details id="venvSection" style="display:none;margin-top:2px;">
           <summary class="repo-detail-summary"><span id="venvStatus" style="font-size:11px;display:inline-flex;align-items:center;gap:6px;"></span> Environment</summary>
-          <div style="display:flex;flex-direction:column;gap:6px;margin-top:8px;">
+          <div style="display:flex;flex-direction:column;gap:8px;margin-top:8px;">
+
+            <!-- Step 1: Create venv -->
             <div class="action-row" style="gap:4px;">
-              <button class="btn btn-sm" onclick="createVenv()" id="createVenvBtn">Create .venv</button>
-              <button class="btn btn-sm" onclick="installDeps()" id="installDepsBtn">pip install</button>
+              <button class="btn btn-sm" onclick="createVenv()" id="createVenvBtn">1. Create .venv</button>
+            </div>
+
+            <!-- Step 2: JFrog pip.ini (optional) -->
+            <div id="jfrogPipSection" style="display:none;flex-direction:column;gap:6px;padding:10px 12px;border:1px solid var(--border);border-radius:var(--radius);background:var(--surface2);">
+              <div style="display:flex;align-items:center;gap:6px;">
+                <span style="font-size:10px;text-transform:uppercase;letter-spacing:.06em;font-weight:700;color:var(--text-dim);">JFrog Artifactory</span>
+                <span id="pipIniStatus" style="font-size:10px;color:var(--text-dim);margin-left:auto;"></span>
+              </div>
+              <div class="hint">Configure JFrog to download packages from your private Artifactory registry. Skip if using public PyPI.</div>
+              <div class="field">
+                <label>Artifactory URL</label>
+                <input type="text" id="env_jfrog_url" placeholder="https://yourcompany.jfrog.io" style="font-size:12px;">
+              </div>
+              <div class="field-row" style="gap:6px;">
+                <div class="field" style="flex:1;">
+                  <label>Email</label>
+                  <input type="text" id="env_jfrog_email" placeholder="you@company.com" style="font-size:12px;">
+                </div>
+                <div class="field" style="flex:1;">
+                  <label>Repo Name</label>
+                  <input type="text" id="env_jfrog_repo" placeholder="pypi-remote" value="pypi-remote" style="font-size:12px;">
+                </div>
+              </div>
+              <div class="field">
+                <label>API Token</label>
+                <input type="password" id="env_jfrog_token" placeholder="JFrog API key or identity token" style="font-size:12px;">
+              </div>
+              <div class="action-row" style="gap:4px;">
+                <button class="btn btn-sm" onclick="generatePipIni()">Generate pip.ini</button>
+                <button class="btn btn-sm" onclick="skipJfrog()" style="color:var(--text-dim);">Skip (use public PyPI)</button>
+              </div>
+              <div id="pipIniResult" class="hint" style="display:none;"></div>
+            </div>
+
+            <!-- Step 3: pip install -->
+            <div class="action-row" style="gap:4px;">
+              <button class="btn btn-sm" onclick="installDeps()" id="installDepsBtn">3. pip install</button>
               <select id="reqFileSelect" style="width:auto;font-size:11px;padding:4px 6px;"></select>
+            </div>
+
+            <div class="hint" style="margin-top:2px;">
+              Or configure JFrog in <a href="javascript:void(0)" onclick="switchTab('tools');switchCfgTab('jfrog')" style="color:var(--accent);text-decoration:none;font-weight:600;">Config → JFrog</a> for full settings.
             </div>
           </div>
         </details>
