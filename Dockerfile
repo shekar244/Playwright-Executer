@@ -21,7 +21,6 @@ RUN if [ -n "$APT_PROXY" ]; then \
     fi && \
     apt-get update && apt-get install -y --no-install-recommends \
         git \
-        curl \
     && rm -rf /var/lib/apt/lists/*
 
 # ── App directory ─────────────────────────────────────────────────────────────
@@ -55,7 +54,7 @@ EXPOSE 8501
 
 # ── Health check ──────────────────────────────────────────────────────────────
 HEALTHCHECK --interval=30s --timeout=10s --start-period=15s --retries=3 \
-    CMD curl -f http://localhost:8080/ || exit 1
+    CMD python -c "import urllib.request; urllib.request.urlopen('http://localhost:8080/login', timeout=5)" || exit 1
 
 # ── Data and Database ─────────────────────────────────────────────────────
 # Persistent storage for user workspaces and SQLite database
