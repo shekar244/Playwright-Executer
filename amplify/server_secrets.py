@@ -85,10 +85,12 @@ def load_zephyr_config() -> dict:
     if env_cfg:
         file_cfg = _load_server_file().get("zephyr", {})
         merged = {**file_cfg, **env_cfg}
+        merged.setdefault("verify_ssl", False)
         return merged
 
     file_cfg = _load_server_file().get("zephyr", {})
     if file_cfg:
+        file_cfg.setdefault("verify_ssl", False)
         return file_cfg
 
     return {}
