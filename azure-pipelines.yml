@@ -53,10 +53,11 @@ stages:
           #     echo $(JFROG_PASSWORD) | docker login $(JFROG_REGISTRY) -u $(JFROG_USERNAME) --password-stdin
           #   displayName: 'Login to JFrog (CLI)'
 
-          # Step 3: Build for linux/amd64 (base image pulled from JFrog remote proxy)
+          # Step 3: Build for linux/amd64 (all downloads routed through JFrog)
           - script: |
               docker build \
                 --build-arg BASE_REGISTRY=$(JFROG_REGISTRY)/$(JFROG_REMOTE_REPO)/ \
+                --build-arg APT_PROXY=https://$(JFROG_REGISTRY)/artifactory/debian-remote \
                 -t $(JFROG_REGISTRY)/$(JFROG_REPO)/$(IMAGE_NAME):$(IMAGE_TAG) \
                 -t $(JFROG_REGISTRY)/$(JFROG_REPO)/$(IMAGE_NAME):latest \
                 .

@@ -11,7 +11,15 @@ FROM ${BASE_REGISTRY}python:3.13-slim
 # ── System dependencies ───────────────────────────────────────────────────────
 # git  : needed if the app clones/pulls repos at runtime
 # curl : healthcheck and misc tooling
-RUN apt-get update && apt-get install -y --no-install-recommends \
+#
+# APT_PROXY: optional JFrog Debian remote repo URL to avoid direct internet access
+#   Build with: --build-arg APT_PROXY=https://yourcompany.jfrog.io/artifactory/debian-remote
+ARG APT_PROXY=
+RUN if [ -n "$APT_PROXY" ]; then \
+      echo "deb $APT_PROXY bookworm main" > /etc/apt/sources.list && \
+      echo "deb $APT_PROXY bookworm-updates main" >> /etc/apt/sources.list; \
+    fi && \
+    apt-get update && apt-get install -y --no-install-recommends \
         git \
         curl \
     && rm -rf /var/lib/apt/lists/*
