@@ -1,0 +1,78 @@
+trigger:
+  branches:
+    include:
+      - master
+      - amplify-server-multi-user
+
+pr:
+  branches:
+    include:
+      - master
+
+variables:
+  # JFrog Artifactory
+  JFROG_REGISTRY: 'yourcompany.jfrog.io'
+  JFROG_REPO: 'docker-local'
+  IMAGE_NAME: 'amplify-qea'
+  IMAGE_TAG: '$(Build.BuildId)'
+
+  # Set these as pipeline variables (secret) in Azure DevOps:
+  #   JFROG_USERNAME  — JFrog username/email
+  #   JFROG_PASSWORD  — JFrog API key or password
+
+stages:
+
+  - stage: Build
+    displayName: 'Build & Push Docker Image'
+    jobs:
+      - job: BuildAndPush
+        displayName: 'Build Docker Image'
+        pool:
+          vmImage: 'ubuntu-latest'
+        steps:
+
+          # Step 1: Checkout code
+          - checkout: self
+            fetchDepth: 1
+
+          # Step 2: Login to JFrog
+          - task: Docker@2
+            displayName: 'Login to JFrog Artifactory'
+            inputs:
+              command: login
+              containerRegistry: 'jfrog-docker-connection'
+              # Or use inline credentials:
+              # command: login
+              # containerregistry: '$(JFROG_REGISTRY)'
+
+          # Alternative: login via CLI if not using service connection
+          # - script: |
+          #     echo $(JFROG_PASSWORD) | docker login $(JFROG_REGISTRY) -u $(JFROG_USERNAME) --password-stdin
+          #   displayName: 'Login to JFrog (CLI)'
+
+          # Step 3: Build for linux/amd64
+          - script: |
+              docker build \
+                --platform linux/amd64 \
+                -t $(JFROG_REGISTRY)/$(JFROG_REPO)/$(IMAGE_NAME):$(IMAGE_TAG) \
+                -t $(JFROG_REGISTRY)/$(JFROG_REPO)/$(IMAGE_NAME):latest \
+                .
+            displayName: 'Build Docker Image'
+
+          # Step 4: Push both tags
+          - script: |
+              docker push $(JFROG_REGISTRY)/$(JFROG_REPO)/$(IMAGE_NAME):$(IMAGE_TAG)
+              docker push $(JFROG_REGISTRY)/$(JFROG_REPO)/$(IMAGE_NAME):latest
+            displayName: 'Push to JFrog Artifactory'
+
+          # Step 5: Print image details
+          - script: |
+              echo "============================================"
+              echo "  Image pushed successfully"
+              echo "  Registry:  $(JFROG_REGISTRY)"
+              echo "  Repo:      $(JFROG_REPO)"
+              echo "  Image:     $(IMAGE_NAME)"
+              echo "  Tags:      $(IMAGE_TAG), latest"
+              echo "  Full path: $(JFROG_REGISTRY)/$(JFROG_REPO)/$(IMAGE_NAME):$(IMAGE_TAG)"
+              echo "============================================"
+            displayName: 'Print Image Info'
