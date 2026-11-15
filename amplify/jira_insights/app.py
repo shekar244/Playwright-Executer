@@ -75,20 +75,28 @@ if not _user_id and not _is_embedded:
                 _auth_ok = False
                 _qea_url = os.environ.get("QEA_API_URL", "").rstrip("/")
                 if _qea_url:
-                    import urllib.request, json as _json
+                    import urllib.request, json as _json, ssl as _ssl
+                    _ctx = _ssl._create_unverified_context()
                     _req = urllib.request.Request(
                         f"{_qea_url}/api/auth/login",
                         data=_json.dumps({"username": username, "password": password}).encode(),
                         headers={"Content-Type": "application/json"}, method="POST")
                     try:
-                        with urllib.request.urlopen(_req, timeout=10) as _resp:
+                        with urllib.request.urlopen(_req, timeout=10, context=_ctx) as _resp:
                             _data = _json.loads(_resp.read())
                             if _data.get("ok"):
                                 ss["ji_auth_user_id"] = _data["user"]["id"]
                                 ss["ji_auth_username"] = _data["user"]["username"]
                                 _auth_ok = True
-                    except Exception:
-                        pass
+                    except urllib.error.HTTPError as _he:
+                        _body = _he.read().decode()
+                        try:
+                            _err = _json.loads(_body).get("error", _body)
+                        except Exception:
+                            _err = _body
+                        st.error(f"Login failed: {_err}")
+                    except Exception as _ex:
+                        st.error(f"Cannot reach QEA: {_ex}")
                 else:
                     from amplify.models.user import User
                     user = User.verify_credentials(username, password)
