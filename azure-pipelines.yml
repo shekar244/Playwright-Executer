@@ -27,8 +27,21 @@ stages:
     jobs:
       - job: BuildAndPush
         displayName: 'Build Docker Image'
+        # Option 1: Microsoft-hosted Ubuntu (recommended — no self-hosted agent needed)
         pool:
           vmImage: 'ubuntu-latest'
+
+        # Option 2: If your org blocks Microsoft-hosted agents, use a self-hosted pool:
+        # pool:
+        #   name: 'YourLinuxPoolName'       # self-hosted Linux pool
+        #   demands:
+        #     - agent.os -equals Linux
+
+        # Option 3: Use your existing Windows pool (Docker Desktop must be installed):
+        # pool:
+        #   name: 'YourWindowsPoolName'
+        #   demands:
+        #     - docker
         steps:
 
           # Step 1: Checkout code
