@@ -71,11 +71,31 @@ if not _user_id and not _is_embedded:
                 submitted = st.form_submit_button("Sign In", use_container_width=True, type="primary")
         if submitted and username and password:
             try:
-                from amplify.models.user import User
-                user = User.verify_credentials(username, password)
-                if user:
-                    ss["ji_auth_user_id"] = user.id
-                    ss["ji_auth_username"] = user.username
+                _auth_ok = False
+                _qea_url = os.environ.get("QEA_API_URL", "").rstrip("/")
+                if _qea_url:
+                    import urllib.request, json as _json
+                    _req = urllib.request.Request(
+                        f"{_qea_url}/api/auth/login",
+                        data=_json.dumps({"username": username, "password": password}).encode(),
+                        headers={"Content-Type": "application/json"}, method="POST")
+                    try:
+                        with urllib.request.urlopen(_req, timeout=10) as _resp:
+                            _data = _json.loads(_resp.read())
+                            if _data.get("ok"):
+                                ss["ji_auth_user_id"] = _data["user"]["id"]
+                                ss["ji_auth_username"] = _data["user"]["username"]
+                                _auth_ok = True
+                    except Exception:
+                        pass
+                else:
+                    from amplify.models.user import User
+                    user = User.verify_credentials(username, password)
+                    if user:
+                        ss["ji_auth_user_id"] = user.id
+                        ss["ji_auth_username"] = user.username
+                        _auth_ok = True
+                if _auth_ok:
                     st.rerun()
                 else:
                     st.error("Invalid credentials")
