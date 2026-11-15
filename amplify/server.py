@@ -24,7 +24,6 @@ from amplify.routes.git         import bp as git_bp
 from amplify.routes.dashboard   import bp as dashboard_bp
 from amplify.routes.zephyr      import bp as zephyr_bp
 from amplify.routes.filemanager import bp as filemanager_bp
-from amplify.routes.studio      import bp as studio_bp
 from amplify.routes.insights    import bp as insights_bp
 from amplify.routes.auth        import bp as auth_bp
 from amplify.routes.admin       import bp as admin_bp
@@ -44,7 +43,6 @@ app.register_blueprint(git_bp)
 app.register_blueprint(dashboard_bp)
 app.register_blueprint(zephyr_bp)
 app.register_blueprint(filemanager_bp)
-app.register_blueprint(studio_bp)
 app.register_blueprint(insights_bp)
 app.register_blueprint(auth_bp)
 app.register_blueprint(admin_bp)
