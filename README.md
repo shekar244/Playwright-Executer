@@ -1,14 +1,8 @@
 # Amplify QEA
 
-A browser-based local UI for running, reporting, and managing **Playwright + pytest** test suites — no VS Code, no terminal, no command memorisation required.
+A multi-tenant, server-deployable platform for running, reporting, and managing **Playwright + pytest** test suites — with user authentication, isolated workspaces, and admin controls.
 
-```
-GitHub/
-├── Your-QA-Framework/    ← your existing framework (unchanged)
-└── Amplify-QEA/  ← Amplify QEA (UI layer only)
-```
-
-Amplify QEA **never modifies the framework**. All test logic, fixtures, page objects, and configuration remain exactly as they are.
+Deployable on **Docker**, **OpenShift**, **Render.com**, or any container platform. Each user registers, gets their own workspace, and runs tests without interfering with others.
 
 ---
 
@@ -16,35 +10,199 @@ Amplify QEA **never modifies the framework**. All test logic, fixtures, page obj
 
 | Tab | What it does |
 |---|---|
-| **Executor** | Run pytest with full control: browser, suite, file, test filter (-k), marker (-m), workers (-n), headed/headless, extra args; pinned repo quick-switching |
-| **Config** | Manage features/scripts, git commands, custom CLI flags, field mappings, Zephyr credentials, tab visibility |
-| **Dashboard** | Per-test results, run history table, 4 charts, suite + per-test report links; history scoped per-repo |
-| **Test Management** | Full Zephyr for Jira Cloud — import tests, bulk upload results, view/mark executions, hierarchical metrics with dynamic statuses |
+| **Executor** | Clone repos via Git, create venvs, pip install, run pytest with full control: browser, suite, file, test filter (-k), marker (-m), workers (-n), headed/headless, extra args |
+| **Dashboard** | Per-test results, run history table, 4 charts (donut, bar, daily trend, history trend), suite + per-test report links |
+| **Test Management** | Full Zephyr for Jira Cloud — import tests, bulk upload results, view/mark executions, hierarchical metrics |
 | **File Manager** | Browse and edit `.json`, `.yaml`, `.env`, `.csv`, `.xlsx` files with dedicated editors per format |
+| **AI Studio** | AI-powered test assistance |
+| **Jira Insights** | Streamlit-based reporting — pull Jira issues with JQL, build pivot reports and charts (runs on port 8501) |
+| **Config** | Repository config, features/scripts, git commands, CLI tools, Allure settings, JFrog Artifactory, field mappings, tab visibility |
+| **Admin Panel** | User management, password resets, enable/disable accounts, promote/demote admins, usage metrics, activity log, server secrets |
+
+---
+
+## Architecture
+
+```
+┌──────────────────────────────────────────────────────┐
+│  Amplify QEA Server                                  │
+│                                                      │
+│  Flask (gunicorn) ──── port 8080                     │
+│  Streamlit (Jira Insights) ── port 8501              │
+│                                                      │
+│  /app/data/ (persistent volume)                      │
+│    ├── amplify.db            (SQLite: users, sessions,│
+│    │                          activity log)           │
+│    ├── server_config.json    (Jira/Zephyr secrets)   │
+│    └── workspaces/                                   │
+│        ├── 1/  (user 1)                              │
+│        │   ├── config/config.json                    │
+│        │   ├── history/report_history.json           │
+│        │   ├── repos/  (cloned git repos)            │
+│        │   └── jira_insights/  (datasets, reports)   │
+│        ├── 2/  (user 2, fully isolated)              │
+│        └── ...                                       │
+└──────────────────────────────────────────────────────┘
+```
 
 ---
 
 ## Quick Start
 
-For Docker builds, persistent configuration, browser execution, local tests, and deployment, see [the Docker guide](amplify/docs/DOCKER.md).
-
-### macOS / Linux
+### Docker (recommended)
 
 ```bash
-bash amplify.sh
+docker build -t amplify-qea .
+docker run -p 8080:8080 -p 8501:8501 \
+  -e JWT_SECRET_KEY="$(openssl rand -base64 32)" \
+  -e CONTAINER=1 \
+  -v amplify-data:/app/data \
+  amplify-qea
 ```
 
-### Windows
+Open `http://localhost:8080/register` to create your account. The first registered user is automatically promoted to admin.
 
-```bat
-amplify.bat    # run as Administrator on first launch
+### Docker Hub
+
+```bash
+docker pull shekar244/amplify-qea:latest
+docker run -p 8080:8080 -p 8501:8501 \
+  -e JWT_SECRET_KEY="$(openssl rand -base64 32)" \
+  -e CONTAINER=1 \
+  -v amplify-data:/app/data \
+  shekar244/amplify-qea:latest
 ```
 
-The launcher:
-1. Detects or creates a virtualenv
-2. Installs Flask if missing
-3. Adds `127.0.0.1 amplify-qea` to `/etc/hosts`
-4. Opens `http://amplify-qea:7777` in the default browser
+### Local Development
+
+```bash
+pip install -r requirements.txt
+python3 -m amplify.models.db    # initialize database
+bash amplify.sh                 # or: python3 amplify/server.py
+```
+
+### Render.com
+
+1. Use image: `docker.io/shekar244/amplify-qea:latest`
+2. Set env var: `JWT_SECRET_KEY` = (generate with `openssl rand -base64 32`)
+3. Set env var: `CONTAINER` = `1`
+4. Add disk: mount path `/app/data`
+5. Deploy
+
+### OpenShift
+
+See [openshift/README.md](openshift/README.md) for full deployment guide with JFrog Artifactory integration.
+
+---
+
+## Authentication & Multi-Tenancy
+
+### User Registration & Login
+
+- Register at `/register` with username, password, optional email
+- Login at `/login` — JWT token issued (24-hour expiration, httpOnly cookie)
+- First registered user is auto-promoted to admin
+- Disabled accounts are blocked from login
+
+### User Isolation
+
+Every user gets a completely isolated workspace:
+- **Config** — separate `config.json` per user
+- **History** — separate `report_history.json` per user
+- **Repos** — cloned repos stored in user's workspace
+- **Jira Insights** — datasets and reports per user
+- No cross-user data visibility
+
+### Admin Panel (`/admin`)
+
+Accessible only to admin users (via user dropdown menu):
+
+| Feature | Description |
+|---|---|
+| **User Management** | List all users with role, status, last login, disk usage |
+| **Password Reset** | Reset any user's password |
+| **Enable/Disable** | Toggle account active status |
+| **Promote/Demote** | Grant or revoke admin role |
+| **Delete User** | Remove user and their entire workspace |
+| **Metrics** | Total users, active today/week, events, disk usage |
+| **Activity Log** | Who did what, when, from which IP |
+| **Server Secrets** | Configure Jira/Zephyr credentials (admin only) |
+
+### Admin Bootstrap (for platforms without shell access)
+
+Set env var `ADMIN_BOOTSTRAP_TOKEN`, then:
+
+```bash
+curl -X POST https://your-app.com/api/admin/bootstrap \
+  -H "Content-Type: application/json" \
+  -d '{"username": "your-user", "token": "your-bootstrap-token"}'
+```
+
+---
+
+## Git Clone Workflow (Server Mode)
+
+Since the server runs in Docker, users clone repos instead of browsing local files:
+
+1. **Config → Repo** — save repo URL, branch, and access token
+2. **Executor → Clone Repository** — clone into user workspace
+3. **Environment** — create `.venv`, pip install dependencies
+4. **Branch** — switch branches from dropdown
+5. **Discover Tests** — find suites and test files
+6. **Run** — execute pytest as usual
+
+Supports GitHub, GitLab, Bitbucket with PAT authentication. JFrog Artifactory pip.ini auto-generated if configured.
+
+---
+
+## Server Secrets (Jira / Zephyr)
+
+Credentials are managed at the server level — users never see or configure them:
+
+**Priority:** Environment variables → `server_config.json` → not configured
+
+| Environment Variable | Description |
+|---|---|
+| `JIRA_URL` | Jira instance URL |
+| `JIRA_USERNAME` | Atlassian email |
+| `JIRA_API_TOKEN` | Atlassian API token |
+| `ZEPHYR_ACCESS_KEY` | Zephyr for Jira Cloud access key |
+| `ZEPHYR_SECRET_KEY` | Zephyr for Jira Cloud secret key |
+| `ZEPHYR_ACCOUNT_ID` | Atlassian account ID |
+
+Or configure from Admin Panel → Server Secrets section.
+
+Non-admin users see only that Jira is configured and the project key — no credentials, not even masked.
+
+---
+
+## Themes
+
+8 built-in color themes, selectable from the header dropdown:
+
+| Theme | Type | Description |
+|---|---|---|
+| Light | Light | Default white theme |
+| Dark | Dark | Apple-style dark |
+| Midnight | Dark | Deep navy blue |
+| Nord | Dark | Cool blue-gray |
+| Solarized | Light | Warm cream |
+| Rosé | Dark | Pink/mauve |
+| Forest | Dark | Emerald green |
+| Ocean Blue | Light | Soft blue |
+
+Theme persists across pages and sessions via localStorage.
+
+---
+
+## Mobile Responsive
+
+The UI adapts to phone and tablet screens:
+- Executor panels stack vertically
+- Dashboard cards reflow (4 → 2 → 1 columns)
+- Tables scroll horizontally
+- Compact header and nav
+- 16px inputs prevent iOS zoom
 
 ---
 
@@ -53,25 +211,17 @@ The launcher:
 | Dependency | Version | Notes |
 |---|---|---|
 | Python | 3.10+ | 3.13 recommended |
-| Flask | 3.0+ | only required pip dependency |
-| tkinter | stdlib | used by native folder picker |
-| openpyxl | optional | required for `.xlsx` editing in File Manager |
+| Flask | 3.0+ | Web server |
+| bcrypt | 4.1+ | Password hashing |
+| PyJWT | 2.8+ | JWT authentication |
+| gunicorn | 21+ | Production WSGI server |
+| openpyxl | 3.1+ | Excel file editing |
+| pyyaml | 6.0+ | YAML file editing |
 
-All other modules (`hashlib`, `hmac`, `base64`, `csv`, `urllib`, etc.) are Python standard library.
+Jira Insights additionally requires: `streamlit`, `pygwalker`, `plotly`, `pandas`
 
 ```bash
 pip install -r requirements.txt
-# or:
-pip install flask openpyxl
-```
-
-Optional — needed only in the test framework repo itself:
-
-```
-pytest
-pytest-playwright
-allure-pytest
-pytest-xdist
 ```
 
 ---
@@ -79,466 +229,195 @@ pytest-xdist
 ## Project Layout
 
 ```
-Amplify-QEA/
-├── amplify.sh / amplify.bat     # Launchers (run `python -m amplify.server`)
-├── config.json                  # Tool-level bootstrap config (repo_root, overrides)
-├── report_history.json          # Tool-level run history
+amplify-qea/
+├── amplify.sh / amplify.bat         # Local launchers
 ├── requirements.txt
-├── Dockerfile / Dockerfile.runner
-└── amplify/                     # The application package
-    ├── server.py                # Flask app factory — registers blueprints
-    ├── command_builder.py       # Builds the pytest command; venv Python resolution
-    ├── config_reader.py         # Config resolution chain (tool → override → repo)
-    ├── report_resolver.py       # Finds the latest Allure HTML report
-    ├── runner.py                # Spawns subprocess + SSE stream
-    ├── test_discovery.py        # Discovers suites and test files
-    ├── routes/                  # Flask blueprints (state, executor, config, dashboard,
-    │                            #   history, zephyr, filemanager, studio, insights)
+├── Dockerfile
+├── openshift/                       # OpenShift deployment manifests
+│   ├── deployment.yaml
+│   ├── service.yaml
+│   ├── route.yaml
+│   ├── pvc.yaml
+│   ├── secrets.yaml
+│   └── jfrog-deploy.sh             # Build + push + deploy script
+└── amplify/                         # Application package
+    ├── server.py                    # Flask app — registers blueprints, auth middleware
+    ├── auth_utils.py                # JWT, @require_auth, @require_admin
+    ├── server_secrets.py            # Server-level Jira/Zephyr credential resolution
+    ├── storage.py                   # User workspace path management
+    ├── user_config_reader.py        # User-scoped config reader
+    ├── config_reader.py             # Base config reader
+    ├── command_builder.py           # pytest command builder
+    ├── runner.py                    # Subprocess + SSE streaming
+    ├── test_discovery.py            # Suite and test file discovery
+    ├── models/
+    │   ├── db.py                    # SQLite schema, migrations
+    │   └── user.py                  # User model, ActivityLog
+    ├── config/
+    │   └── settings.py              # App settings (DB path, JWT, workspaces)
+    ├── routes/
+    │   ├── auth.py                  # Register, login, logout, refresh
+    │   ├── admin.py                 # User management, metrics, server config
+    │   ├── admin_bootstrap.py       # One-time admin promotion endpoint
+    │   ├── repo.py                  # Git clone, pull, branch, venv, pip
+    │   ├── executor.py              # Test runs, discovery, features, venv
+    │   ├── config.py                # Config read/write
+    │   ├── dashboard.py             # Results, history, reports
+    │   ├── zephyr.py                # Zephyr/Jira integration
+    │   ├── filemanager.py           # File browse/read/write
+    │   ├── git.py                   # Git commands
+    │   ├── studio.py                # AI Studio
+    │   ├── insights.py              # Jira Insights launcher
+    │   ├── history.py               # Run history persistence
+    │   └── state.py                 # Shared run state
     ├── templates/
-    │   ├── base.html            # HTML shell: head, nav, shared JS, includes
-    │   └── partials/            # One HTML partial per tab
+    │   ├── base.html                # Main app shell
+    │   ├── login.html               # Login page
+    │   ├── register.html            # Registration page
+    │   ├── admin.html               # Admin panel
+    │   └── partials/                # Tab partials
     ├── static/
-    │   ├── css/amplify.css      # Apple-style design system (light + dark)
-    │   └── js/                  # Per-tab JavaScript
-    ├── jira_insights/           # Jira Insights Streamlit app (embedded in an iframe)
-    ├── .streamlit/config.toml   # Streamlit settings for Jira Insights
-    ├── tests/                   # Unit tests (run: python -m pytest amplify/tests)
-    └── docs/                    # DOCKER.md, EXTENDING.md
+    │   ├── css/amplify.css          # Design system (8 themes, responsive)
+    │   └── js/                      # Per-tab JavaScript
+    └── jira_insights/               # Streamlit app (port 8501)
+        ├── app.py
+        ├── launcher.py
+        ├── settings.py
+        └── ...
 ```
-
----
-
-## Executor Tab
-
-### Repository
-
-- Click **📂 Browse for Repo…** to pick a folder using the native OS picker (Finder on macOS, Explorer on Windows/Linux)
-- The **active repo banner** shows the repo name and full path once selected
-- Click **📌** to pin the current repo to the **Pinned Repos** quick-access list
-- Click any pinned repo card to switch instantly; click **✕** on a card to unpin it
-- Pinned repos are stored in `config.json` as `pinned_repos`
-
-### Test Selection
-
-- **Suite / Folder** — discovered from `tests/` subdirectories
-- **Test File** — all `.py` files in the selected suite
-- **Test Name Filter** — tick individual test functions (auto-discovered) or toggle to manual `-k` expression mode
-
-### Execution Options
-
-| Control | Purpose |
-|---|---|
-| Browser | chromium / firefox / webkit |
-| Marker (-m) | Filter by pytest marker |
-| Workers (-n) | Parallel execution via pytest-xdist |
-| Headed | Run browser in headed mode |
-| Verbose (-v) | Add pytest verbosity |
-| Auto-open Report | Open the Allure report automatically after each run |
-| Extra Args | Free-text additional pytest flags |
-
-### Custom Options (🎛️)
-
-User-defined CLI controls (checkbox, dropdown, text input) defined in **Config → CLI Tools**. They appear as an extra panel on the Executor tab and their values are appended to the pytest command.
-
-### Config File (collapsed)
-
-- Shows active config path with full word-wrap and a source badge (`tool` / `repo` / `override`)
-- **📂 Load Different Config** — browse for any `.json` file to use as a config override
-- **✕ Clear Override** — return to normal config resolution
-- **⟳ Refresh** — re-fetches config and re-applies all tool options without a page reload
-
-### Python Venv (collapsed)
-
-- Enter a venv path (relative to repo or absolute), or leave blank for auto-detect
-- Auto-detect order: `.venv`, `venv`, `env`, `.env` inside the repo root
-- Status badge: **venv active** (green) or **system python** (yellow)
-- Detects `requirements.txt` and offers a **pip install** button that streams output to the log panel
-- The resolved Python is used for both pytest runs and feature script runs
-
-### Reports Panel
-
-- **Individual Run** — path to the latest Allure HTML report for the current run
-- **Consolidated** — path to the consolidated/history report
-- Click **Open Latest** to open in the default browser
-
----
-
-## Reports Dashboard Tab
-
-### Current Run
-
-- **Results** card — Total / Passed / Failed counts
-- **Performance** card — Broken / Skipped / Avg Duration / Pass Rate
-- **Distribution** donut — hover a segment to see percentage; centre shows total count
-- **Count by Status** horizontal bar chart
-- **View Report** button — opens the suite-level Allure report (`record.report_path`)
-
-### Test Cases Table
-
-- Live search by name/suite
-- Status filter (All / Passed / Failed / Broken / Skipped)
-- Sortable columns: File, Test Method, Duration
-- Per-test **📊 View** button — opens the report for that run (`test.report_path`); falls back to suite report
-- Click a historical run row to load its tests into this table; a banner shows which run is active with a **← Back to Live Run** button
-
-### Run History Table
-
-Columns: Date · Repo · Status · Passed · Failed · Broken · Skipped · Total · Pass% · Report
-
-- Paginated (10 per page) with smart pagination controls
-- Click any row to inspect that run's individual test results
-- **Clear History** — clears history for the currently active repo only
-
-### History Storage
-
-`report_history.json` is stored **per-repo** at `{repo_root}/report_history.json`. It is created and maintained entirely by Amplify QEA — no pytest fixtures or plugins required. Each run prepends a new record; the file is capped at 200 records.
-
----
-
-## Test Management Tab (Zephyr for Jira Cloud)
-
-### Authentication
-
-Credentials are stored in `config.json` under the `zephyr` key and managed via **Config → 🔷 Zephyr Config**.
-
-| Field | Where to find it |
-|---|---|
-| **Jira Base URL** | `https://yourcompany.atlassian.net` |
-| **Jira Username** | Your Atlassian email |
-| **Jira API Token** | `id.atlassian.com` → Security → API tokens |
-| **Zephyr Access Key** | Jira → Zephyr app → API Keys |
-| **Zephyr Secret Key** | Jira → Zephyr app → API Keys |
-| **Atlassian Account ID** | Jira profile URL → `accountId` |
-
-JWT tokens are generated per-request using HS256 — no external JWT library required.
-
-### Workflow
-
-1. **Configure** credentials in Config → Zephyr Config, click **⚡ Test Connection**
-2. Select **Project → Version → Cycle → Folder** in the left panel
-3. Use one of the four sub-tabs:
-
-### Import Tests tab
-
-- **By Issue Keys** — paste Jira keys (one per line) or upload a CSV with an `Issue Key` column
-- **Create from CSV** — upload a test case CSV; rows grouped by `Story ID` column create sub-folders automatically, test cases are linked to the story
-- **From Jira Filter** — enter a Saved Filter ID or JQL to fetch and preview matching issues, then add selected ones to the cycle
-
-### Upload Results tab
-
-- **Bulk CSV Upload** — upload a results CSV; columns mapped via Config → Field Mapping
-- **Individual Test** — update a single test by issue key with status, comment, and optional attachment
-- **Bulk status override** — override all rows in the CSV to a single status
-
-Results CSV format:
-```csv
-Issue Key,Status,Comment,Attachment Path
-PROJ-1,pass,Verified on chromium,
-PROJ-2,fail,Assertion error on step 3,/path/to/screenshot.png
-PROJ-3,wip,,
-```
-
-### Executions tab
-
-- Load all executions for the selected cycle/folder
-- Filter by status using a dynamic dropdown (all Zephyr statuses)
-- Paginated table with select-all / individual checkboxes
-- **Mark Selected** — bulk-update status with optional comment and step-update toggle
-- **Quick Mark** — mark a single execution inline
-
-### 📊 Metrics tab
-
-- Fetches all folders for the cycle depth-first, accumulates execution counts per status
-- Hierarchical table: parent rows show aggregated counts including sub-folders
-- Stacked horizontal bar chart per folder
-- **Dynamic Zephyr statuses**: on tab open, statuses are fetched from `/api/zephyr/statuses`; all table columns, dropdowns, and chart datasets rebuild automatically
-- Hardcoded fallback if Zephyr is not configured: Pass · Fail · WIP · Blocked · Descoped · To-Do · Unexecuted
-
----
-
-## File Manager Tab
-
-Browse the file system and edit files in place.
-
-| Format | Editor |
-|---|---|
-| `.json` | Collapsible interactive tree + raw edit mode with JSON validation badge |
-| `.yaml` / `.yml` | Raw text editor |
-| `.env` | Key=Value table editor + raw mode; add/delete rows |
-| `.csv` | Editable spreadsheet table; + Row, + Col, − Row buttons |
-| `.xlsx` | Multi-sheet editable table; + Row, + Col, − Row, − Col; click a row number to select the row, click a column letter to select the column; delete buttons activate on selection |
-
-- **Cmd/Ctrl+S** saves the current file
-- All changes marked with an `● unsaved` badge; `✓ saved` confirmation on save
-- Status bar shows file info (row/col counts, filled cells, etc.)
-
----
-
-## Config File Resolution
-
-Amplify QEA uses a three-level config resolution chain:
-
-1. **Tool bootstrap** — `{tool_dir}/config.json` — always read first; stores `repo_root` and `config_override_path`
-2. **Override** — if `config_override_path` is set and the file exists, it overrides everything
-3. **Repo config** — if `{repo_root}/config.json` exists, it is merged on top of the tool config
-
-The active source is shown in the **Config File** panel as a colour-coded badge:
-
-| Badge | Meaning |
-|---|---|
-| `tool` (blue) | Using `{tool_dir}/config.json` |
-| `repo` (green) | Using `{repo_root}/config.json` |
-| `override` (yellow) | Using a custom override file |
-
-When you save `repo_root`, it is written to both the active config and the tool bootstrap so the chain survives restarts.
-
----
-
-## Python Venv
-
-The tool resolves a Python executable for every run using this priority order:
-
-1. **Configured `venv_path`** — value from config, relative to repo root or absolute
-2. **Auto-detect** — checks `.venv`, `venv`, `env`, `.env` inside the repo root
-3. **System Python** — the Python running the Amplify QEA server itself
-
-This resolved Python is used for:
-- **pytest** test runs
-- **Feature scripts** (Python runtime)
-- **pip install** from the Venv panel
-
----
-
-## Configuration (`config.json`)
-
-Full example with all supported keys:
-
-```json
-{
-  "repo_root": "/path/to/your-qa-repo",
-  "pinned_repos": [
-    "/path/to/repo-a",
-    "/path/to/repo-b"
-  ],
-  "config_override_path": "",
-  "venv_path": ".venv",
-  "browsers": ["chromium", "firefox", "webkit"],
-  "default_browser": "chromium",
-  "default_workers": 1,
-  "auto_open_report": false,
-
-  "allure_results_dir": "allure/results",
-  "allure_format": "allure3",
-  "allure2_bin": "",
-  "allure3_bin": "",
-  "report_consolidated_dir": "allure/reports/consolidated",
-  "report_pertest_dir": "allure/reports/individual",
-  "report_individual_dir": "allure/reports",
-  "generate_pertest_reports": true,
-
-  "extra_options": [],
-  "features": [],
-  "git_commands": [],
-  "markers": [],
-  "ui_tabs": {
-    "dashboard": true,
-    "zephyr": true,
-    "cfg_git": true,
-    "cfg_tools": true,
-    "cfg_mapping": true,
-    "cfg_zephyr": true
-  },
-  "zephyr": {
-    "jira_url": "https://yourcompany.atlassian.net",
-    "username": "you@company.com",
-    "api_token": "",
-    "access_key": "",
-    "secret_key": "",
-    "account_id": "",
-    "project_key": "PROJ",
-    "project_name": "My QA Project",
-    "verify_ssl": false
-  },
-  "zephyr_tc_mapping": {
-    "story_id": "Story ID",
-    "summary": "Test Name",
-    "description": "Description",
-    "steps_format": "columns"
-  },
-  "zephyr_results_mapping": {
-    "issue_key": "Issue Key",
-    "status": "Status",
-    "comment": "Comment",
-    "attachment_path": "Attachment Path"
-  }
-}
-```
-
----
-
-## Allure Report Generation
-
-After every test run Amplify QEA generates Allure reports automatically. The behaviour adapts to how many tests ran and which format is configured.
-
-### Format selection (`allure_format`)
-
-| Value | Reports generated |
-|---|---|
-| `"allure3"` | Allure 3 only (default) |
-| `"allure2"` | Allure 2 only |
-| `"both"` | Both formats; consolidated report link uses Allure 3 |
-
-### Binary resolution (`allure2_bin` / `allure3_bin`)
-
-Set either key to the **full path** of the binary you want to use. Leave blank (`""`) to auto-detect:
-
-| Platform | Allure 2 fallback | Allure 3 fallback |
-|---|---|---|
-| macOS (Homebrew) | `/opt/homebrew/bin/allure` | `allure` on PATH |
-| Linux | `/usr/local/bin/allure` | `allure` on PATH |
-| Windows (Scoop) | `%USERPROFILE%\scoop\apps\allure\current\bin\allure.bat` | `allure` on PATH |
-| Windows (Chocolatey) | `C:\ProgramData\chocolatey\bin\allure.cmd` | `allure` on PATH |
-
-Example — explicit paths on macOS when both versions are installed:
-
-```json
-"allure_format": "both",
-"allure2_bin": "/opt/homebrew/bin/allure",
-"allure3_bin": "/usr/local/bin/allure3"
-```
-
-Example — Windows with Scoop:
-
-```json
-"allure_format": "allure2",
-"allure2_bin": "C:/Users/you/scoop/apps/allure/current/bin/allure.bat",
-"allure3_bin": ""
-```
-
-### Report logic by test count
-
-| Tests in run | What is generated |
-|---|---|
-| **= 1** | One consolidated report (Allure 2 and/or 3) in `report_consolidated_dir`. No per-test split needed. |
-| **> 1** | Consolidated report for the whole run **+** individual single-file shareable reports per test in `report_pertest_dir` (generated in parallel, max 4 workers). |
-
-### Directory layout
-
-```
-allure/
-  results/                        ← written by allure-pytest during the run
-  reports/
-    consolidated/                 ← all-tests report (report_consolidated_dir)
-      index.html                  ← Allure 3 SPA
-      history/                    ← Allure 2 history files (auto-managed)
-    consolidated-allure2/         ← Allure 2 report when format is "both"
-      index.html
-      history/
-    individual/                   ← per-test single-file reports (report_pertest_dir)
-      {uid}-allure3.html          ← self-contained Allure 3 report for one test
-      {uid}-allure2.html          ← self-contained Allure 2 report for one test
-  allure3-history.jsonl           ← Allure 3 accumulated history (auto-managed)
-```
-
-### History preservation
-
-**Allure 2** — history is preserved automatically between runs:
-1. Before each generate, the executor injects `{consolidated_dir}/history/` into a temporary results copy.
-2. Allure 2 reads it and writes updated history back to `{consolidated_dir}/history/`.
-3. The next run reads from there — up to 20 previous runs are tracked.
-
-**Allure 3** — history is accumulated in `allure3-history.jsonl` (next to `report_consolidated_dir`):
-1. The file is passed to Allure 3 via `--history-path` on every generate.
-2. Allure 3 reads prior runs from the file and appends the current run.
-3. No manual copying required — the JSONL grows by one line per run.
-
-### Report links in `report_history.json`
-
-Each test entry in the history file carries its own `report_path`:
-
-| Situation | Link stored |
-|---|---|
-| Individual single-file report exists for this test | Direct path to `{uid}-allure3.html` (self-contained, shareable) |
-| No individual report (e.g. `generate_pertest_reports: false`) | `{consolidated_report}#/test/{uid}` — deep-link into the Allure 3 SPA |
-| Fallback | Path to the consolidated report |
-
-### Disabling per-test reports
-
-For large test suites where generating one report per test is too slow:
-
-```json
-"generate_pertest_reports": false
-```
-
-Each test will then link to the consolidated report with an Allure 3 deep-link anchor (`#/test/{uid}`) instead.
 
 ---
 
 ## API Reference
 
-### Config
+### Authentication
 
 | Method | Route | Purpose |
 |---|---|---|
-| GET | `/api/config` | Full merged config |
-| GET | `/api/config/info` | Active config path + source badge |
-| POST | `/api/config/repo-root` | Save repo_root |
-| POST | `/api/config/pinned-repos` | Save pinned repos list |
-| POST | `/api/config/override` | Set / clear config_override_path |
-| POST | `/api/config/venv-path` | Save venv_path |
-| POST | `/api/config/features` | Save features list |
-| POST | `/api/config/tools` | Save extra_options (CLI tools) |
-| POST | `/api/config/ui-tabs` | Save tab visibility settings |
+| POST | `/api/auth/register` | Create new user |
+| POST | `/api/auth/login` | Authenticate, issue JWT |
+| POST | `/api/auth/logout` | Clear session |
+| POST | `/api/auth/refresh` | Refresh JWT token |
+| GET | `/api/auth/me` | Current user info |
+| POST | `/api/admin/bootstrap` | One-time admin promotion |
+
+### Admin (requires admin role)
+
+| Method | Route | Purpose |
+|---|---|---|
+| GET | `/api/admin/users` | List all users + disk usage |
+| GET | `/api/admin/users/<id>` | User detail + activity |
+| POST | `/api/admin/users/<id>/reset` | Reset password |
+| POST | `/api/admin/users/<id>/toggle` | Enable/disable account |
+| POST | `/api/admin/users/<id>/promote` | Grant/revoke admin |
+| DELETE | `/api/admin/users/<id>` | Delete user + workspace |
+| GET | `/api/admin/metrics` | Usage stats |
+| GET | `/api/admin/activity` | Activity log |
+| GET/POST | `/api/admin/server-config` | Server secrets |
+
+### Repository
+
+| Method | Route | Purpose |
+|---|---|---|
+| POST | `/api/repo/clone` | Clone or pull a git repo |
+| POST | `/api/repo/pull` | Pull latest |
+| GET | `/api/repo/branches` | List branches |
+| POST | `/api/repo/checkout` | Switch branch |
+| GET | `/api/repo/status` | Repo + venv status |
+| POST | `/api/repo/venv/create` | Create .venv |
+| POST | `/api/repo/venv/install` | pip install (SSE stream) |
+| GET/POST/DELETE | `/api/repo/configs` | Saved repo presets |
 
 ### Executor
 
 | Method | Route | Purpose |
 |---|---|---|
-| POST | `/api/run` | Start a pytest run (streams via SSE) |
-| POST | `/api/stop` | Cancel the running process |
-| GET | `/api/stream` | SSE event stream (cmd / line / status / done) |
-| GET | `/api/repos` | Auto-discover Playwright repos |
-| GET | `/api/tests?repo=` | Discover suites + test files |
-| GET | `/api/tests/names?repo=&file=` | List test function names in a file |
+| POST | `/api/run` | Start pytest run (SSE stream) |
+| POST | `/api/stop` | Cancel running process |
+| GET | `/api/stream` | SSE event stream |
+| GET | `/api/tests` | Discover suites + test files |
+| GET | `/api/tests/names` | List test functions |
 | POST | `/api/features/run` | Run a feature script |
-| POST | `/api/git/run` | Run a configured git command |
-| POST | `/api/browse-folder` | Open native OS folder picker |
-| GET | `/api/venv/status?repo=` | Venv detection + requirements files |
-| POST | `/api/venv/install` | pip install -r requirements.txt (streams) |
+| GET | `/api/venv/status` | Venv detection |
+| POST | `/api/venv/install` | pip install (SSE stream) |
 
 ### Dashboard
 
 | Method | Route | Purpose |
 |---|---|---|
-| GET | `/api/dashboard?repo=` | Tests, summaries, trend, run history, report_path |
-| GET | `/api/report?repo=` | Individual + consolidated report paths |
-| POST | `/api/report/open` | Open a report file in the browser |
-| GET | `/api/report/history?repo=` | Load history records for a repo |
-| POST | `/api/report/history/clear` | Clear history for a repo |
+| GET | `/api/dashboard` | Results, summaries, history |
+| GET | `/api/report` | Report paths |
+| GET | `/api/report/history` | History records |
+| POST | `/api/report/history/clear` | Clear history |
 
-### Zephyr
+### Zephyr / Jira
 
 | Method | Route | Purpose |
 |---|---|---|
-| GET | `/api/zephyr/statuses` | Dynamic status list (Zephyr API or fallback) |
-| GET/POST | `/api/zephyr/config` | Load / save credentials |
+| GET | `/api/zephyr/config` | View config status (server-managed) |
+| GET | `/api/zephyr/statuses` | Dynamic status list |
 | GET | `/api/zephyr/projects` | List Jira projects |
-| GET | `/api/zephyr/versions?projectKey=` | List versions |
-| GET | `/api/zephyr/cycles?projectId=&versionId=` | List cycles |
-| POST | `/api/zephyr/cycle` | Create a cycle |
-| GET | `/api/zephyr/folders?projectId=&versionId=&cycleId=` | List folders |
-| POST | `/api/zephyr/folder` | Create a folder |
-| POST | `/api/zephyr/executions/add` | Add tests to cycle/folder |
-| GET | `/api/zephyr/executions?cycleId=` | List executions |
-| POST | `/api/zephyr/bulk-results` | Parse CSV + bulk status update + attach |
+| GET | `/api/zephyr/versions` | List versions |
+| GET | `/api/zephyr/cycles` | List cycles |
+| POST | `/api/zephyr/cycle` | Create cycle |
+| GET | `/api/zephyr/folders` | List folders |
+| POST | `/api/zephyr/folder` | Create folder |
+| POST | `/api/zephyr/executions/add` | Add tests to cycle |
+| GET | `/api/zephyr/executions` | List executions |
+| POST | `/api/zephyr/bulk-results` | Bulk status update |
 
 ### File Manager
 
 | Method | Route | Purpose |
 |---|---|---|
-| GET | `/api/fm/browse?path=` | List directory entries |
-| GET | `/api/fm/read?path=` | Read a file (json/yaml/env/csv/xlsx) |
-| POST | `/api/fm/save` | Write a file |
+| GET | `/api/fm/browse` | List directory |
+| GET | `/api/fm/read` | Read file |
+| POST | `/api/fm/save` | Write file |
+
+### Jira Insights
+
+| Method | Route | Purpose |
+|---|---|---|
+| GET | `/api/insights/status` | Streamlit process status |
+| POST | `/api/insights/start` | Start Streamlit |
+| POST | `/api/insights/stop` | Stop Streamlit |
+
+---
+
+## Environment Variables
+
+| Variable | Required | Default | Description |
+|---|---|---|---|
+| `JWT_SECRET_KEY` | **Yes** | — | Token signing key |
+| `CONTAINER` | Yes | `1` | Set by Dockerfile |
+| `PORT` | No | `8080` | Flask listen port |
+| `JIRA_URL` | No | — | Jira instance URL |
+| `JIRA_USERNAME` | No | — | Atlassian email |
+| `JIRA_API_TOKEN` | No | — | Atlassian API token |
+| `ZEPHYR_ACCESS_KEY` | No | — | Zephyr access key |
+| `ZEPHYR_SECRET_KEY` | No | — | Zephyr secret key |
+| `ZEPHYR_ACCOUNT_ID` | No | — | Atlassian account ID |
+| `ADMIN_BOOTSTRAP_TOKEN` | No | — | One-time admin promotion token |
+| `INSIGHTS_PORT` | No | `8501` | Streamlit port |
+
+---
+
+## Security
+
+- **Passwords**: bcrypt with 12 rounds
+- **Tokens**: JWT (HS256, 24-hour expiration, httpOnly cookies)
+- **User isolation**: filesystem-level workspace separation
+- **Credentials**: server-level only, never in user config, masked in API responses
+- **Disabled accounts**: rejected at auth middleware level
+- **Admin-only**: credential management, user management, activity log
+- **Activity logging**: all logins, registrations, and admin actions recorded with IP
+
+---
+
+## Deployment Guides
+
+- [OpenShift with JFrog Artifactory](openshift/README.md)
+- [Docker guide](amplify/docs/DOCKER.md)
 
 ---
 
