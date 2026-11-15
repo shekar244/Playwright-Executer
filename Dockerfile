@@ -40,29 +40,24 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY . .
 
 # ── Runtime configuration ─────────────────────────────────────────────────────
-# PORT=8080   : OpenShift routes external traffic to 8080 by default
-# CONTAINER=1 : tells amplify/server.py to skip browser launch and hosts-file edit
 ENV PORT=8080
 ENV CONTAINER=1
-
-# Jira Insights (Streamlit side-car) — started on demand from the Jira Insights tab.
-# On OpenShift expose 8501 with its own route and set INSIGHTS_PUBLIC_URL to it.
 ENV INSIGHTS_PORT=8501
+ENV HOME=/tmp
 
 EXPOSE 8080
 EXPOSE 8501
+
+# ── Permissions ──────────────────────────────────────────────────────────────
+# OpenShift runs as a random non-root UID in GID 0.
+# Everything must be group-writable. Set AFTER copy so all files get it.
+RUN mkdir -p /app/data /app/workspaces /tmp/.gunicorn /tmp/.streamlit && \
+    chown -R 0:0 /app && chmod -R g=u /app && \
+    chmod -R 777 /app/data /app/workspaces /tmp/.gunicorn /tmp/.streamlit
 
 # ── Health check ──────────────────────────────────────────────────────────────
 HEALTHCHECK --interval=30s --timeout=10s --start-period=15s --retries=3 \
     CMD python -c "import urllib.request; urllib.request.urlopen('http://localhost:8080/login', timeout=5)" || exit 1
 
-# ── Data and Database ─────────────────────────────────────────────────────
-# Persistent storage for user workspaces and SQLite database
-RUN mkdir -p /app/data /app/workspaces && chmod 777 /app/data /app/workspaces
-
 # ── Start command ─────────────────────────────────────────────────────────────
-# workers=1  : app uses in-process state (SSE stream, subprocess handle);
-#              multiple workers would not share that state.
-# threads=8  : handles concurrent SSE + API requests within the single worker.
-# timeout=300: long timeout for test runs that can take several minutes.
 CMD ["sh", "-c", "python -m amplify.models.db && gunicorn amplify.server:app --bind 0.0.0.0:8080 --workers 1 --threads 8 --timeout 300 --access-logfile - --error-logfile -"]
