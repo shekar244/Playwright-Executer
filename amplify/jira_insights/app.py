@@ -37,9 +37,48 @@ ss = st.session_state
 ss.setdefault("ji_dark_mode", st.query_params.get("theme", "light") == "dark")
 inject_css()
 
+# ── Authentication ────────────────────────────────────────────────────────────
+# If accessed via Flask iframe, user_id comes from query params (already authed).
+# If accessed standalone, show a login form using the same Amplify user database.
 _user_id = st.query_params.get("user_id")
+_is_embedded = st.query_params.get("embed") == "true"
+
+if not _user_id and not _is_embedded:
+    if "ji_auth_user_id" not in ss:
+        st.markdown("### 🔐 Sign in to Jira Insights")
+        st.caption("Use your Amplify QEA credentials")
+        with st.form("login_form"):
+            username = st.text_input("Username")
+            password = st.text_input("Password", type="password")
+            submitted = st.form_submit_button("Sign In", type="primary")
+        if submitted and username and password:
+            try:
+                from amplify.models.user import User
+                user = User.verify_credentials(username, password)
+                if user:
+                    ss["ji_auth_user_id"] = user.id
+                    ss["ji_auth_username"] = user.username
+                    st.rerun()
+                else:
+                    st.error("Invalid credentials")
+            except Exception as e:
+                st.error(f"Auth error: {e}")
+        st.stop()
+    _user_id = ss["ji_auth_user_id"]
+
 store = Store(workspace_dir(_user_id))
 ss["ji_category_colors"] = store.get_setting("category_colors", {}) or {}   # 🎨 field defaults
+
+# Show logged-in user + logout in sidebar (standalone mode only)
+if not _is_embedded and "ji_auth_username" in ss:
+    with st.sidebar:
+        cols = st.columns([3, 1])
+        cols[0].caption(f"👤 **{ss['ji_auth_username']}**")
+        if cols[1].button("Logout", key="ji_logout", type="secondary"):
+            del ss["ji_auth_user_id"]
+            del ss["ji_auth_username"]
+            st.rerun()
+
 ds = data_source.render_sidebar(store)
 
 if ds is None:
