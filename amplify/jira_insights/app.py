@@ -45,30 +45,26 @@ _is_embedded = st.query_params.get("embed") == "true"
 
 if not _user_id and not _is_embedded:
     if "ji_auth_user_id" not in ss:
-        _login_css = """
-        <style>
-        [data-testid="stAppViewContainer"] > div { display:flex; justify-content:center; align-items:center; min-height:85vh; }
-        [data-testid="stAppViewContainer"] > div > div { max-width:380px; width:100%; }
+        st.markdown("""<style>
         section[data-testid="stSidebar"] { display:none !important; }
         [data-testid="stHeader"] { display:none !important; }
-        [data-testid="stMainBlockContainer"] { max-width:380px; margin:0 auto; padding-top:15vh; }
-        </style>
-        """
-        st.markdown(_login_css, unsafe_allow_html=True)
-        st.markdown("""
-        <div style="text-align:center;margin-bottom:28px;">
-            <div style="width:48px;height:48px;border-radius:13px;margin:0 auto 14px;
-                 background:linear-gradient(135deg,#0071e3,#0a7f99);color:#fff;
-                 display:flex;align-items:center;justify-content:center;font-size:22px;
-                 box-shadow:0 2px 8px rgba(0,113,227,.3);">⚡</div>
-            <div style="font-size:24px;font-weight:800;letter-spacing:-0.03em;">Amplify <span style="color:#6e6e73;font-weight:400;">QEA</span></div>
-            <div style="color:#6e6e73;font-size:13px;margin-top:6px;">Sign in to Jira Insights</div>
-        </div>
-        """, unsafe_allow_html=True)
-        with st.form("login_form"):
-            username = st.text_input("Username")
-            password = st.text_input("Password", type="password")
-            submitted = st.form_submit_button("Sign In", use_container_width=True, type="primary")
+        </style>""", unsafe_allow_html=True)
+        _sp1, _login_col, _sp2 = st.columns([1, 1, 1])
+        with _login_col:
+            st.markdown("""
+            <div style="text-align:center;margin:15vh 0 28px;">
+                <div style="width:48px;height:48px;border-radius:13px;margin:0 auto 14px;
+                     background:linear-gradient(135deg,#0071e3,#0a7f99);color:#fff;
+                     display:flex;align-items:center;justify-content:center;font-size:22px;
+                     box-shadow:0 2px 8px rgba(0,113,227,.3);">⚡</div>
+                <div style="font-size:24px;font-weight:800;letter-spacing:-0.03em;">Amplify <span style="color:#6e6e73;font-weight:400;">QEA</span></div>
+                <div style="color:#6e6e73;font-size:13px;margin-top:6px;">Sign in to Jira Insights</div>
+            </div>
+            """, unsafe_allow_html=True)
+            with st.form("login_form"):
+                username = st.text_input("Username")
+                password = st.text_input("Password", type="password")
+                submitted = st.form_submit_button("Sign In", use_container_width=True, type="primary")
         if submitted and username and password:
             try:
                 from amplify.models.user import User
