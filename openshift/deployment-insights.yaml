@@ -1,0 +1,83 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: amplify-insights
+  labels:
+    app: amplify-insights
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: amplify-insights
+  template:
+    metadata:
+      labels:
+        app: amplify-insights
+    spec:
+      containers:
+        - name: amplify-insights
+          image: image-registry.openshift-image-registry.svc:5000/${NAMESPACE}/amplify-insights:latest
+          ports:
+            - containerPort: 8501
+              name: streamlit
+          env:
+            - name: CONTAINER
+              value: "1"
+            - name: HOME
+              value: "/tmp"
+          volumeMounts:
+            - name: amplify-data
+              mountPath: /app/data
+          resources:
+            requests:
+              cpu: 250m
+              memory: 512Mi
+            limits:
+              cpu: "2"
+              memory: 2Gi
+          readinessProbe:
+            httpGet:
+              path: /_stcore/health
+              port: 8501
+            initialDelaySeconds: 15
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /_stcore/health
+              port: 8501
+            initialDelaySeconds: 20
+            periodSeconds: 30
+      volumes:
+        - name: amplify-data
+          persistentVolumeClaim:
+            claimName: amplify-data-pvc
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: amplify-insights
+  labels:
+    app: amplify-insights
+spec:
+  selector:
+    app: amplify-insights
+  ports:
+    - name: streamlit
+      port: 8501
+      targetPort: 8501
+---
+apiVersion: route.openshift.io/v1
+kind: Route
+metadata:
+  name: amplify-insights
+  labels:
+    app: amplify-insights
+spec:
+  to:
+    kind: Service
+    name: amplify-insights
+  port:
+    targetPort: streamlit
+  tls:
+    termination: edge
+    insecureEdgeTerminationPolicy: Redirect

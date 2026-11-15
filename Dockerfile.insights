@@ -1,0 +1,36 @@
+# ── Amplify Insights — Standalone Streamlit App ───────────────────────────────
+#
+# Build:   docker build -f Dockerfile.insights -t amplify-insights .
+# Run:     docker run -p 8501:8501 -v amplify-data:/app/data amplify-insights
+# ─────────────────────────────────────────────────────────────────────────────
+
+ARG BASE_REGISTRY=
+FROM ${BASE_REGISTRY}python:3.13-slim
+
+WORKDIR /app
+
+RUN chown -R 0:0 /app && chmod -R g=u /app
+
+COPY requirements.txt .
+RUN pip install --no-cache-dir --trusted-host pypi.org --trusted-host pypi.python.org --trusted-host files.pythonhosted.org -r requirements.txt
+
+COPY . .
+
+ENV PORT=8501
+ENV CONTAINER=1
+ENV HOME=/tmp
+
+RUN mkdir -p /app/data /app/workspaces /tmp/.streamlit && \
+    chown -R 0:0 /app && chmod -R g=u /app && \
+    chmod -R 777 /app/data /app/workspaces /tmp/.streamlit
+
+EXPOSE 8501
+
+HEALTHCHECK --interval=30s --timeout=10s --start-period=20s --retries=3 \
+    CMD python -c "import urllib.request; urllib.request.urlopen('http://localhost:8501/_stcore/health', timeout=5)" || exit 1
+
+CMD ["streamlit", "run", "amplify/jira_insights/app.py", \
+     "--server.port", "8501", \
+     "--server.address", "0.0.0.0", \
+     "--server.headless", "true", \
+     "--browser.gatherUsageStats", "false"]
