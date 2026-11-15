@@ -185,7 +185,7 @@ async function loadRepoStatus() {
     document.title = 'Amplify QEA — ' + s.repo_name;
 
     // Venv section
-    venvSec.style.display = 'flex';
+    venvSec.style.display = 'block';
     const vs = document.getElementById('venvStatus');
     if (s.has_venv) {
       vs.innerHTML = '<span style="color:var(--green);">● venv active</span>';
@@ -204,7 +204,7 @@ async function loadRepoStatus() {
     ).join('') || '<option value="">no requirements found</option>';
 
     // Branch section
-    brSec.style.display = 'flex';
+    brSec.style.display = 'block';
     loadBranches();
 
     // Close clone panel if repo is loaded

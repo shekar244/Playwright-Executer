@@ -28,9 +28,7 @@
 
         <!-- Clone / Configure -->
         <details id="cloneDetails" style="margin-top:2px;">
-          <summary style="cursor:pointer;font-size:12px;font-weight:600;color:var(--accent);list-style:none;display:flex;align-items:center;gap:4px;">
-            <span style="font-size:10px;">▶</span> Clone Repository
-          </summary>
+          <summary class="repo-detail-summary">Clone Repository</summary>
           <div style="display:flex;flex-direction:column;gap:8px;margin-top:10px;">
             <div class="field">
               <label>Git URL</label>
@@ -56,23 +54,24 @@
         </details>
 
         <!-- Venv & Dependencies -->
-        <div id="venvSection" style="display:none;flex-direction:column;gap:6px;margin-top:4px;">
-          <div style="font-size:10px;text-transform:uppercase;letter-spacing:.07em;font-weight:600;color:var(--text-dim);">Environment</div>
-          <div id="venvStatus" style="font-size:11px;color:var(--text-dim);display:flex;align-items:center;gap:6px;"></div>
-          <div class="action-row" style="gap:4px;">
-            <button class="btn btn-sm" onclick="createVenv()" id="createVenvBtn">Create .venv</button>
-            <button class="btn btn-sm" onclick="installDeps()" id="installDepsBtn">pip install</button>
-            <select id="reqFileSelect" style="width:auto;font-size:11px;padding:4px 6px;"></select>
+        <details id="venvSection" style="display:none;margin-top:2px;">
+          <summary class="repo-detail-summary"><span id="venvStatus" style="font-size:11px;display:inline-flex;align-items:center;gap:6px;"></span> Environment</summary>
+          <div style="display:flex;flex-direction:column;gap:6px;margin-top:8px;">
+            <div class="action-row" style="gap:4px;">
+              <button class="btn btn-sm" onclick="createVenv()" id="createVenvBtn">Create .venv</button>
+              <button class="btn btn-sm" onclick="installDeps()" id="installDepsBtn">pip install</button>
+              <select id="reqFileSelect" style="width:auto;font-size:11px;padding:4px 6px;"></select>
+            </div>
           </div>
-        </div>
+        </details>
 
         <!-- Branch switcher -->
-        <div id="branchSection" style="display:none;flex-direction:column;gap:6px;margin-top:4px;">
-          <div style="font-size:10px;text-transform:uppercase;letter-spacing:.07em;font-weight:600;color:var(--text-dim);">Branch</div>
-          <div class="field-row">
-            <select id="branchSelect" onchange="switchBranch()" style="flex:1;font-size:12px;"></select>
+        <details id="branchSection" style="display:none;margin-top:2px;">
+          <summary class="repo-detail-summary">Branch</summary>
+          <div style="margin-top:8px;">
+            <select id="branchSelect" onchange="switchBranch()" style="width:100%;font-size:12px;"></select>
           </div>
-        </div>
+        </details>
 
         <!-- Hidden inputs for backward compatibility -->
         <input type="hidden" id="repo" />

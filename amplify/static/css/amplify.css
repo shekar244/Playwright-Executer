@@ -217,6 +217,17 @@ header h1 span { color: var(--text-dim); font-weight: 400; }
 .section-title::before { content: none; }
 .section-title .stitle-icon { font-size: 12px; }
 .section-content { padding: 6px 16px 16px; display: flex; flex-direction: column; gap: 12px; }
+/* ── Expandable sections ── */
+.repo-detail-summary {
+  cursor: pointer; font-size: 11px; font-weight: 700; color: var(--accent);
+  text-transform: uppercase; letter-spacing: 0.06em; list-style: none;
+  display: flex; align-items: center; gap: 6px; padding: 6px 0;
+  transition: color var(--tr);
+}
+.repo-detail-summary:hover { color: var(--text); }
+.repo-detail-summary::before { content: '▸'; font-size: 10px; transition: transform var(--tr); }
+details[open] > .repo-detail-summary::before { transform: rotate(90deg); }
+
 .field { display: flex; flex-direction: column; gap: 5px; }
 .field label { font-size: 12px; color: var(--text-muted); font-weight: 500; }
 .field-row { display: flex; gap: 6px; align-items: center; }
