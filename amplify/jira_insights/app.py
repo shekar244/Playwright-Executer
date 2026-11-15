@@ -54,62 +54,100 @@ if not _user_id and not _is_embedded:
     </style>""", unsafe_allow_html=True)
 
     if not _logged_in:
+        import urllib.request, urllib.error, json as _json, ssl as _ssl
+
+        def _qea_api(endpoint, payload):
+            _qea_url = os.environ.get("QEA_API_URL", "").rstrip("/")
+            if not _qea_url:
+                return None, "QEA_API_URL not configured"
+            _ctx = _ssl._create_unverified_context()
+            _req = urllib.request.Request(
+                f"{_qea_url}{endpoint}",
+                data=_json.dumps(payload).encode(),
+                headers={"Content-Type": "application/json"}, method="POST")
+            try:
+                with urllib.request.urlopen(_req, timeout=10, context=_ctx) as _resp:
+                    return _json.loads(_resp.read()), None
+            except urllib.error.HTTPError as _he:
+                _body = _he.read().decode()
+                try:
+                    return None, _json.loads(_body).get("error", _body)
+                except Exception:
+                    return None, _body
+            except Exception as _ex:
+                return None, str(_ex)
+
         _sp1, _login_col, _sp2 = st.columns([1, 1, 1])
         with _login_col:
             st.markdown("""
-            <div style="text-align:center;margin:15vh 0 28px;">
+            <div style="text-align:center;margin:12vh 0 24px;">
                 <div style="width:48px;height:48px;border-radius:13px;margin:0 auto 14px;
                      background:linear-gradient(135deg,#0071e3,#0a7f99);color:#fff;
                      display:flex;align-items:center;justify-content:center;font-size:22px;
                      box-shadow:0 2px 8px rgba(0,113,227,.3);">⚡</div>
                 <div style="font-size:24px;font-weight:800;letter-spacing:-0.03em;">Amplify <span style="color:#6e6e73;font-weight:400;">QEA</span></div>
-                <div style="color:#6e6e73;font-size:13px;margin-top:6px;">Sign in to Jira Insights</div>
+                <div style="color:#6e6e73;font-size:13px;margin-top:6px;">Jira Insights</div>
             </div>
             """, unsafe_allow_html=True)
-            with st.form("login_form"):
-                username = st.text_input("Username")
-                password = st.text_input("Password", type="password")
-                submitted = st.form_submit_button("Sign In", use_container_width=True, type="primary")
-        if submitted and username and password:
-            try:
-                _auth_ok = False
-                _qea_url = os.environ.get("QEA_API_URL", "").rstrip("/")
-                if _qea_url:
-                    import urllib.request, json as _json, ssl as _ssl
-                    _ctx = _ssl._create_unverified_context()
-                    _req = urllib.request.Request(
-                        f"{_qea_url}/api/auth/login",
-                        data=_json.dumps({"username": username, "password": password}).encode(),
-                        headers={"Content-Type": "application/json"}, method="POST")
-                    try:
-                        with urllib.request.urlopen(_req, timeout=10, context=_ctx) as _resp:
-                            _data = _json.loads(_resp.read())
-                            if _data.get("ok"):
-                                ss["ji_auth_user_id"] = _data["user"]["id"]
-                                ss["ji_auth_username"] = _data["user"]["username"]
-                                _auth_ok = True
-                    except urllib.error.HTTPError as _he:
-                        _body = _he.read().decode()
+
+            _login_tab, _register_tab = st.tabs(["Sign In", "Create Account"])
+
+            with _login_tab:
+                with st.form("login_form"):
+                    l_user = st.text_input("Username", key="l_user")
+                    l_pass = st.text_input("Password", type="password", key="l_pass")
+                    l_submit = st.form_submit_button("Sign In", use_container_width=True, type="primary")
+                if l_submit and l_user and l_pass:
+                    _qea_url = os.environ.get("QEA_API_URL", "").rstrip("/")
+                    if _qea_url:
+                        _data, _err = _qea_api("/api/auth/login", {"username": l_user, "password": l_pass})
+                        if _data and _data.get("ok"):
+                            ss["ji_auth_user_id"] = _data["user"]["id"]
+                            ss["ji_auth_username"] = _data["user"]["username"]
+                            st.rerun()
+                        else:
+                            st.error(_err or "Invalid credentials")
+                    else:
+                        from amplify.models.user import User
+                        user = User.verify_credentials(l_user, l_pass)
+                        if user:
+                            ss["ji_auth_user_id"] = user.id
+                            ss["ji_auth_username"] = user.username
+                            st.rerun()
+                        else:
+                            st.error("Invalid credentials")
+
+            with _register_tab:
+                with st.form("register_form"):
+                    r_user = st.text_input("Username (min 3 chars)", key="r_user")
+                    r_email = st.text_input("Email (optional)", key="r_email")
+                    r_pass = st.text_input("Password (min 6 chars)", type="password", key="r_pass")
+                    r_submit = st.form_submit_button("Create Account", use_container_width=True, type="primary")
+                if r_submit and r_user and r_pass:
+                    _qea_url = os.environ.get("QEA_API_URL", "").rstrip("/")
+                    if _qea_url:
+                        _payload = {"username": r_user, "password": r_pass}
+                        if r_email:
+                            _payload["email"] = r_email
+                        _data, _err = _qea_api("/api/auth/register", _payload)
+                        if _data and _data.get("ok"):
+                            ss["ji_auth_user_id"] = _data["user"]["id"]
+                            ss["ji_auth_username"] = _data["user"]["username"]
+                            st.rerun()
+                        else:
+                            st.error(_err or "Registration failed")
+                    else:
+                        from amplify.models.user import User
                         try:
-                            _err = _json.loads(_body).get("error", _body)
-                        except Exception:
-                            _err = _body
-                        st.error(f"Login failed: {_err}")
-                    except Exception as _ex:
-                        st.error(f"Cannot reach QEA: {_ex}")
-                else:
-                    from amplify.models.user import User
-                    user = User.verify_credentials(username, password)
-                    if user:
-                        ss["ji_auth_user_id"] = user.id
-                        ss["ji_auth_username"] = user.username
-                        _auth_ok = True
-                if _auth_ok:
-                    st.rerun()
-                else:
-                    st.error("Invalid credentials")
-            except Exception as e:
-                st.error(f"Auth error: {e}")
+                            user = User.create(r_user, r_pass, r_email or None)
+                            ss["ji_auth_user_id"] = user.id
+                            ss["ji_auth_username"] = user.username
+                            from amplify.storage import initialize_user_workspace
+                            initialize_user_workspace(user.id)
+                            st.rerun()
+                        except ValueError as _ve:
+                            st.error(str(_ve))
+
         st.stop()
     _user_id = ss["ji_auth_user_id"]
 
