@@ -117,3 +117,38 @@ def test_launcher_routes_require_login(monkeypatch, app):
     assert anon.post("/api/insights/stop").status_code == 401
     fake.start.assert_not_called()
     fake.stop.assert_not_called()
+
+
+# ── Insights in its own pod (INSIGHTS_INTERNAL_URL) ───────────────────────────
+
+def test_with_an_internal_url_qea_checks_the_service_and_never_starts_streamlit(monkeypatch):
+    monkeypatch.setenv("INSIGHTS_INTERNAL_URL", "http://amplify-insights:8501/jira-insights/")
+    monkeypatch.setenv("INSIGHTS_PUBLIC_URL", "/jira-insights")
+    probed, popen = [], mock.Mock()
+    p = InsightsProcess(popen=popen, probe=lambda port: pytest.fail("no local probe"), has_streamlit=lambda: True,
+                        probe_url=lambda base: probed.append(base) or True)
+
+    status = p.start()
+
+    popen.assert_not_called()
+    assert probed == ["http://amplify-insights:8501/jira-insights"]
+    assert status["healthy"] is True and status["external"] is True and status["public_url"] == "/jira-insights"
+    assert "error" not in status and p.stop()["managed"] is False
+
+
+def test_an_internal_service_that_does_not_answer_is_reported_not_replaced(monkeypatch):
+    monkeypatch.setenv("INSIGHTS_INTERNAL_URL", "http://amplify-insights:8501/jira-insights")
+    popen = mock.Mock()
+
+    status = InsightsProcess(popen=popen, has_streamlit=lambda: True, probe_url=lambda base: False).start()
+
+    popen.assert_not_called()
+    assert status["healthy"] is False and "amplify-insights pod" in status["error"]
+
+
+def test_open_sends_the_browser_to_a_path_on_qeas_own_host(monkeypatch, admin):
+    monkeypatch.setenv("INSIGHTS_PUBLIC_URL", "/jira-insights")
+
+    resp = admin.get("/api/insights/open?theme=dark")
+
+    assert resp.status_code == 302 and resp.headers["Location"].startswith("/jira-insights/?sso=")

@@ -1,5 +1,6 @@
-# Amplify Insights — the Streamlit app (Jira dashboards, sprint reports, ...) on port 8501.
-# Shares users, workspaces and server settings with QEA through the same volume.
+# Amplify Insights — the Streamlit app (Jira dashboards, sprint reports, ...) on port 8501, served under /jira-insights
+# on QEA's own host (amplify-ingress.yaml). Shares users, workspaces and server settings with QEA through the same
+# volume, and its sign-in with QEA through the same JWT_SECRET_KEY.
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -40,6 +41,12 @@ spec:
               value: "1"
             - name: HOME
               value: /tmp
+            # Every page, asset and WebSocket of Streamlit under /jira-insights (the ingress path; not rewritten).
+            - name: STREAMLIT_SERVER_BASE_URL_PATH
+              value: "jira-insights"
+            # Insights' own sign-in form and the option flags go through QEA: the same user accounts.
+            - name: QEA_API_URL
+              value: "http://amplify-qea:8080"
             # Same value as QEA — Insights verifies the sign-in token QEA issues with it.
             - name: JWT_SECRET_KEY
               valueFrom:
@@ -69,11 +76,11 @@ spec:
             requests: { cpu: 250m, memory: 512Mi }
             limits:   { cpu: "2",  memory: 2Gi }
           readinessProbe:
-            httpGet: { path: /_stcore/health, port: 8501 }
+            httpGet: { path: /jira-insights/_stcore/health, port: 8501 }
             initialDelaySeconds: 15
             periodSeconds: 10
           livenessProbe:
-            httpGet: { path: /_stcore/health, port: 8501 }
+            httpGet: { path: /jira-insights/_stcore/health, port: 8501 }
             initialDelaySeconds: 20
             periodSeconds: 30
       volumes:

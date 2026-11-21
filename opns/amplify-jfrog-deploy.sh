@@ -42,12 +42,14 @@ if [ -z "$JFROG_PASSWORD" ]; then
 fi
 
 FULL_IMAGE="${JFROG_REGISTRY}/${JFROG_REPO}/amplify-qea:${IMAGE_TAG}"
+INSIGHTS_IMAGE="${JFROG_REGISTRY}/${JFROG_REPO}/amplify-insights:${IMAGE_TAG}"   # Jira Insights: its own pod
 
 echo ""
 echo "═══════════════════════════════════════════════════════════════"
 echo "  Registry:  ${JFROG_REGISTRY}"
 echo "  Repo:      ${JFROG_REPO}"
 echo "  Image:     ${FULL_IMAGE}"
+echo "  Insights:  ${INSIGHTS_IMAGE}"
 echo "  Project:   ${OC_PROJECT}"
 echo "═══════════════════════════════════════════════════════════════"
 echo ""
@@ -56,7 +58,9 @@ echo ""
 echo "▶ Step 1: Building Docker image..."
 docker build -t amplify-qea:${IMAGE_TAG} .
 docker tag amplify-qea:${IMAGE_TAG} ${FULL_IMAGE}
-echo "✓ Image built and tagged: ${FULL_IMAGE}"
+docker build -f Dockerfile.insights -t amplify-insights:${IMAGE_TAG} .
+docker tag amplify-insights:${IMAGE_TAG} ${INSIGHTS_IMAGE}
+echo "✓ Images built and tagged: ${FULL_IMAGE}, ${INSIGHTS_IMAGE}"
 echo ""
 
 # ── Step 2: Login to JFrog ───────────────────────────────────────────
@@ -68,7 +72,8 @@ echo ""
 # ── Step 3: Push to JFrog ────────────────────────────────────────────
 echo "▶ Step 3: Pushing image to JFrog..."
 docker push ${FULL_IMAGE}
-echo "✓ Image pushed: ${FULL_IMAGE}"
+docker push ${INSIGHTS_IMAGE}
+echo "✓ Images pushed: ${FULL_IMAGE}, ${INSIGHTS_IMAGE}"
 echo ""
 
 # ── Step 4: Create OpenShift pull secret ─────────────────────────────
@@ -103,20 +108,31 @@ if ! oc get secret amplify-secrets &>/dev/null; then
     --from-literal=jwt-secret-key="$(openssl rand -base64 32)"
 fi
 
-# Apply deployment with JFrog image
-sed "s|image:.*|image: ${FULL_IMAGE}|" opns/amplify-deployment.yaml | \
-  sed '/imagePullSecrets/d' | \
-  sed "/spec:/a\\
+# Apply a deployment with its JFrog image and the pull secret (added to the pod spec: the 4-space "spec:")
+apply_with_image() {
+  sed "s|image:.*|image: $2|" "$1" | \
+    sed '/imagePullSecrets/d' | \
+    sed "/^    spec:/a\\
 \\      imagePullSecrets:\\
 \\        - name: jfrog-pull-secret" | \
-  oc apply -f -
+    oc apply -f -
+}
+apply_with_image opns/amplify-deployment.yaml "${FULL_IMAGE}"
 
-echo "✓ Deployment applied"
+# Jira Insights in its own pod, at /jira-insights on the same host as QEA (same users, same workspaces: the
+# shared amplify-data PVC and the same JWT_SECRET_KEY). Drop the side-car route of older versions.
+oc delete route amplify-qea-insights --ignore-not-found=true
+apply_with_image opns/amplify-deployment-insights.yaml "${INSIGHTS_IMAGE}"
+AMPLIFY_HOST=$(oc get route amplify-qea -o jsonpath='{.spec.host}')
+sed "s|AMPLIFY_HOST|${AMPLIFY_HOST}|" opns/amplify-route-insights.yaml | oc apply -f -
+
+echo "✓ Deployments applied"
 echo ""
 
 # ── Step 6: Wait for rollout ─────────────────────────────────────────
 echo "▶ Step 6: Waiting for rollout..."
 oc rollout status deployment/amplify-qea --timeout=120s
+oc rollout status deployment/amplify-insights --timeout=180s
 
 ROUTE_URL=$(oc get route amplify-qea -o jsonpath='{.spec.host}' 2>/dev/null || echo "")
 
@@ -128,6 +144,7 @@ echo "  Image:     ${FULL_IMAGE}"
 echo "  Project:   ${OC_PROJECT}"
 if [ -n "$ROUTE_URL" ]; then
 echo "  URL:       https://${ROUTE_URL}"
+echo "  Insights:  https://${ROUTE_URL}/jira-insights  (opened from the Jira Insights tab, signed in)"
 fi
 echo ""
 echo "  Next steps:"

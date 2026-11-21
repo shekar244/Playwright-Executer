@@ -11,6 +11,3 @@ spec:
     - name: http
       port: 8080
       targetPort: 8080
-    - name: streamlit
-      port: 8501
-      targetPort: 8501

@@ -1,9 +1,9 @@
-# Assumes the ingress-nginx controller. Replace example.com with your domain (and keep
-# INSIGHTS_PUBLIC_URL in amplify-deployment.yaml pointing at the insights host).
+# Assumes the ingress-nginx controller. Replace amplify.example.com with your host in both Ingresses: QEA at /,
+# Jira Insights at /jira-insights (INSIGHTS_PUBLIC_URL in amplify-deployment.yaml).
 #
 # TLS: either create the secret yourself
 #   kubectl -n amplify create secret tls amplify-tls --cert=tls.crt --key=tls.key
-# or let cert-manager issue it by uncommenting the cluster-issuer annotation on both Ingresses.
+# or let cert-manager issue it by uncommenting the cluster-issuer annotation (one certificate for the host).
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
@@ -34,6 +34,8 @@ spec:
                 port:
                   name: http
 ---
+# Jira Insights at /jira-insights on the same host as QEA (ingress-nginx merges Ingresses for one host; the longer
+# path wins). Not rewritten: Insights serves under /jira-insights (STREAMLIT_SERVER_BASE_URL_PATH).
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
@@ -46,17 +48,16 @@ metadata:
     nginx.ingress.kubernetes.io/proxy-read-timeout: "3600"
     nginx.ingress.kubernetes.io/proxy-send-timeout: "3600"
     nginx.ingress.kubernetes.io/proxy-body-size: "200m"      # Jira export uploads
-    # cert-manager.io/cluster-issuer: letsencrypt
 spec:
   ingressClassName: nginx
   tls:
-    - hosts: [insights.example.com]
-      secretName: insights-tls
+    - hosts: [amplify.example.com]
+      secretName: amplify-tls
   rules:
-    - host: insights.example.com
+    - host: amplify.example.com
       http:
         paths:
-          - path: /
+          - path: /jira-insights
             pathType: Prefix
             backend:
               service:

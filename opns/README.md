@@ -191,17 +191,29 @@ oc logs -f deployment/amplify-qea
 open "https://$(oc get route amplify-qea -o jsonpath='{.spec.host}')"
 ```
 
-### Jira Insights tab
+### Jira Insights (its own pod, at `/jira-insights`)
 
-Insights needs its own route (Streamlit uses WebSockets on port 8501). Create it, then tell QEA its address — the Insights tab and **↗ New tab** send the browser there, signed in:
+Jira Insights runs in its own pod (`amplify-insights`, Streamlit on port 8501) and is reached on QEA's own host at **`https://<amplify-qea host>/jira-insights`**: the `amplify-insights` route claims the path `/jira-insights` of that host, the `amplify-qea` route keeps everything else. `amplify-jfrog-deploy.sh` builds and deploys both; by hand:
 
 ```bash
-oc apply -f opns/amplify-route-insights.yaml
-oc set env deployment/amplify-qea \
-  INSIGHTS_PUBLIC_URL="https://$(oc get route amplify-qea-insights -o jsonpath='{.spec.host}')"
+oc apply -f opns/amplify-deployment-insights.yaml            # Deployment + Service (set the image first)
+HOST=$(oc get route amplify-qea -o jsonpath='{.spec.host}')
+sed "s|AMPLIFY_HOST|$HOST|" opns/amplify-route-insights.yaml | oc apply -f -
+oc delete route amplify-qea-insights --ignore-not-found       # the side-car route of older versions
 ```
 
-If Insights runs as its own deployment (`amplify-deployment-insights.yaml`), it must get the same `JWT_SECRET_KEY` as QEA — both manifests read it from the `amplify-secrets` secret.
+What makes it one app to users:
+
+| | Setting | Where |
+|---|---|---|
+| Served under the path | `STREAMLIT_SERVER_BASE_URL_PATH=jira-insights` (probes on `/jira-insights/_stcore/health`) | `amplify-deployment-insights.yaml` |
+| Where browsers go | `INSIGHTS_PUBLIC_URL=/jira-insights` | `amplify-deployment.yaml` |
+| Where QEA checks it (and never starts its own Streamlit) | `INSIGHTS_INTERNAL_URL=http://amplify-insights:8501/jira-insights` | `amplify-deployment.yaml` |
+| Same sign-in | the same `JWT_SECRET_KEY` (both read `amplify-secrets`): QEA hands Insights a 60-second single-use token for the logged-in user; Insights' own sign-in form goes through `QEA_API_URL=http://amplify-qea:8080` | both deployments |
+| Same users and workspaces | both mount `amplify-data-pvc` at `/app/data` (`workspaces/<user id>/jira_insights`); the PVC is ReadWriteOnce, so the Insights pod has a pod affinity to the QEA pod's node (drop it with a ReadWriteMany class) | both deployments |
+| WebSockets | `haproxy.router.openshift.io/timeout: 3600s` on the route | `amplify-route-insights.yaml` |
+
+Users always enter through QEA (**Jira Insights** tab, or **↗ New tab**), already signed in as themselves.
 
 ### Step 10: Create Admin User
 
@@ -307,13 +319,13 @@ Files are named `<system>-<resource>`: `amplify-*` for Amplify QEA and Jira Insi
 | File | Resource | Purpose |
 |------|----------|---------|
 | `amplify-deployment.yaml` | Deployment | Pod spec, env vars from Secret, PVC mount, health probes, resource limits |
-| `amplify-service.yaml` | Service | ClusterIP service exposing ports 8080 (Flask) and 8501 (Streamlit) |
+| `amplify-service.yaml` | Service | ClusterIP service for QEA, port 8080 |
 | `amplify-route.yaml` | Route | HTTPS route with edge TLS termination |
 | `amplify-pvc.yaml` | PersistentVolumeClaim | 10Gi storage for database and user workspaces |
 | `amplify-secrets.yaml` | Secret (template) | Template for JWT key and Jira/Zephyr credentials |
-| `amplify-deployment-insights.yaml` | Deployment + Service + Route | Jira Insights as its own deployment (instead of the side-car inside QEA) |
-| `amplify-route-insights.yaml` | Route | HTTPS route to the Insights port (8501) of the `amplify-qea` Service |
-| `amplify-jfrog-deploy.sh` | Script | Automated build, push, and deploy of Amplify |
+| `amplify-deployment-insights.yaml` | Deployment + Service | Jira Insights in its own pod (port 8501, served under `/jira-insights`), same PVC and `JWT_SECRET_KEY` as QEA |
+| `amplify-route-insights.yaml` | Route | The path `/jira-insights` of QEA's host → the `amplify-insights` Service |
+| `amplify-jfrog-deploy.sh` | Script | Automated build, push, and deploy of Amplify QEA and Jira Insights |
 | `grid-01-postgres.yaml` | Secret + Deployment + Service | Grid database credentials and an in-cluster PostgreSQL (skip the Deployment/Service for an external database) |
 | `grid-02-coordinator.yaml` | ServiceAccount, Role, RoleBinding, PVC, Deployment, Service | Grid coordinator API and queue, its data volume, and read access to runner pods |
 | `grid-03-runner-job.yaml` | Template | Manual batch trigger: one runner Job per browser (`oc process … \| oc create`) |

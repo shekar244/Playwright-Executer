@@ -14,6 +14,16 @@ spec:
       labels:
         app: amplify-insights
     spec:
+      # Same users and workspaces as QEA: both pods mount amplify-data-pvc at /app/data (users, per-user
+      # workspaces/<id>/jira_insights). The PVC is ReadWriteOnce, so this pod must run on the node where amplify-qea
+      # runs. With a ReadWriteMany storage class, set the PVC to RWX and drop this block.
+      affinity:
+        podAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            - topologyKey: kubernetes.io/hostname
+              labelSelector:
+                matchLabels:
+                  app: amplify-qea
       containers:
         - name: amplify-insights
           image: image-registry.openshift-image-registry.svc:5000/${NAMESPACE}/amplify-insights:latest
@@ -25,6 +35,13 @@ spec:
               value: "1"
             - name: HOME
               value: "/tmp"
+            # Served under /jira-insights (amplify-route-insights.yaml sends that path of QEA's host here): every page,
+            # asset and WebSocket of Streamlit lives under it, and so does the health check below.
+            - name: STREAMLIT_SERVER_BASE_URL_PATH
+              value: "jira-insights"
+            # Insights' own sign-in form and the option flags go through QEA: the same user accounts.
+            - name: QEA_API_URL
+              value: "http://amplify-qea:8080"
             # Same secret as amplify-qea: Insights verifies the sign-in token QEA issues with this key.
             - name: JWT_SECRET_KEY
               valueFrom:
@@ -61,13 +78,13 @@ spec:
               memory: 2Gi
           readinessProbe:
             httpGet:
-              path: /_stcore/health
+              path: /jira-insights/_stcore/health
               port: 8501
             initialDelaySeconds: 15
             periodSeconds: 10
           livenessProbe:
             httpGet:
-              path: /_stcore/health
+              path: /jira-insights/_stcore/health
               port: 8501
             initialDelaySeconds: 20
             periodSeconds: 30
@@ -89,19 +106,3 @@ spec:
     - name: streamlit
       port: 8501
       targetPort: 8501
----
-apiVersion: route.openshift.io/v1
-kind: Route
-metadata:
-  name: amplify-insights
-  labels:
-    app: amplify-insights
-spec:
-  to:
-    kind: Service
-    name: amplify-insights
-  port:
-    targetPort: streamlit
-  tls:
-    termination: edge
-    insecureEdgeTerminationPolicy: Redirect

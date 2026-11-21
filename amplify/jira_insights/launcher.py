@@ -5,9 +5,13 @@ Flask and Streamlit each want to own the server loop, so Insights runs next
 to the Flask app on its own port and the UI embeds it with an <iframe>.
 The process is started from the tool root so .streamlit/config.toml applies.
 
-  INSIGHTS_PORT        — Streamlit port (default 8501)
-  INSIGHTS_PUBLIC_URL  — browser-facing URL when it differs from
-                         http://<flask-host>:<port> (e.g. an OpenShift route)
+  INSIGHTS_PORT         — Streamlit port (default 8501)
+  INSIGHTS_PUBLIC_URL   — browser-facing URL when it differs from http://<flask-host>:<port>: a full URL
+                          (its own host) or a path on QEA's own host, e.g. /jira-insights (a route/ingress
+                          path that sends /jira-insights to the Insights service)
+  INSIGHTS_INTERNAL_URL — Insights runs as its own service (its own pod), e.g.
+                          http://amplify-insights:8501/jira-insights: QEA checks its health there and never
+                          starts a Streamlit process of its own
 
 Standalone:  python -m amplify.jira_insights.launcher
 """
@@ -45,19 +49,28 @@ def build_command(python: str = sys.executable, port_: int | None = None,
             "--server.headless", "true"]
 
 
-def _probe_health(port_: int) -> bool:
+def internal_url() -> str:
+    return os.environ.get("INSIGHTS_INTERNAL_URL", "").strip().rstrip("/")
+
+
+def _probe_url(base: str) -> bool:
     try:
-        with urllib.request.urlopen(f"http://127.0.0.1:{port_}/_stcore/health", timeout=1) as resp:
+        with urllib.request.urlopen(f"{base}/_stcore/health", timeout=2) as resp:
             return resp.read().strip() == b"ok"
     except Exception:
         return False
 
 
+def _probe_health(port_: int) -> bool:
+    return _probe_url(f"http://127.0.0.1:{port_}")
+
+
 class InsightsProcess:
     def __init__(self, popen=subprocess.Popen, probe=_probe_health,
-                 has_streamlit=lambda: importlib.util.find_spec("streamlit") is not None):
+                 has_streamlit=lambda: importlib.util.find_spec("streamlit") is not None, probe_url=_probe_url):
         self._popen = popen
         self._probe = probe
+        self._probe_url = probe_url
         self._has_streamlit = has_streamlit
         self._proc = None
         self._lock = threading.Lock()
@@ -73,7 +86,14 @@ class InsightsProcess:
         except OSError:
             return ""
 
+    def _external_status(self, base: str) -> dict:
+        healthy = self._probe_url(base)
+        return {"running": healthy, "healthy": healthy, "managed": False, "exited": False, "external": True,
+                "port": port(), "public_url": os.environ.get("INSIGHTS_PUBLIC_URL", "").rstrip("/"), "log_tail": ""}
+
     def status(self) -> dict:
+        if internal_url():
+            return self._external_status(internal_url())
         managed = self._proc is not None and self._proc.poll() is None
         exited  = self._proc is not None and not managed
         healthy = self._probe(port())
@@ -85,6 +105,12 @@ class InsightsProcess:
         }
 
     def start(self) -> dict:
+        if internal_url():                    # its own pod: nothing to start here, only report whether it answers
+            status = self._external_status(internal_url())
+            if not status["healthy"]:
+                status["error"] = (f"Jira Insights runs as its own service and is not answering at {internal_url()} "
+                                   "— check the amplify-insights pod")
+            return status
         with self._lock:
             if self._probe(port()) or (self._proc is not None and self._proc.poll() is None):
                 return self.status()
@@ -106,6 +132,8 @@ class InsightsProcess:
             return self.status()
 
     def stop(self) -> dict:
+        if internal_url():
+            return self._external_status(internal_url())
         with self._lock:
             proc, self._proc = self._proc, None
             if proc is not None and proc.poll() is None:

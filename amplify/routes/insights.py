@@ -6,9 +6,12 @@ Blueprint: Jira Insights launcher
   GET  /api/insights/open    — sign the user in to Insights and redirect there (iframe + New tab)
   GET  /api/insights/options — Insights option visibility, read-only (for a separately deployed Insights)
 
-Streamlit requires WebSockets so it must be accessed on its own port.
-On OpenShift: create a separate route for port 8501 and set INSIGHTS_PUBLIC_URL.
-On local Docker: expose with -p 8501:8501.
+Two ways to run it (see amplify/jira_insights/launcher.py):
+  * a side-car process of this server, on its own port (local runs, local Docker: -p 8501:8501);
+  * its own pod/service (OpenShift, Kubernetes): INSIGHTS_INTERNAL_URL is where QEA checks it, and
+    INSIGHTS_PUBLIC_URL where browsers reach it — e.g. /jira-insights on QEA's own host, sent to the
+    Insights service by a route/ingress path (Streamlit started with STREAMLIT_SERVER_BASE_URL_PATH=jira-insights).
+Either way users get there through /api/insights/open, signed in as their QEA user.
 """
 from __future__ import annotations
 

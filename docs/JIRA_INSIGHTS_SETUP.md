@@ -224,6 +224,10 @@ Workspace data: `~/.amplify-qea/workspaces/{user_id}/`
 
 ## 🚀 Production (OpenShift)
 
+### As its own pod at `/jira-insights`
+
+The manifests in `opns/` and `k8s/` run Insights in its own pod, served at `/jira-insights` on QEA's host, with the same users, workspaces and sign-in as QEA. See *Jira Insights (its own pod, at `/jira-insights`)* in `opns/README.md` for the settings. The example below is the older layout with Insights on its own host.
+
 ### As Sidecar Service
 
 In Kubernetes/OpenShift, run Jira Insights as a **separate service**:

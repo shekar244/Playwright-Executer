@@ -45,6 +45,9 @@ function _insightsEmbed(s) {
   }
   _insightsShowFrame(true);
   _insightsSetState('ok', s.managed ? `Running on port ${s.port}` : `Connected · ${url}`);
+  // Its own pod (INSIGHTS_INTERNAL_URL): QEA cannot start or stop it, so no Stop button.
+  const stop = document.getElementById('insightsStopBtn');
+  if (stop) stop.style.display = s.external ? 'none' : '';
 }
 
 function _insightsFail(message, logTail) {

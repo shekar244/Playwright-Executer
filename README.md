@@ -460,7 +460,9 @@ amplify-qea/
 | Variable | Required | Default | Description |
 |---|---|---|---|
 | `JWT_SECRET_KEY` | **Yes** (in containers) | generated | Signing key for sessions and for the Jira Insights sign-in link. Set it explicitly in any real deployment. If unset, a random key is generated once and stored in the data directory, so QEA and Insights on the same host or volume agree automatically. **Insights deployed separately must be given the same value as QEA**, otherwise sign-in from QEA is refused |
-| `INSIGHTS_PUBLIC_URL` | When Insights has its own address | `http(s)://<host>:8501` | Browser-facing URL of Jira Insights (e.g. `https://insights.example.com`) — where the Insights tab and **↗ New tab** send the user |
+| `INSIGHTS_PUBLIC_URL` | When Insights has its own address | `http(s)://<host>:8501` | Browser-facing URL of Jira Insights — where the Insights tab and **↗ New tab** send the user: a full URL, or a path on QEA's own host such as `/jira-insights` (OpenShift/Kubernetes manifests) |
+| `INSIGHTS_INTERNAL_URL` | When Insights is its own pod | — | Where QEA reaches the Insights service, e.g. `http://amplify-insights:8501/jira-insights`. Set, QEA only checks its health there and never starts a Streamlit process of its own |
+| `STREAMLIT_SERVER_BASE_URL_PATH` | On the Insights pod, under a path | — | e.g. `jira-insights`: Insights serves its pages, assets, WebSocket and health check under `/jira-insights/` |
 | `CONTAINER` | Yes | `1` | Set by Dockerfile |
 | `PORT` | No | `8080` | Flask listen port |
 | `ALLURE3_BIN` | No | `/usr/local/bin` (image) | Where the Allure 3 CLI is: the folder `npm install -g allure` installs into (what `echo $(npm config get prefix)/bin` prints) or the executable. The image ships Node, npm and the CLI and sets this. It is the default for each user's **Allure 3 binary path** (`allure3_bin`, Config → Allure) when that is empty; a path saved there wins. Where it is set, Allure 3 is also the default report format for new users (Allure 2 needs Java, which the image does not include). |

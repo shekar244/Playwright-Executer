@@ -20,13 +20,18 @@ spec:
           ports:
             - containerPort: 8080
               name: http
-            - containerPort: 8501
-              name: streamlit
           env:
             - name: CONTAINER
               value: "1"
             - name: PORT
               value: "8080"
+            # Jira Insights runs in its own pod (amplify-deployment-insights.yaml). Browsers reach it at /jira-insights on
+            # this app's own host (amplify-route-insights.yaml); QEA checks its health on the service and never starts
+            # a Streamlit process of its own. Users enter through /api/insights/open, signed in as their QEA user.
+            - name: INSIGHTS_PUBLIC_URL
+              value: "/jira-insights"
+            - name: INSIGHTS_INTERNAL_URL
+              value: "http://amplify-insights:8501/jira-insights"
             - name: JWT_SECRET_KEY
               valueFrom:
                 secretKeyRef:

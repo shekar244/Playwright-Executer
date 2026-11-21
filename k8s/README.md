@@ -7,14 +7,14 @@ Two independent apps share one volume (users database, `server_config.json`, eve
 | App | Image | Port | Reached at |
 |---|---|---|---|
 | **amplify-qea** — login, Executor, Dashboard, Admin Panel… | `amplify-qea` | 8080 | `https://amplify.example.com` |
-| **amplify-insights** — Jira dashboards and sprint reports | `amplify-insights` | 8501 | `https://insights.example.com` |
+| **amplify-insights** — Jira dashboards and sprint reports | `amplify-insights` | 8501 | `https://amplify.example.com/jira-insights` |
 
-Signing in happens once, in QEA. Opening Jira Insights (embedded tab or **New tab**) goes through QEA, which hands Insights a short-lived signed token — that is why both apps need the **same `JWT_SECRET_KEY`**.
+Signing in happens once, in QEA. Opening Jira Insights (embedded tab or **New tab**) goes through QEA, which hands Insights a short-lived signed token — that is why both apps need the **same `JWT_SECRET_KEY`**. Insights is served under `/jira-insights` on QEA's own host (`STREAMLIT_SERVER_BASE_URL_PATH=jira-insights`; the second Ingress sends that path to it); QEA sends browsers there (`INSIGHTS_PUBLIC_URL=/jira-insights`) and checks it on the service (`INSIGHTS_INTERNAL_URL`), never starting a Streamlit process of its own.
 
 ## Prerequisites
 
 - `kubectl` pointed at your cluster, with permission to create a namespace, deployments, services, ingresses, PVCs and secrets
-- An NGINX ingress controller (`ingressClassName: nginx`) and two DNS names pointing at it
+- An NGINX ingress controller (`ingressClassName: nginx`) and one DNS name pointing at it
 - A storage class that can provision a 10Gi volume (ReadWriteMany is nicer — see [Storage](#storage))
 - Optional: cert-manager for automatic TLS; a registry pull secret if the images are private (e.g. JFrog)
 
@@ -23,9 +23,8 @@ Signing in happens once, in QEA. Opening Jira Insights (embedded tab or **New ta
 ```bash
 cd amplify
 
-# 1. Your hostnames — replace example.com in these two files
-#    k8s/amplify-ingress.yaml        (both hosts)
-#    k8s/amplify-deployment.yaml     (INSIGHTS_PUBLIC_URL must be the insights host)
+# 1. Your hostname — replace amplify.example.com in k8s/amplify-ingress.yaml (both Ingresses: QEA at /,
+#    Jira Insights at /jira-insights)
 
 # 2. Namespace and secrets (secrets are never applied from a file)
 kubectl create namespace amplify
@@ -112,7 +111,7 @@ Files are named `<system>-<resource>`, as in `opns/`: `amplify-*` for Amplify QE
 
 ## Troubleshooting
 
-- **Insights tab says it can't connect / blank** — `INSIGHTS_PUBLIC_URL` in `amplify-deployment.yaml` must be the exact https URL of the insights ingress; check `kubectl -n amplify describe ingress amplify-insights`.
+- **Insights tab says it can't connect / blank** — QEA checks `INSIGHTS_INTERNAL_URL` (`http://amplify-insights:8501/jira-insights`) and sends browsers to `INSIGHTS_PUBLIC_URL` (`/jira-insights`); the Insights pod must run with `STREAMLIT_SERVER_BASE_URL_PATH=jira-insights` and the `amplify-insights` Ingress must route `/jira-insights` of the same host: `kubectl -n amplify describe ingress amplify-insights`.
 - **Jira Insights asks you to sign in again** — the two apps have different `JWT_SECRET_KEY` values; both read it from `amplify-secrets`, so check that only one secret is in play and restart both deployments after changing it.
 - **Insights pod stays `Pending`** — it is waiting for the QEA pod to be scheduled (affinity), or the PVC is unbound: `kubectl -n amplify get pvc,pods`.
 - **Live test logs arrive in bursts** — a proxy in front of nginx is buffering; the QEA ingress already sets `proxy-buffering: "off"`.
