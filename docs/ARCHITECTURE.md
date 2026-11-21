@@ -135,7 +135,7 @@ CREATE TABLE user_sessions (
 
 **Local Development:**
 ```bash
-pip install -r requirements.txt
+pip install -r amplify-requirements.txt
 python3 -m amplify.models.db    # Initialize database
 python3 amplify/server.py        # Run server
 ```

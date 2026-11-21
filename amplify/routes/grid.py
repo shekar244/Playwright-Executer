@@ -11,7 +11,13 @@ watch pods and runs. The coordinator URL and token stay server-side; browsers ne
   GET  /api/grid/runs                — recent runs with progress
   GET  /api/grid/runs/<run_id>       — one run: chunks and per-test outcomes
   GET  /api/grid/chunks/<chunk_id>   — chunk record including pytest output
-  POST /api/grid/runs                — start a run {tests, environment, browsers, chunk_size[, repo_path]}
+  POST /api/grid/runs/<run_id>/cancel — cancel a queued or running run. Only the person who started it, or an
+                                       admin, may. Queued chunks are dropped; a chunk already running finishes on
+                                       its pod but its results are discarded; finished chunks keep theirs.
+  GET  /api/grid/test-tree           — the repo's tests/ as folders → files → tests for the New run picker (grid_tests.py)
+  GET  /api/grid/pytest-args         — the extra pytest arguments configured in Admin → Grid (see grid_args.py)
+  POST /api/grid/runs                — start a run {tests, environment, browsers, chunk_size[, repo_path][, pytest_args]}
+                                       pytest_args is {option: value | true/false}, checked against Admin → Grid
                                        with repo_path (the repo's top-level folder) the tests run from a snapshot
                                        of that repo's HEAD, delivered to the pods (see grid_snapshot.py). The
                                        coordinator must advertise "code-delivery" in /api/config "features", and
@@ -37,7 +43,7 @@ from dataclasses import dataclass, field
 
 from flask import Blueprint, g, jsonify, request
 
-from amplify import grid_snapshot
+from amplify import grid_args, grid_snapshot, grid_tests
 from amplify.auth_utils import require_auth
 from amplify.config import settings
 from amplify.grid_snapshot import SnapshotError
@@ -46,12 +52,13 @@ from amplify.server_secrets import load_grid_config
 
 bp = Blueprint("grid", __name__)
 
-_ID = re.compile(r"^[A-Za-z0-9._-]+$")
+_ID = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]*$")      # starts alphanumeric: ".." and "." never reach a coordinator path
 _TIMEOUT = 8
 _CODE_TIMEOUT = 120                       # sending a snapshot (up to 100 MiB) to the coordinator
 REPORT_TIMEOUT = 150                      # the coordinator may need up to ~2 minutes to generate a report
 REPORT_MAX_BYTES = 200 * 1024 * 1024
 CODE_DELIVERY = "code-delivery"           # the coordinator's /api/config "features" entry for repo/sha runs
+PYTEST_ARGS = "pytest-args"               # ... and for runs that carry extra pytest arguments (Admin → Grid)
 DEFAULT_CHUNK_SIZE, CHUNK_SIZE_RANGE = 3, (1, 10)    # the coordinator accepts 1..10
 _COORDINATOR_TOO_OLD = "The Grid coordinator is too old for code delivery — update it"
 
@@ -231,7 +238,17 @@ def grid_status():
 @bp.route("/api/grid/config")
 @require_auth
 def grid_config():
-    return _call("GET", "/api/config")
+    payload, status = coordinator_request("GET", "/api/config")
+    if status == 200 and isinstance(payload, dict):
+        configured = grid_args.run_environments(grid_args.load_definitions())
+        environments = configured["environments"]
+        if environments:
+            payload["environments"] = environments
+            payload["default_environment"] = (
+                configured["default_environment"] if configured["default_environment"] in environments
+                else environments[0]
+            )
+    return jsonify(payload), status
 
 
 @bp.route("/api/grid/pods")
@@ -254,6 +271,52 @@ def grid_run(run_id):
     return _call("GET", f"/api/runs/{run_id}")
 
 
+@bp.route("/api/grid/runs/<run_id>/cancel", methods=["POST"])
+@require_auth
+def grid_cancel_run(run_id):
+    """Cancel a run. The Grid is shared by everyone with access to Amplify, so only the person who started the run
+    (the coordinator records their username) or an admin may stop it."""
+    if not _ID.match(run_id):
+        return jsonify({"error": "Invalid run id"}), 400
+    run, status = coordinator_request("GET", f"/api/runs/{run_id}")
+    if status != 200:
+        return jsonify(run), status
+    owner = run.get("requested_by") if isinstance(run, dict) else None
+    if not g.user.is_admin and not (isinstance(owner, str) and owner and owner == g.user.username):
+        return jsonify({"error": "Only the person who started a run, or an admin, can cancel it"}), 403
+    payload, status = coordinator_request("POST", f"/api/runs/{run_id}/cancel")
+    if status == 200:
+        from amplify import grid_data           # local import: grid_data imports this module
+        grid_data.clear_cache()                 # the dashboard must not keep showing the run as queued
+    return jsonify(payload), status
+
+
+@bp.route("/api/grid/test-tree")
+@require_auth
+def grid_test_tree():
+    """The repo's tests/ as folders → files → tests, for the New run picker. ?repo= a repo top-level folder; without
+    it, the user's active repo. The same folders a run may be snapshotted from (grid_snapshot.inspect_repo rules)."""
+    from amplify.user_config_reader import UserConfigReader
+    repo = (request.args.get("repo") or "").strip() or str(UserConfigReader(g.user.id).load().get("repo_root") or "")
+    if not repo:
+        return jsonify({"error": "No repository selected — choose one in the Repository tab"}), 400
+    try:
+        info = grid_snapshot.inspect_repo(repo, **_snapshot_dirs())
+        tree = grid_tests.build_tree(info.top)
+    except SnapshotError as exc:
+        return jsonify({"error": str(exc)}), exc.status
+    except (FileNotFoundError, ValueError) as exc:
+        return jsonify({"error": str(exc)}), 400
+    return jsonify({"repo": info.repo, "path": str(info.top), "sha": info.sha, "dirty": info.dirty, "tree": tree})
+
+
+@bp.route("/api/grid/pytest-args")
+@require_auth
+def grid_pytest_args():
+    """The extra pytest arguments an admin configured: what the Grid tab's New run form offers."""
+    return jsonify({"arguments": grid_args.load_definitions()})
+
+
 @bp.route("/api/grid/chunks/<chunk_id>")
 @require_auth
 def grid_chunk(chunk_id):
@@ -262,14 +325,16 @@ def grid_chunk(chunk_id):
     return _call("GET", f"/api/chunks/{chunk_id}")
 
 
+def _snapshot_dirs() -> dict:
+    """Amplify's data directory is off limits — except this user's own clones, which live there in a container."""
+    user_id = getattr(getattr(g, "user", None), "id", None)
+    return {"protected_dirs": [settings.DATABASE_PATH.parent, settings.WORKSPACES_ROOT],
+            "allowed_dirs": [settings.WORKSPACES_ROOT / str(user_id) / "repos"] if user_id is not None else []}
+
+
 def _snapshot_for(repo_path) -> tuple[grid_snapshot.RepoInfo, str]:
     """Package the repo's committed state and deliver it. Returns (repo info, code_source); raises SnapshotError."""
-    user_id = getattr(getattr(g, "user", None), "id", None)
-    # Amplify's data directory is off limits — except this user's own clones, which live there in a container.
-    info = grid_snapshot.inspect_repo(
-        repo_path,
-        protected_dirs=[settings.DATABASE_PATH.parent, settings.WORKSPACES_ROOT],
-        allowed_dirs=[settings.WORKSPACES_ROOT / str(user_id) / "repos"] if user_id is not None else [])
+    info = grid_snapshot.inspect_repo(repo_path, **_snapshot_dirs())
     if info.subpath:
         # The pods unpack the whole repo and run from its top-level, so test ids listed relative to a
         # sub-folder would not exist there. Say which folder to select rather than run nothing.
@@ -282,16 +347,22 @@ def _snapshot_for(repo_path) -> tuple[grid_snapshot.RepoInfo, str]:
     return info, source
 
 
-def _require_code_delivery():
-    """None when the coordinator can carry repo/sha runs, else a (JSON answer, status) to return. An older
-    coordinator would ignore repo and sha and its pods would run whatever tests their image holds."""
+_TOO_OLD_FOR_ARGS = ("The Grid coordinator is too old for pytest arguments — update it, "
+                     "or remove the arguments in Admin → Grid")
+
+
+def _require_features(needed: list[tuple[str, str]]):
+    """None when the coordinator announces every (feature, message-if-missing) in `needed` (one /api/config call),
+    else a (JSON answer, status) to return. An older coordinator would ignore what it does not know: repo/sha (its
+    pods would run whatever tests their image holds) or pytest_args (dropped without a word)."""
     data, status = coordinator_request("GET", "/api/config")
     if status != 200 or not isinstance(data, dict):
         reason = data.get("error") if isinstance(data, dict) else None
         return jsonify({"error": f"Could not check the Grid coordinator: {reason or f'HTTP {status}'}"}), 502
     features = data.get("features")
-    if not isinstance(features, list) or CODE_DELIVERY not in features:
-        return jsonify({"error": _COORDINATOR_TOO_OLD}), 502
+    for feature, too_old in needed:
+        if not isinstance(features, list) or feature not in features:
+            return jsonify({"error": too_old}), 502
     return None
 
 
@@ -307,6 +378,12 @@ def _selection(body: dict) -> tuple[dict | None, str | None]:
     environment, browsers = body.get("environment"), body.get("browsers")
     if environment is not None and not isinstance(environment, str):
         return None, "environment must be text"
+    environment = (environment or "").strip().lower() or None
+    definitions = grid_args.load_definitions()
+    configured = grid_args.run_environments(definitions)
+    environment = environment or configured["default_environment"] or None    # the run's and --env's value agree
+    if environment and configured["environments"] and environment not in configured["environments"]:
+        return None, f"Unsupported environment '{environment}'. Choose one of: {configured['environments']}"
     if browsers is not None and (not isinstance(browsers, list) or not all(isinstance(b, str) for b in browsers)):
         return None, "browsers must be a list of browser names (text)"
     chunk_size = DEFAULT_CHUNK_SIZE if body.get("chunk_size") is None else body["chunk_size"]
@@ -316,8 +393,13 @@ def _selection(body: dict) -> tuple[dict | None, str | None]:
     repo_path = body.get("repo_path")
     if repo_path is not None and not isinstance(repo_path, str):
         return None, "repo_path must be a folder path"
-    return {"tests": tests, "environment": (environment or "").strip() or None, "browsers": browsers or None,
-            "chunk_size": chunk_size, "requested_by": getattr(getattr(g, "user", None), "username", None)}, None
+    try:
+        pytest_args = grid_args.resolve(definitions, body.get("pytest_args"), environment)
+    except ValueError as exc:
+        return None, str(exc)
+    return {"tests": tests, "environment": environment, "browsers": browsers or None,
+            "chunk_size": chunk_size, "requested_by": getattr(getattr(g, "user", None), "username", None),
+            "pytest_args": pytest_args or None}, None
 
 
 def _unconfirmed(info: grid_snapshot.RepoInfo) -> str:
@@ -335,13 +417,17 @@ def grid_start_run():
     if payload is None:
         return jsonify({"error": problem}), 400
     repo_path = body.get("repo_path")
+    wants_code = bool(repo_path and repo_path.strip())
     info = source = None
-    if repo_path and repo_path.strip():
-        if not _coordinator_url():                       # nothing to deliver to: don't package the repo for nothing
-            return jsonify({"error": _NOT_CONFIGURED, "configured": False}), 503
-        refused = _require_code_delivery()
+    if wants_code and not _coordinator_url():            # nothing to deliver to: don't package the repo for nothing
+        return jsonify({"error": _NOT_CONFIGURED, "configured": False}), 503
+    needed = ([(CODE_DELIVERY, _COORDINATOR_TOO_OLD)] if wants_code else []) + \
+        ([(PYTEST_ARGS, _TOO_OLD_FOR_ARGS)] if payload["pytest_args"] else [])
+    if needed:
+        refused = _require_features(needed)
         if refused:
             return refused
+    if wants_code:
         try:
             info, source = _snapshot_for(repo_path)
         except SnapshotError as exc:

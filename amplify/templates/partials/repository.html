@@ -1,0 +1,95 @@
+<!-- ══════════════════════════════════════════════════════════════
+     Repository Tab  (#page-repository)
+     The test code a user works with: the active repo (what the Executor runs and the Grid snapshots), its
+     branch and last commit, the other clones in their workspace, and cloning a new one. Access tokens are
+     saved server-side and never shown again. Talks to /api/repo/* (routes/repo.py, repo_store.py).
+     ══════════════════════════════════════════════════════════════ -->
+<style>
+  #page-repository { display:none; flex:1; flex-direction:column; overflow-y:auto; background:var(--bg); }
+  #page-repository.active { display:flex; }
+  .repo-top { display:grid; grid-template-columns:minmax(320px,1.3fr) minmax(300px,1fr); gap:18px; align-items:start; }
+  @media (max-width: 960px) { .repo-top { grid-template-columns:1fr; } }
+  .repo-kv { display:grid; grid-template-columns:120px 1fr; gap:6px 12px; font-size:13px; align-items:baseline; }
+  .repo-kv dt { color:var(--text-dim); font-size:11px; text-transform:uppercase; letter-spacing:.05em; }
+  .repo-kv dd { margin:0; word-break:break-all; }
+  .repo-mono { font-family:var(--mono); font-size:12px; }
+  .repo-actions { display:flex; gap:8px; flex-wrap:wrap; align-items:center; margin-top:12px; }
+  .repo-msg { font-size:12px; color:var(--text-dim); }
+  .repo-msg.err { color:var(--red); }
+  .repo-msg.ok { color:var(--green); }
+  .repo-badge { display:inline-block; padding:1px 8px; border-radius:10px; font-size:11px; background:var(--surface3); color:var(--text-dim); }
+  .repo-badge.on { background:var(--accent-glow); color:var(--accent); }
+  .repo-badge.warn { background:rgba(255,159,10,.15); color:var(--yellow); }
+  .repo-form { display:flex; flex-direction:column; gap:10px; }
+  #repoTable td { vertical-align:middle; }
+  #page-repository .btn { white-space:nowrap; }
+</style>
+
+<div id="page-repository">
+  <div class="dash-body">
+
+    <div class="dash-title">
+      <span>📦</span> Repository
+      <span class="dash-sub" id="repoSubtitleTab">— the test code you run (Executor) and send to the Grid</span>
+      <span style="margin-left:auto;"><button class="btn btn-sm" onclick="loadRepository()">⟳ Refresh</button></span>
+    </div>
+
+    <div class="repo-top">
+      <!-- ── Active repository ───────────────────────────────────────────── -->
+      <div class="dash-card">
+        <div class="dash-card-title">Active repository</div>
+        <div id="repoActiveEmpty" class="repo-msg">No repository selected — clone one, or pick one of yours below.</div>
+        <dl class="repo-kv" id="repoActive" style="display:none;">
+          <dt>Name</dt><dd><strong id="repoActName"></strong> <span id="repoActDirty"></span></dd>
+          <dt>Remote</dt><dd class="repo-mono" id="repoActRemote"></dd>
+          <dt>Access token</dt><dd id="repoActToken"></dd>
+          <dt>Branch</dt>
+          <dd style="display:flex;gap:8px;align-items:center;">
+            <select id="repoBranchSelect" style="min-width:200px;"></select>
+            <button class="btn btn-sm" onclick="repoSwitchBranch()">Switch</button>
+            <button class="btn btn-sm" onclick="repoLoadBranches(true)" title="Fetch the branches from the remote">↻</button>
+          </dd>
+          <dt>Last commit</dt><dd><span class="repo-mono" id="repoActSha"></span> <span id="repoActSubject"></span><br>
+            <span class="repo-msg" id="repoActWho"></span></dd>
+          <dt>Folder</dt><dd class="repo-mono" id="repoActPath"></dd>
+        </dl>
+        <div class="repo-actions" id="repoActButtons" style="display:none;">
+          <button class="btn" onclick="repoPull()">↻ Pull latest</button>
+          <span class="repo-msg" id="repoActMsg"></span>
+        </div>
+      </div>
+
+      <!-- ── Clone ───────────────────────────────────────────────────────── -->
+      <div class="dash-card">
+        <div class="dash-card-title">Clone a repository</div>
+        <div class="repo-form">
+          <div class="field"><label for="repoCloneUrl">Git URL</label>
+            <input type="text" id="repoCloneUrl" placeholder="https://github.com/org/repo.git" autocomplete="off"></div>
+          <div class="field"><label for="repoCloneToken">Access token (PAT) <span class="hint">for private repos — saved for this repo, never shown again</span></label>
+            <input type="password" id="repoCloneToken" placeholder="ghp_… / github_pat_…" autocomplete="new-password"></div>
+          <div class="field"><label for="repoCloneBranch">Branch</label>
+            <div style="display:flex;gap:6px;"><select id="repoCloneBranch" style="flex:1;"><option value="">default</option></select>
+              <button class="btn btn-sm" onclick="repoFetchRemoteBranches()" title="List the remote's branches">↻</button></div></div>
+          <div class="repo-actions" style="margin-top:0;">
+            <button class="btn btn-accent" id="repoCloneBtn" onclick="repoClone()">Clone &amp; use</button>
+            <span class="repo-msg" id="repoCloneMsg"></span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── The user's repositories ─────────────────────────────────────────── -->
+    <div class="dash-card">
+      <div class="dash-card-title">Your repositories</div>
+      <div class="grid-scroll" style="overflow-x:auto;">
+        <table class="history-tbl" id="repoTable">
+          <thead><tr><th>Repository</th><th>Branch</th><th>Remote</th><th>Last commit</th><th>Access token</th><th></th></tr></thead>
+          <tbody id="repoTableBody"></tbody>
+        </table>
+      </div>
+      <div class="repo-msg" id="repoListMsg" style="margin-top:8px;"></div>
+      <p class="repo-msg" id="repoLocation" style="margin-top:10px;"></p>
+    </div>
+
+  </div>
+</div>

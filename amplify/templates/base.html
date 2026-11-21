@@ -56,9 +56,11 @@
 
 <nav class="tab-nav">
   <button type="button" class="tab-btn active" id="navbtn-executor" onclick="switchTab('executor')"><span class="tab-icon">⚡</span>Executor</button>
+  <button type="button" class="tab-btn" id="navbtn-repository" onclick="switchTab('repository')"><span class="tab-icon">📦</span>Repository</button>
   <button type="button" class="tab-btn" id="navbtn-dashboard" onclick="switchTab('dashboard')"><span class="tab-icon">📊</span>Reporting Dashboard</button>
   <button type="button" class="tab-btn" id="navbtn-grid" onclick="switchTab('grid')"><span class="tab-icon">🛰️</span>Grid</button>
   <button type="button" class="tab-btn" id="navbtn-zephyr" onclick="switchTab('zephyr')"><span class="tab-icon">🔷</span>Test Management</button>
+  <button type="button" class="tab-btn" id="navbtn-testdata" onclick="switchTab('testdata')"><span class="tab-icon">🧪</span>Test Data</button>
   {% if user.is_admin %}
   <button type="button" class="tab-btn" id="navbtn-filemanager" onclick="switchTab('filemanager')"><span class="tab-icon">🗂️</span>File Manager</button>
   {% endif %}
@@ -67,9 +69,11 @@
 </nav>
 
 {% include 'partials/executor.html' %}
+{% include 'partials/repository.html' %}
 {% include 'partials/dashboard.html' %}
 {% include 'partials/grid.html' %}
 {% include 'partials/testmanagement.html' %}
+{% include 'partials/testdata.html' %}
 {% if user.is_admin %}
 {% include 'partials/filemanager.html' %}
 {% endif %}
@@ -153,12 +157,12 @@ function setRunning(running) {
 function switchTab(tab) {
   const btn = document.getElementById('navbtn-' + tab);
   if (!btn || btn.style.display === 'none') return;   // hidden by an admin, or not available to this user
-  const pages = ['executor','tools','dashboard','grid','zephyr','filemanager','insights'];
+  const pages = ['executor','repository','tools','dashboard','grid','zephyr','testdata','filemanager','insights'];
   pages.forEach(p => {
     const el = document.getElementById('page-' + p);
     if (el) {
       if (p === 'executor') { el.classList.toggle('hidden', p !== tab); }
-      else if (p === 'filemanager') { el.style.display = (p === tab) ? 'flex' : 'none'; }
+      else if (p === 'filemanager' || p === 'testdata') { el.style.display = (p === tab) ? 'flex' : 'none'; }
       else { el.classList.toggle('active', p === tab); }
     }
   });
@@ -169,7 +173,9 @@ function switchTab(tab) {
   if (tab === 'tools')       { switchCfgTab(_visibleCfgTab()); loadTools(); loadFeatures(); loadZephyrConfig(); loadMappingConfig(); }
   if (tab === 'dashboard')   loadDashboard();
   if (tab === 'grid')        loadGrid();
+  if (tab === 'repository')  loadRepository();
   if (tab === 'zephyr')      { loadZephyrConfig(); _updateZephyrContextBanners(); loadZephyrStatuses(); }
+  if (tab === 'testdata')    initTestData();
   if (tab === 'filemanager') initFileManager();
 
   if (tab === 'insights')    loadInsights();
@@ -398,7 +404,10 @@ init();
 <script src="/static/js/executor.js"></script>
 <script src="/static/js/dashboard.js"></script>
 <script src="/static/js/grid.js"></script>
+<script src="/static/js/grid_picker.js"></script>
+<script src="/static/js/repository.js"></script>
 <script src="/static/js/testmanagement.js"></script>
+<script src="/static/js/testdata.js"></script>
 <script src="/static/js/insights.js"></script>
 </body>
 </html>

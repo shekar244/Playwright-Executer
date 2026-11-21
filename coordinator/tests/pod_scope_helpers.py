@@ -74,14 +74,15 @@ def chunk_row(sessions: sessionmaker, chunk_id: str) -> Tuple[str, Optional[str]
         return c.status, c.assigned_runner, c.lease_token
 
 
-async def _asgi(app, method: str, path: str, headers: Dict[str, str], body: bytes, query: str):
+async def _asgi(app, method: str, path: str, headers: Dict[str, str], body: bytes, query: str,
+                client: Tuple[str, int] = ("test", 1)):
     sent, pending = [], [{"type": "http.request", "body": body, "more_body": False}]
     raw = [(k.lower().encode(), v.encode()) for k, v in headers.items()]
     if body:
         raw.append((b"content-length", str(len(body)).encode()))
     scope = {"type": "http", "asgi": {"version": "3.0"}, "http_version": "1.1", "method": method,
              "scheme": "http", "path": path, "raw_path": path.encode(), "query_string": query.encode(),
-             "headers": raw, "client": ("test", 1), "server": ("test", 80), "root_path": ""}
+             "headers": raw, "client": client, "server": ("test", 80), "root_path": ""}
 
     async def receive():
         return pending.pop(0) if pending else {"type": "http.disconnect"}
@@ -95,14 +96,15 @@ async def _asgi(app, method: str, path: str, headers: Dict[str, str], body: byte
 
 
 def call(app, method: str, path: str, token: Optional[str] = None, lease: Optional[str] = None,
-         query: str = "", body: bytes = b"", extra_headers: Optional[Dict[str, str]] = None):
+         query: str = "", body: bytes = b"", extra_headers: Optional[Dict[str, str]] = None,
+         client: Tuple[str, int] = ("test", 1)):
     """One request through the whole ASGI stack; returns (status, parsed JSON or raw bytes)."""
     headers = dict(extra_headers or {})
     if token is not None:
         headers["X-API-Token"] = token
     if lease is not None:
         headers["X-Lease-Token"] = lease
-    status, raw = asyncio.run(_asgi(app, method, path, headers, body, query))
+    status, raw = asyncio.run(_asgi(app, method, path, headers, body, query, client))
     try:
         return status, json.loads(raw)
     except ValueError:

@@ -150,7 +150,21 @@ def test_the_token_is_write_only(admin, coordinator):
     for response in (r, admin.get("/api/admin/grid")):
         assert TOKEN not in response.get_data(as_text=True)
     assert admin.get("/api/admin/grid").get_json() == {
-        "coordinator_url": coordinator.url, "url_source": "saved", "has_token": True, "token_source": "saved"}
+        "coordinator_url": coordinator.url, "url_source": "saved", "has_token": True, "token_source": "saved",
+        "environments": [], "default_environment": ""}
+
+
+def test_grid_environments_can_be_configured_and_validated(admin, coordinator):
+    r = save(admin, coordinator_url=coordinator.url,
+             api_token=TOKEN, environments=["dev", "qa", "prod"], default_environment="prod")
+    assert r.status_code == 200
+    data = admin.get("/api/admin/grid").get_json()
+    assert data["environments"] == ["dev", "qa", "prod"]
+    assert data["default_environment"] == "prod"
+    assert ss.load_grid_environments() == {"environments": ["dev", "qa", "prod"], "default_environment": "prod"}
+
+    bad = save(admin, environments=["qa", "prod"], default_environment="staging")
+    assert bad.status_code == 400
 
 
 def test_saving_checks_the_connection_and_says_what_is_on_offer(admin, coordinator):

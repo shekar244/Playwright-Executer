@@ -22,10 +22,15 @@ def current_browser() -> str:
     return name
 
 
-def launch(playwright: Any, name: Optional[str] = None, headless: bool = True):
+def headless_default() -> bool:
+    """HEADLESS=false (or 0/no/off) runs the browser headed: the grid runner sets it when the pod has a live view."""
+    return os.getenv("HEADLESS", "true").strip().lower() not in ("false", "0", "no", "off")
+
+
+def launch(playwright: Any, name: Optional[str] = None, headless: Optional[bool] = None):
     """Launch the configured browser from an active sync_playwright() instance."""
     engine_name, channel = BROWSER_LAUNCH[name or current_browser()]
-    kwargs: Dict[str, Any] = {"headless": headless}
+    kwargs: Dict[str, Any] = {"headless": headless_default() if headless is None else headless}
     if channel:
         kwargs["channel"] = channel
     if engine_name == "chromium":

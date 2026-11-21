@@ -62,7 +62,7 @@ def test_start_reports_missing_streamlit():
     popen = mock.Mock()
     status = InsightsProcess(popen=popen, probe=lambda port: False, has_streamlit=lambda: False).start()
     popen.assert_not_called()
-    assert "pip install -r requirements.txt" in status["error"]
+    assert "pip install -r amplify-requirements.txt" in status["error"]
 
 
 def test_crashed_process_reports_log_tail(workspace):

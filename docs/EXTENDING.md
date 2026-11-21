@@ -25,6 +25,7 @@ Amplify-QEA/
     │   ├── executor.py                  ← Blueprint: run/stop/stream/repos/tests/features/git/venv
     │   ├── config.py                    ← Blueprint: /api/config/* endpoints
     │   ├── grid.py                      ← Blueprint: /api/grid/* — proxy to the Grid coordinator; POST /api/grid/runs starts a run (optionally from a repo snapshot, see grid_snapshot.py)
+    │   ├── testdata.py                  ← Blueprint: /api/testdata/* — list, upload and delete files in the active cloned repo
     │   ├── dashboard.py                 ← Blueprint: /api/dashboard (+ /overview, /run, /report-link), /rv viewer, /api/report
     │   ├── zephyr.py                    ← Blueprint: all /api/zephyr/* and /api/jira/*
     │   ├── filemanager.py               ← Blueprint: /api/fm/browse, read, save

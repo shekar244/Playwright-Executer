@@ -7,7 +7,9 @@
 !runner/code_download.py
 !runner/tar_guard.py
 !runner/lease_token.py
-!runner/requirements.txt
+!runner/live_view.py
+!runner/pytest_args.py
+!runner-requirements.txt
 !pytest.ini
 !src/
 !tests/

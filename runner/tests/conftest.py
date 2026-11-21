@@ -25,7 +25,7 @@ def coordinator():
 def runner(coordinator, tmp_path, monkeypatch):
     """runner_client wired to the fake coordinator, with its own empty volume and work dir."""
     for var in ("PYTEST_ADDOPTS", "PYTEST_CURRENT_TEST", "PYTEST_XDIST_WORKER", "PYTEST_XDIST_WORKER_COUNT",
-                "GRID_ALLURE_MAX_BYTES", "BROWSER", "TEST_ENV", "PYTHONPATH"):
+                "GRID_ALLURE_MAX_BYTES", "BROWSER", "TEST_ENV", "PYTHONPATH", "GRID_LIVE_VIEW", "HEADLESS", "DISPLAY"):
         monkeypatch.delenv(var, raising=False)
     monkeypatch.setenv("GRID_CODE_ROOT", str(tmp_path / "code-root"))
     monkeypatch.setenv("GRID_WORK_DIR", str(tmp_path / "work"))
@@ -36,6 +36,7 @@ def runner(coordinator, tmp_path, monkeypatch):
     monkeypatch.setattr(runner_client, "RUNNER_ID", "pod-test-1")
     monkeypatch.setattr(runner_client, "BROWSER", "chromium")
     monkeypatch.setattr(runner_client, "ALLURE_UPLOAD_BACKOFF", (0, 0))
+    monkeypatch.setattr(runner_client, "_live", None)
     (tmp_path / "code-root").mkdir()
     return runner_client
 

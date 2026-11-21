@@ -1,6 +1,6 @@
 # Amplify QEA — Python dependencies
 #
-# Install:  pip install -r requirements.txt
+# Install:  pip install -r amplify-requirements.txt
 # Requires: Python 3.10+  (3.13 recommended, used by amplify.sh)
 #
 # Runtime
@@ -8,6 +8,7 @@ flask>=3.0.0          # Web server + SSE streaming
 openpyxl>=3.1.0       # Excel read/write for File Manager
 pyyaml>=6.0           # YAML read/write for File Manager
 gunicorn>=21.0.0      # Production WSGI server (used in Docker/OpenShift)
+simple-websocket>=1.1.0  # Grid live view: WebSocket relay between the viewer and a runner pod's VNC server
 bcrypt>=4.1.0         # Password hashing
 PyJWT>=2.8.0          # JWT token generation and verification
 

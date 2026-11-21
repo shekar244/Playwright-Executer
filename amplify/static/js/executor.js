@@ -235,9 +235,9 @@ async function fetchBranches() {
   if (!url) return;
   const sel = document.getElementById('cloneBranch');
   sel.innerHTML = '<option value="">loading...</option>';
-  const params = new URLSearchParams({ url });
-  if (token) params.set('token', token);
-  const data = await fetch('/api/repo/branches?' + params).then(r => r.json()).catch(() => ({}));
+  const data = await fetch('/api/repo/branches', {      // POST: the token never goes into a URL (or a log)
+    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ url, token }),
+  }).then(r => r.json()).catch(() => ({}));
   if (data.error) { sel.innerHTML = '<option value="">default</option>'; return; }
   sel.innerHTML = '<option value="">default</option>' +
     (data.branches || []).map(b => `<option value="${b}">${b}</option>`).join('');
@@ -404,33 +404,43 @@ async function loadSavedRepos() {
   const section = document.getElementById('savedReposSection');
   const list    = document.getElementById('savedReposList');
   if (!section || !list) return;
-  if (!configs.length) { section.style.display = 'none'; return; }
+  if (!Array.isArray(configs) || !configs.length) { section.style.display = 'none'; return; }
   section.style.display = 'flex';
-  list.innerHTML = configs.map(c => `
-    <div style="display:flex;align-items:center;gap:8px;padding:6px 10px;border-radius:var(--radius);
-                border:0.5px solid var(--border);background:var(--surface2);cursor:pointer;transition:all .12s;"
-         onclick="applySavedRepo('${escHtml(c.url)}','${escHtml(c.branch||'')}','${escHtml(c.token||'')}')"
-         title="${escHtml(c.url)}">
-      <span style="font-size:12px;flex-shrink:0;">📦</span>
-      <span style="flex:1;font-size:12px;font-weight:600;color:var(--text-muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escHtml(c.name)}</span>
-      <span style="font-size:10px;color:var(--text-dim);">${escHtml(c.branch||'default')}</span>
-      <button onclick="event.stopPropagation();deleteSavedRepo('${escHtml(c.name)}')"
-              title="Remove" style="background:none;border:none;color:var(--text-dim);cursor:pointer;font-size:11px;padding:2px 4px;opacity:.5"
-              onmouseover="this.style.opacity='1';this.style.color='var(--red)'"
-              onmouseout="this.style.opacity='.5';this.style.color='var(--text-dim)'">✕</button>
-    </div>
-  `).join('');
+  // DOM calls, not innerHTML: names and URLs are user input. Tokens never reach the page (has_token only).
+  list.replaceChildren(...configs.map(c => {
+    const row = document.createElement('div');
+    row.style.cssText = 'display:flex;align-items:center;gap:8px;padding:6px 10px;border-radius:var(--radius);border:0.5px solid var(--border);background:var(--surface2);cursor:pointer;';
+    row.title = c.url + (c.has_token ? ' (access token saved)' : '');
+    row.onclick = () => applySavedRepo(c.name);
+    const icon = document.createElement('span'); icon.textContent = '📦';
+    const name = document.createElement('span');
+    name.style.cssText = 'flex:1;font-size:12px;font-weight:600;color:var(--text-muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;';
+    name.textContent = c.name;
+    const br = document.createElement('span');
+    br.style.cssText = 'font-size:10px;color:var(--text-dim);';
+    br.textContent = (c.branch || 'default') + (c.has_token ? ' · 🔑' : '');
+    const del = document.createElement('button');
+    del.textContent = '✕'; del.title = 'Remove';
+    del.style.cssText = 'background:none;border:none;color:var(--text-dim);cursor:pointer;font-size:11px;padding:2px 4px;';
+    del.onclick = (e) => { e.stopPropagation(); deleteSavedRepo(c.name); };
+    row.append(icon, name, br, del);
+    return row;
+  }));
 }
 
-function applySavedRepo(url, branch, token) {
-  document.getElementById('cloneUrl').value = url;
-  document.getElementById('cloneToken').value = token;
-  document.getElementById('cloneDetails').setAttribute('open', '');
-  if (branch) {
-    const sel = document.getElementById('cloneBranch');
-    sel.innerHTML = `<option value="">default</option><option value="${branch}" selected>${branch}</option>`;
-  }
-  cloneRepo();
+// Clone (or pull) a saved repo by name: the server uses its saved URL, branch and token.
+async function applySavedRepo(name) {
+  const status = document.getElementById('cloneStatus');
+  status.style.display = 'block'; status.style.color = 'var(--accent)'; status.textContent = `Cloning ${name}…`;
+  const r = await fetch('/api/repo/clone', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name }),
+  });
+  const d = await r.json().catch(() => ({}));
+  if (!r.ok) { status.style.color = 'var(--red)'; status.textContent = d.error || 'Clone failed'; return; }
+  status.style.color = 'var(--green)'; status.textContent = d.action === 'cloned' ? 'Cloned successfully' : 'Pulled latest';
+  applyRepo(d.path, false);
+  await loadRepoStatus();
+  discoverTests();
 }
 
 async function saveRepoConfig() {
@@ -1401,27 +1411,37 @@ async function loadCfgRepoList() {
   const configs = await fetch('/api/repo/configs').then(r => r.json()).catch(() => []);
   const list = document.getElementById('cfgRepoList');
   if (!list) return;
-  if (!configs.length) {
-    list.innerHTML = '<div style="color:var(--text-dim);font-size:12px;padding:8px 0;">No saved repositories. Add one above.</div>';
+  if (!Array.isArray(configs) || !configs.length) {
+    list.innerHTML = '<div style="color:var(--text-dim);font-size:12px;padding:8px 0;">No saved repositories. Add one above, or clone one in the Repository tab.</div>';
     return;
   }
-  list.innerHTML = configs.map(c => `
-    <div style="display:flex;align-items:center;gap:10px;padding:10px 12px;border-radius:var(--radius);
-                border:0.5px solid var(--border);background:var(--surface2);transition:background .15s;">
-      <span style="font-size:14px;flex-shrink:0;">📦</span>
-      <div style="flex:1;min-width:0;">
-        <div style="font-weight:600;font-size:13px;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escHtml(c.name)}</div>
-        <div style="font-size:10px;color:var(--text-dim);font-family:var(--mono);word-break:break-all;margin-top:2px;">${escHtml(c.url)}</div>
-        <div style="font-size:10px;color:var(--green);margin-top:1px;">⎇ ${escHtml(c.branch || 'default')}</div>
-      </div>
-      <button class="btn btn-sm" onclick="cfgCloneRepo('${escHtml(c.url)}','${escHtml(c.branch||'')}','${escHtml(c.token||'')}')"
-              title="Clone this repo to workspace">Clone</button>
-      <button onclick="cfgDeleteRepo('${escHtml(c.name)}')"
-              title="Remove" style="background:none;border:none;color:var(--text-dim);cursor:pointer;font-size:13px;padding:4px;opacity:.5"
-              onmouseover="this.style.opacity='1';this.style.color='var(--red)'"
-              onmouseout="this.style.opacity='.5';this.style.color='var(--text-dim)'">✕</button>
-    </div>
-  `).join('');
+  // DOM calls, not innerHTML: names and URLs are user input. The token itself never comes back: has_token only.
+  list.replaceChildren(...configs.map(c => {
+    const row = document.createElement('div');
+    row.style.cssText = 'display:flex;align-items:center;gap:10px;padding:10px 12px;border-radius:var(--radius);border:0.5px solid var(--border);background:var(--surface2);';
+    const info = document.createElement('div');
+    info.style.cssText = 'flex:1;min-width:0;';
+    const name = document.createElement('div');
+    name.style.cssText = 'font-weight:600;font-size:13px;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;';
+    name.textContent = c.name;
+    const url = document.createElement('div');
+    url.style.cssText = 'font-size:10px;color:var(--text-dim);font-family:var(--mono);word-break:break-all;margin-top:2px;';
+    url.textContent = c.url;
+    const meta = document.createElement('div');
+    meta.style.cssText = 'font-size:10px;margin-top:1px;';
+    meta.textContent = `⎇ ${c.branch || 'default'} · ${c.has_token ? '🔑 access token saved' : 'no access token'}`;
+    meta.style.color = c.has_token ? 'var(--green)' : 'var(--text-dim)';
+    info.append(name, url, meta);
+    const clone = document.createElement('button');
+    clone.className = 'btn btn-sm'; clone.textContent = 'Clone'; clone.title = 'Clone this repo to your workspace';
+    clone.onclick = () => cfgCloneRepo(c.name);
+    const del = document.createElement('button');
+    del.textContent = '✕'; del.title = 'Remove';
+    del.style.cssText = 'background:none;border:none;color:var(--text-dim);cursor:pointer;font-size:13px;padding:4px;';
+    del.onclick = () => cfgDeleteRepo(c.name);
+    row.append(document.createTextNode('📦'), info, clone, del);
+    return row;
+  }));
 }
 
 async function cfgSaveRepo() {
@@ -1450,12 +1470,7 @@ async function cfgDeleteRepo(name) {
   loadSavedRepos();
 }
 
-async function cfgCloneRepo(url, branch, token) {
-  document.getElementById('cloneUrl').value = url;
-  document.getElementById('cloneToken').value = token;
-  if (branch) {
-    document.getElementById('cloneBranch').innerHTML = `<option value="">default</option><option value="${branch}" selected>${branch}</option>`;
-  }
-  switchTab('executor');
-  cloneRepo();
+async function cfgCloneRepo(name) {
+  switchTab('repository');                 // the Repository tab shows the clone and its result
+  repoCloneSaved(name);
 }

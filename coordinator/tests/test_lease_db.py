@@ -157,3 +157,28 @@ def test_the_migration_adds_the_nullable_column_to_an_existing_table_and_is_idem
     finally:
         with engine.begin() as conn:
             conn.execute(text("DROP SCHEMA IF EXISTS pgt_mig CASCADE"))
+
+def test_a_cancelled_chunk_is_never_leased_and_a_release_does_not_bring_it_back(sessions):
+    with sessions() as s:
+        _queue(s)
+        _queue(s, "pgt-2")
+        s.query(TestChunkRecord).filter(TestChunkRecord.chunk_id == "pgt-1").update({"status": "cancelled"})
+        s.commit()
+
+        row = leasing.lease_next_chunk(s, "pgt-w1", BROWSER, True)
+        s.commit()
+        assert row.chunk_id == "pgt-2"                                      # the cancelled one was skipped
+        assert leasing.lease_next_chunk(s, "pgt-w2", BROWSER, True) is None   # and nothing else is queued
+        assert leasing.release_chunk_row(s, "pgt-1", "pgt-w1", None) is False
+        assert _row(s, "pgt-1")[0] == "cancelled"
+
+
+def test_a_lease_returns_the_chunks_pytest_arguments_from_postgresql(sessions):
+    args = [{"flag": "--env", "style": "separate", "value": "qa3"}, {"flag": "--lf", "style": "switch", "value": None}]
+    with sessions() as s:
+        s.add(TestChunkRecord(chunk_id="pgt-args", status="pending", browser=BROWSER, environment="qa3", tests=["t.py"],
+                              pytest_args=args))
+        s.commit()
+        row = leasing.lease_next_chunk(s, "pgt-w1", BROWSER, True)
+        s.commit()
+        assert row.chunk_id == "pgt-args" and row.pytest_args == args      # JSON comes back as a list, not text

@@ -35,6 +35,7 @@ Server config file (second priority):
 """
 import json
 import os
+import re
 from pathlib import Path
 
 from amplify.config import settings
@@ -141,6 +142,21 @@ def load_grid_config() -> dict:
             "api_token": _grid_value("api_token", "GRID_API_TOKEN")[0]}
 
 
+def load_grid_environments() -> dict:
+    """Configured Grid environment choices and default; [] means use the coordinator values."""
+    saved = _load_server_file().get("grid", {})
+    saved = saved if isinstance(saved, dict) else {}
+    environments = saved.get("environments")
+    if not isinstance(environments, list):
+        environments = []
+    environments = [str(value).strip().lower() for value in environments
+                    if isinstance(value, str) and str(value).strip()]
+    default_environment = str(saved.get("default_environment") or "").strip().lower()
+    if default_environment not in environments:
+        default_environment = environments[0] if environments else ""
+    return {"environments": environments, "default_environment": default_environment}
+
+
 def grid_config_summary() -> dict:
     """What the Admin Panel may show: the URL, whether a token exists, and where each came from."""
     url, url_source = _grid_value("coordinator_url", "GRID_COORDINATOR_URL")
@@ -169,7 +185,8 @@ def normalize_coordinator_url(value) -> str:
     return text.rstrip("/")
 
 
-def save_grid_config(coordinator_url=None, api_token=None, clear_token: bool = False) -> None:
+def save_grid_config(coordinator_url=None, api_token=None, clear_token: bool = False,
+                     environments=None, default_environment=None) -> None:
     """Save what was given; leave the rest alone.
 
     coordinator_url  None = unchanged · "" = remove the saved URL (the env var applies again)
@@ -193,6 +210,38 @@ def save_grid_config(coordinator_url=None, api_token=None, clear_token: bool = F
         if len(token) > _GRID_TOKEN_MAX or any(ord(c) < 32 or ord(c) == 127 for c in token):
             raise ValueError("The API token has characters that can't be sent in a header")
         saved["api_token"] = token
+    if environments is not None:
+        if not isinstance(environments, list):
+            raise ValueError("Grid environments must be a list")
+        normalized = []
+        seen = set()
+        for value in environments:
+            if not isinstance(value, str):
+                raise ValueError("Each Grid environment must be text")
+            name = value.strip().lower()
+            if not name:
+                continue
+            if not re.fullmatch(r"[A-Za-z0-9_-]{1,64}", name):
+                raise ValueError("Environment names may contain only letters, numbers, hyphens and underscores")
+            if name not in seen:
+                normalized.append(name)
+                seen.add(name)
+        if normalized:
+            saved["environments"] = normalized
+        else:
+            saved.pop("environments", None)
+            saved.pop("default_environment", None)
+    if default_environment is not None:
+        default = str(default_environment).strip().lower()
+        configured = environments if environments is not None else saved.get("environments")
+        configured = configured if isinstance(configured, list) else []
+        configured = [str(v).strip().lower() for v in configured if isinstance(v, str) and str(v).strip()]
+        if default and default not in configured:
+            raise ValueError("The default Grid environment must be in the environments list")
+        if default:
+            saved["default_environment"] = default
+        else:
+            saved.pop("default_environment", None)
     data = _load_server_file()
     data["grid"] = saved
     save_server_config(data)
@@ -245,9 +294,11 @@ def _keys(catalog: list, group: str) -> list:
 
 UI_TAB_CATALOG = [
     {"key": "executor",     "label": "Executor",        "group": "main",   "default": True},
+    {"key": "repository",   "label": "Repository",      "group": "main",   "default": True},
     {"key": "dashboard",    "label": "Reporting Dashboard", "group": "main", "default": True},
     {"key": "grid",         "label": "Grid",            "group": "main",   "default": True},
     {"key": "zephyr",       "label": "Test Management", "group": "main",   "default": True},
+    {"key": "testdata",     "label": "Test Data",       "group": "main",   "default": True},
     {"key": "filemanager",  "label": "File Manager (admins only)", "group": "main", "default": True},
     {"key": "insights",     "label": "Jira Insights",   "group": "main",   "default": False},
     {"key": "tools",        "label": "Config",          "group": "main",   "default": True},

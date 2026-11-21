@@ -11,8 +11,24 @@ API_TOKEN = os.getenv("API_TOKEN", "")
 # use the full token as before. Equal to API_TOKEN: it is simply the full token.
 POD_API_TOKEN = os.getenv("POD_API_TOKEN", "")
 
-SUPPORTED_BROWSERS = ("edge", "chrome", "chromium", "firefox", "webkit")
-DEFAULT_BROWSER = "edge"
+KNOWN_BROWSERS = ("edge", "chrome", "chromium", "firefox", "webkit")
+
+
+def browser_settings(env=os.environ) -> tuple[tuple[str, ...], str]:
+    """(browsers this coordinator accepts and offers, the one a run gets when none is chosen).
+
+    SUPPORTED_BROWSERS (comma list) limits them to the browsers that have runner images: a run for a browser nobody
+    can serve waits in the queue forever. The local Docker stack on Apple Silicon has only chromium (Edge and Chrome
+    exist for amd64 only). Unknown names are ignored; unset or empty means all of them, with edge the default as always.
+    DEFAULT_BROWSER must be one of the supported ones, else the first supported browser is used.
+    """
+    listed = [b.strip().lower() for b in (env.get("SUPPORTED_BROWSERS") or "").split(",")]
+    supported = tuple(dict.fromkeys(b for b in listed if b in KNOWN_BROWSERS)) or KNOWN_BROWSERS
+    wanted = (env.get("DEFAULT_BROWSER") or "edge").strip().lower()
+    return supported, wanted if wanted in supported else supported[0]
+
+
+SUPPORTED_BROWSERS, DEFAULT_BROWSER = browser_settings()
 SUPPORTED_ENVIRONMENTS = [
     e.strip().lower()
     for e in os.getenv("SUPPORTED_ENVIRONMENTS", "dev,qa,perf,prod").split(",")
@@ -25,7 +41,7 @@ DEFAULT_CHUNK_SIZE = 3
 # upload Allure results and GET /api/runs/{id}/report builds the report; "lease-tokens": a lease
 # with ?lease_tokens=1 returns a per-chunk lease_token (X-Lease-Token); "pod-token": the
 # coordinator understands POD_API_TOKEN.
-FEATURES = ["code-delivery", "allure-reports", "lease-tokens", "pod-token"]
+FEATURES = ["code-delivery", "allure-reports", "lease-tokens", "pod-token", "live-view", "pytest-args"]
 
 # A busy/idle runner that has not heartbeated for this long is reported as "lost".
 RUNNER_STALE_SECONDS = int(os.getenv("RUNNER_STALE_SECONDS", "60"))

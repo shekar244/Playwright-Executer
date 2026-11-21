@@ -11,6 +11,8 @@ Blueprint: Admin routes
   GET    /api/admin/workspace/<id>      — workspace disk usage for a user
   GET    /api/admin/grid                — Grid coordinator URL, whether a token is set (never the token)
   POST   /api/admin/grid                — set the coordinator URL / API token; replies with a connection check
+  GET    /api/admin/grid/pytest-args    — the extra pytest arguments Grid runs pass to the runner pods
+  POST   /api/admin/grid/pytest-args    — replace them {"arguments": [...]} (see amplify/grid_args.py)
   GET    /api/admin/ui-tabs             — tab catalog + current visibility + landing tab
   POST   /api/admin/ui-tabs             — set which tabs every user sees (and, optionally, the landing tab)
   GET    /api/admin/insights-options    — Jira Insights option catalog + current visibility
@@ -24,7 +26,7 @@ from amplify.models.user import User, ActivityLog
 from amplify.routes.grid import probe as grid_probe
 from amplify.server_secrets import (
     INSIGHTS_OPTION_CATALOG, UI_TAB_CATALOG,
-    grid_config_summary, load_default_tab, load_insights_options, load_ui_tabs,
+    grid_config_summary, load_default_tab, load_grid_environments, load_insights_options, load_ui_tabs,
     save_grid_config, save_insights_options, save_ui_tabs,
 )
 from amplify.storage import get_user_workspace_dir
@@ -182,22 +184,53 @@ def grid_coordinator():
     if request.method == "POST":
         body = request.json or {}
         url, token, clear = body.get("coordinator_url"), body.get("api_token"), body.get("clear_token", False)
+        environments = body.get("environments")
+        default_environment = body.get("default_environment")
         if (url is not None and not isinstance(url, str)) or (token is not None and not isinstance(token, str)) \
                 or not isinstance(clear, bool):
             return jsonify({"error": "coordinator_url and api_token must be text; clear_token true or false"}), 400
+        if environments is not None and not isinstance(environments, list):
+            return jsonify({"error": "environments must be a list"}), 400
+        if default_environment is not None and not isinstance(default_environment, str):
+            return jsonify({"error": "default_environment must be text"}), 400
         try:
-            save_grid_config(url, token, clear)
+            save_grid_config(url, token, clear, environments, default_environment)
         except ValueError as exc:
             return jsonify({"error": str(exc)}), 400
         except OSError as exc:
             return jsonify({"error": str(exc)}), 500
         summary = grid_config_summary()
+        summary.update(load_grid_environments())
         token_note = "removed" if clear else ("replaced" if (token or "").strip() else "unchanged")
         ActivityLog.record(g.user.id, "admin_update_grid",
                            f"Grid coordinator: {summary['coordinator_url'] or 'not set'}; token {token_note}",
                            request.remote_addr)
         return jsonify({"ok": True, **summary, "status": grid_probe()})
-    return jsonify(grid_config_summary())
+    summary = grid_config_summary()
+    summary.update(load_grid_environments())
+    return jsonify(summary)
+
+
+@bp.route("/api/admin/grid/pytest-args", methods=["GET", "POST"])
+@require_admin
+def grid_pytest_args():
+    """Which pytest options a Grid run passes to the pods, and the values users may pick (server-wide)."""
+    from amplify import grid_args
+    if request.method == "POST":
+        body = request.get_json(silent=True)
+        if not isinstance(body, dict):
+            return jsonify({"error": "Send a JSON object {\"arguments\": [...]}"}), 400
+        try:
+            saved = grid_args.save_definitions(body.get("arguments"))
+        except ValueError as exc:
+            return jsonify({"error": str(exc)}), 400
+        except OSError as exc:
+            return jsonify({"error": str(exc)}), 500
+        ActivityLog.record(g.user.id, "admin_update_grid_pytest_args",
+                           "Grid pytest arguments: " + (", ".join(d["flag"] for d in saved) or "none"),
+                           request.remote_addr)
+        return jsonify({"ok": True, "arguments": saved, "reserved": sorted(grid_args.RESERVED)})
+    return jsonify({"arguments": grid_args.load_definitions(), "reserved": sorted(grid_args.RESERVED)})
 
 
 def _flags_endpoint(*, body_key, load, save, catalog, action):

@@ -7,6 +7,7 @@ from fastapi import HTTPException, Header
 from pydantic import BaseModel, Field, field_validator, model_validator
 
 from artifacts import valid_repo, valid_sha
+from pytest_args import PytestArg, validate_list as validate_pytest_args
 from config import (
     API_TOKEN, DEFAULT_BROWSER, DEFAULT_CHUNK_SIZE, DEFAULT_ENVIRONMENT, POD_API_TOKEN,
     SUPPORTED_BROWSERS, SUPPORTED_ENVIRONMENTS,
@@ -103,8 +104,11 @@ class RunRequest(BaseModel):
     # Code the runners run the tests from: an immutable snapshot of <repo> at <sha>.
     repo: Optional[str] = None
     sha: Optional[str] = None
+    # Extra pytest options (admin-configured in Amplify, chosen per run); see pytest_args.py.
+    pytest_args: List[PytestArg] = Field(default_factory=list)
 
     _check_tests = field_validator("tests")(lambda v: [validate_test_id(t) for t in v])
+    _check_pytest_args = field_validator("pytest_args")(lambda v: validate_pytest_args(v))
 
     @model_validator(mode="after")
     def _check_code_ref(self):

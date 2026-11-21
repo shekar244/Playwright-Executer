@@ -34,7 +34,7 @@ def _no_secret_printed(capsys):
 @pytest.fixture
 def fast_chunks(runner, monkeypatch):
     """run_assigned_tests without pytest: one passing chunk and one Allure result file to upload."""
-    def run(tests, environment="", repo=None, sha=None, allure_dir=None):
+    def run(tests, environment="", repo=None, sha=None, allure_dir=None, pytest_args=None):
         if allure_dir:
             Path(allure_dir, "r-result.json").write_text('{"status": "passed"}')
         return [{"tests": tests, "environment": environment, "browser": "chromium", "success": True,

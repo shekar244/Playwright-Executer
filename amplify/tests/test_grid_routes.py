@@ -84,6 +84,38 @@ def test_start_run_requires_tests(client):
     assert client.post("/api/grid/runs", json={"tests": ["  "]}).status_code == 400
 
 
+def test_admin_environment_configuration_is_used_by_grid_config_and_run_selection(client, monkeypatch):
+    from amplify.server_secrets import save_server_config
+    save_server_config({"grid": {
+        "coordinator_url": "http://coordinator:8000",
+        "environments": ["qa", "prod"],
+        "default_environment": "prod",
+    }})
+
+    def fake_urlopen(req, timeout):
+        if req.full_url.endswith("/api/config"):
+            return _Resp({"environments": ["dev", "qa", "prod"], "default_environment": "qa",
+                          "browsers": ["chromium"], "default_browser": "chromium", "default_chunk_size": 3})
+        return _Resp({"run_id": "run-1"})
+
+    monkeypatch.setattr(grid.urllib.request, "urlopen", fake_urlopen)
+    config = client.get("/api/grid/config").get_json()
+    assert config["environments"] == ["qa", "prod"]
+    assert config["default_environment"] == "prod"
+
+    sent = {}
+    def fake_start(req, timeout):
+        sent["body"] = json.loads(req.data)
+        return _Resp({"run_id": "run-2"})
+    monkeypatch.setattr(grid.urllib.request, "urlopen", fake_start)
+    response = client.post("/api/grid/runs", json={"tests": ["tests/a.py"], "environment": "PROD"})
+    assert response.status_code == 200
+    assert sent["body"]["environment"] == "prod"
+
+    bad = client.post("/api/grid/runs", json={"tests": ["tests/a.py"], "environment": "staging"})
+    assert bad.status_code == 400
+
+
 @pytest.mark.parametrize("path", ["/api/grid/runs/..%2Fconfig", "/api/grid/chunks/a%20b"])
 def test_ids_are_validated(client, path):
     assert client.get(path).status_code in (400, 404)

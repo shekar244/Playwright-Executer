@@ -10,7 +10,8 @@ Defaults match config/docker-compose.yml (project "amplify-grid", secrets in con
 
 Options (environment): COMPOSE_PROJECT (amplify-grid), ENV_FILE (config/.env), MAX_PER_BROWSER (2),
 RUNNER_IMAGE_TEMPLATE (amplify-grid-runner-{browser}:local), WITH_VOLUME=1 + CODE_STORE_DIR to mount a
-tests-store folder read-only at /code. Stop it with Ctrl-C / SIGTERM: the runners it started are stopped too.
+tests-store folder read-only at /code, LIVE_VIEW (1: runners run the browser headed on a display that the Grid tab's
+Live button shows; 0: headless). Stop it with Ctrl-C / SIGTERM: the runners it started are stopped too.
 """
 import os
 import secrets
@@ -29,6 +30,7 @@ IMAGE_TEMPLATE = os.getenv("RUNNER_IMAGE_TEMPLATE", "amplify-grid-runner-{browse
 MAX_PER_BROWSER = int(os.getenv("MAX_PER_BROWSER", "2"))
 CODE_STORE_DIR = os.getenv("CODE_STORE_DIR", "")
 WITH_VOLUME = os.getenv("WITH_VOLUME") == "1" and CODE_STORE_DIR
+LIVE_VIEW = "0" if os.getenv("LIVE_VIEW", "1").strip() in ("0", "false", "no", "off") else "1"
 
 pods: dict[str, str] = {}      # container name -> browser
 warned: set[str] = set()
@@ -77,6 +79,7 @@ def start(browser: str, token: str) -> None:
     name = f"pw-{browser}-{secrets.token_hex(3)}"
     cmd = ["run", "-d", "--rm", "--name", name, "--network", NETWORK, "--shm-size=1g",
            "-e", f"BROWSER={browser}", "-e", f"RUNNER_ID={name}", "-e", "COORDINATOR_URL=http://coordinator:8000",
+           "-e", f"GRID_LIVE_VIEW={LIVE_VIEW}",
            "-e", "GRID_API_TOKEN"]            # value comes from this process's environment, not from argv
     if WITH_VOLUME:
         cmd += ["-v", f"{CODE_STORE_DIR}:/code:ro"]
@@ -93,7 +96,8 @@ def main() -> None:
         sys.exit(f"{ENV_FILE} has neither POD_API_TOKEN nor GRID_API_TOKEN")
     signal.signal(signal.SIGTERM, lambda *a: globals().update(stop=True))
     signal.signal(signal.SIGINT, lambda *a: globals().update(stop=True))
-    say(f"pod launcher ready (project={PROJECT}, up to {MAX_PER_BROWSER} per browser, volume={'on' if WITH_VOLUME else 'off'})")
+    say(f"pod launcher ready (project={PROJECT}, up to {MAX_PER_BROWSER} per browser, volume={'on' if WITH_VOLUME else 'off'}, "
+        f"live view={'on' if LIVE_VIEW == '1' else 'off'})")
     while not stop:
         pg = postgres_container()
         if pg:

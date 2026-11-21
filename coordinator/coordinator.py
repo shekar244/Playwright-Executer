@@ -12,6 +12,7 @@ from sqlalchemy import func, or_, text
 from sqlalchemy.orm import Session
 
 import artifacts
+import live_view
 from config import (
     DEFAULT_BROWSER, DEFAULT_CHUNK_SIZE, DEFAULT_ENVIRONMENT, FEATURES, REAPER_INTERVAL_SECONDS,
     SUPPORTED_BROWSERS, SUPPORTED_ENVIRONMENTS,
@@ -81,6 +82,7 @@ app = FastAPI(title="Central Test Coordination Pod (SQL-Backed)", lifespan=lifes
 # legitimately calls. Test code in a pod can read the pod token, so keep `pod_api` minimal.
 api = APIRouter(prefix="/api", dependencies=[Depends(require_full_token)])
 pod_api = APIRouter(prefix="/api", dependencies=[Depends(require_pod_or_full_token)])
+live_view.add_routes(api, pod_api)
 
 
 @app.exception_handler(artifacts.ArtifactError)
@@ -143,6 +145,7 @@ def create_run(req: RunRequest, db: Session = Depends(get_db)):
     environment = validate_environment(req.environment)
     browsers = list(dict.fromkeys(validate_browser(b) for b in req.browsers))
     tests = list(dict.fromkeys(req.tests))
+    pytest_args = [a.model_dump() for a in req.pytest_args] or None
 
     run_id = f"run-{_utcnow():%Y%m%d-%H%M%S}-{uuid.uuid4().hex[:6]}"
     run = TestRunRecord(
@@ -154,6 +157,7 @@ def create_run(req: RunRequest, db: Session = Depends(get_db)):
         requested_by=req.requested_by,
         repo=req.repo,
         sha=req.sha,
+        pytest_args=pytest_args,
     )
     db.add(run)
     chunks = [tests[i : i + req.chunk_size] for i in range(0, len(tests), req.chunk_size)]
@@ -169,12 +173,13 @@ def create_run(req: RunRequest, db: Session = Depends(get_db)):
                     tests=chunk_tests,
                     repo=req.repo,
                     sha=req.sha,
+                    pytest_args=pytest_args,
                 )
             )
     db.commit()
     return {"run_id": run_id, "chunks_queued": len(chunks) * len(browsers), "browsers": browsers,
             "environment": environment, "total_tests": len(tests) * len(browsers),
-            "repo": req.repo, "sha": req.sha}
+            "repo": req.repo, "sha": req.sha, "pytest_args": pytest_args or []}
 
 
 @api.get("/runs")
@@ -216,6 +221,26 @@ def get_run(run_id: str, db: Session = Depends(get_db)):
     }
 
 
+@api.post("/runs/{run_id}/cancel")
+def cancel_run(run_id: str, db: Session = Depends(get_db)):
+    """Stop a run: its queued and running chunks become cancelled; finished chunks keep their results.
+
+    A cancelled chunk is never leased again, so the queue (and KEDA's pending count) shrinks at once. A runner that is
+    already in the middle of a chunk finishes its pytest, but the results it then submits are refused with 403, which a
+    runner already treats as "this pod no longer holds the chunk": it drops them and carries on. Idempotent: cancelling
+    a finished or already cancelled run changes nothing. Full token only (a pod cannot cancel runs)."""
+    run = db.get(TestRunRecord, run_id)
+    if run is None:
+        raise HTTPException(status_code=404, detail="Run not found")
+    cancelled = (
+        db.query(TestChunkRecord)
+        .filter(TestChunkRecord.run_id == run_id, TestChunkRecord.status.in_(("pending", "running")))
+        .update({"status": "cancelled", "updated_at": _utcnow()}, synchronize_session=False)
+    )
+    db.commit()
+    return {"cancelled_chunks": cancelled, **summarize_runs(db, [run])[0]}
+
+
 @api.get("/chunks/{chunk_id}")
 def get_chunk(chunk_id: str, db: Session = Depends(get_db)):
     """Full chunk record including pytest stdout/stderr."""
@@ -253,6 +278,7 @@ def lease_chunk(runner_id: str, browser: str = DEFAULT_BROWSER, lease_tokens: bo
         "browser": row.browser,
         "repo": row.repo,
         "sha": row.sha,
+        "pytest_args": row.pytest_args or [],
     }
     if row.lease_token is not None:  # the only response that ever carries it; absent for old runners
         leased["lease_token"] = row.lease_token
@@ -315,6 +341,7 @@ def list_pods(exited_minutes: int = Query(60, ge=0, le=1440), db: Session = Depe
                 "environment": w.environment if w else None,
                 "started_at": k.get("started_at") or (_iso(w.started_at) if w else None),
                 "last_seen": _iso(w.last_seen) if w else None,
+                "live_view": live_view.available(w),
             }
         )
     counts: Dict[str, int] = {}
@@ -334,6 +361,8 @@ def submit_results(payload: TestResultSubmission, db: Session = Depends(get_db),
     record = db.get(TestChunkRecord, payload.chunk_id, with_for_update=True)
     if not record:
         raise HTTPException(status_code=404, detail="Chunk ID not found")
+    if record.status == "cancelled":   # before the token check: a chunk without a token would otherwise accept the write
+        raise HTTPException(status_code=403, detail="This chunk's run was cancelled")
     require_lease_token(record.lease_token, x_lease_token)
 
     counts = count_outcomes(record.tests, payload.results)
@@ -376,6 +405,7 @@ def get_summary(db: Session = Depends(get_db)):
         "pending_chunks": count("pending"),
         "running_chunks": count("running"),
         "completed_chunks": len(completed_records),
+        "cancelled_chunks": count("cancelled"),
         "details": details,
     }
 

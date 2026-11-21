@@ -46,7 +46,7 @@ def list_runs() -> tuple[list[dict], dict]:
 def _finished(detail: dict) -> bool:
     chunks = detail.get("chunks")
     chunks = chunks if isinstance(chunks, dict) else {}
-    return detail.get("status") == "completed" and not chunks.get("pending") and not chunks.get("running")
+    return detail.get("status") in ("completed", "cancelled") and not chunks.get("pending") and not chunks.get("running")
 
 
 def _settled(detail: dict, now: float | None = None) -> bool:
@@ -54,7 +54,7 @@ def _settled(detail: dict, now: float | None = None) -> bool:
     if not _finished(detail):
         return False
     chunks = dicts(detail.get("chunk_details"))
-    if chunks and all(c.get("has_allure") is True for c in chunks):
+    if chunks and all(c.get("has_allure") is True or c.get("status") == "cancelled" for c in chunks):   # a cancelled chunk uploads nothing
         return True
     stamps = [ms for ms in (iso_to_ms(c.get("updated_at")) for c in chunks) if ms is not None]
     newest = max(stamps) if stamps else iso_to_ms(detail.get("created_at"))

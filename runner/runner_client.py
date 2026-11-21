@@ -18,6 +18,8 @@ import requests
 import chunk_runner
 import code_download
 import lease_token as leasing
+import live_view
+import pytest_args as extra_args
 from tar_guard import MAX_TAR_BYTES, MAX_TAR_MEMBERS, safe_extract_tar  # noqa: F401  (re-exported)
 
 COORDINATOR_URL = os.getenv("COORDINATOR_URL", "http://central-coordinator-svc:8000")
@@ -39,6 +41,7 @@ SHA_RE = re.compile(r"^[0-9a-f]{40}$")
 CODE_MAX_BYTES = 100 * 1024 * 1024  # largest snapshot tarball accepted from the coordinator
 ALLURE_UPLOAD_BACKOFF = (2, 5)  # seconds slept between the upload attempts
 _ATTACHMENT_RE = re.compile(r"-attachment(\..*)?$")
+_live = None  # live_view.LiveView while this pod serves a live view (GRID_LIVE_VIEW=1), else None
 
 
 def _code_root() -> str:
@@ -128,8 +131,8 @@ def allure_available() -> bool:
     return importlib.util.find_spec("allure_pytest") is not None
 
 
-def build_test_env(environment: str, results_file: str, snapshot: bool = False) -> dict:
-    """Environment for the pytest process: the runner's, minus the grid credentials."""
+def build_test_env(environment: str, results_file: str, snapshot: bool = False, view=None) -> dict:
+    """Environment for the pytest process: the runner's, minus the grid credentials. With a live view: its display."""
     env = dict(os.environ)
     for secret in ("GRID_API_TOKEN", "COORDINATOR_URL"):
         env.pop(secret, None)  # test code must not see (or leak) the grid's token and address
@@ -143,11 +146,16 @@ def build_test_env(environment: str, results_file: str, snapshot: bool = False) 
         env["PYTHONPATH"] = os.pathsep.join(filter(None, [src, env.get("PYTHONPATH")]))
     if snapshot:
         env["PYTHONDONTWRITEBYTECODE"] = "1"  # the snapshot may be a read-only volume
-    return env
+    return live_view.test_env(env, view)
+
+
+def pytest_playwright_available() -> bool:
+    return importlib.util.find_spec("pytest_playwright") is not None
 
 
 def build_pytest_args(tests: list[str], snapshot: bool = False, alluredir: str | None = None,
-                      cache_dir: str | None = None) -> list[str]:
+                      cache_dir: str | None = None, headed: bool = False,
+                      extra: list[str] | None = None) -> list[str]:
     # Execute up to 3 tests concurrently in separate browser instances via pytest-xdist
     runner_count = min(len(tests), MAX_PARALLEL)
     args = [sys.executable, "-m", "pytest", "-v", f"-n={runner_count}"]
@@ -158,6 +166,10 @@ def build_pytest_args(tests: list[str], snapshot: bool = False, alluredir: str |
         args += ["-o", f"cache_dir={cache_dir}"]  # .pytest_cache stays out of /app and the snapshot (read-only)
     if snapshot and alluredir and allure_available():
         args.append(f"--alluredir={alluredir}")
+    if headed and pytest_playwright_available():
+        args.append("--headed")  # pytest-playwright's page/browser fixtures; others read HEADLESS=false
+    if extra:
+        args += extra  # the run's admin-configured options (pytest_args.words: already checked)
     # "--" keeps every test id a positional argument, never a pytest option.
     return args + ["--"] + tests
 
@@ -175,12 +187,18 @@ def _chunk_result(tests, environment, success, duration, test_results, stdout, s
     }
 
 
-def _run_chunk(tests, environment, snapshot, cwd, allure_dir) -> dict:
+def _run_chunk(tests, environment, snapshot, cwd, allure_dir, pytest_args=None) -> dict:
     """pytest for one chunk under GRID_CHUNK_TIMEOUT_SECONDS; a timeout is a failed chunk, not a crash."""
+    try:
+        extra = extra_args.words(pytest_args)
+    except extra_args.InvalidArguments as e:  # never run with some of the chosen options silently dropped
+        return _chunk_result(tests, environment, False, 0.0, [], "", f"Invalid pytest arguments for this run: {e}")
     with tempfile.TemporaryDirectory() as tmp:
         results_file = os.path.join(tmp, "results.json")
-        env = build_test_env(environment, results_file, snapshot)
-        args = build_pytest_args(tests, snapshot, allure_dir, os.path.join(tmp, "cache"))
+        view = _live if _live is not None and _live.alive() else None
+        env = build_test_env(environment, results_file, snapshot, view)
+        args = build_pytest_args(tests, snapshot, allure_dir, os.path.join(tmp, "cache"),
+                                 headed=view is not None, extra=extra)
         timeout = chunk_runner.chunk_timeout_seconds()
 
         start_time = time.time()
@@ -205,7 +223,7 @@ def _run_chunk(tests, environment, snapshot, cwd, allure_dir) -> dict:
 
 
 def run_assigned_tests(tests: list[str], environment: str = "", repo: str | None = None,
-                       sha: str | None = None, allure_dir: str | None = None) -> list[dict]:
+                       sha: str | None = None, allure_dir: str | None = None, pytest_args=None) -> list[dict]:
     """Run one chunk. Without repo/sha: the tests baked into the image, from the working directory.
 
     With repo/sha: from that snapshot (cwd = the snapshot) and, when allure_dir is given and
@@ -223,7 +241,7 @@ def run_assigned_tests(tests: list[str], environment: str = "", repo: str | None
         if allure_dir:
             os.makedirs(allure_dir, exist_ok=True)
     try:
-        return [_run_chunk(tests, environment, snapshot, cwd, allure_dir)]
+        return [_run_chunk(tests, environment, snapshot, cwd, allure_dir, pytest_args)]
     finally:
         if cwd is not None:
             code_download.discard_snapshot(cwd, _work_dir())  # never reused; a volume path is left alone
@@ -395,8 +413,20 @@ def submit_results(chunk_id: str, results: list[dict], lease_token: str | None =
     raise RuntimeError(f"Could not submit results for {chunk_id}")
 
 
+def start_live_view() -> None:
+    """GRID_LIVE_VIEW=1: start the display + VNC server and register them. Failing only costs the live view."""
+    global _live
+    if not live_view.enabled():
+        return
+    work = _work_dir()
+    _live = live_view.start(_log, str(work) if work.is_dir() else None)
+    if _live is not None:
+        live_view.register(_live, requests.post, f"{COORDINATOR_URL}/api/runners/{RUNNER_ID}/view", HEADERS, _log)
+
+
 def poll_and_execute():
     print(f"[{RUNNER_ID}] Runner initialized ({BROWSER}). Polling {COORDINATOR_URL}...")
+    start_live_view()
     heartbeat_stop = start_heartbeat()
     in_flight = {"chunk_id": None, "lease_token": None}  # the chunk held right now, and its lease secret
 
@@ -428,12 +458,13 @@ def poll_and_execute():
                 repo, sha = data.get("repo"), data.get("sha")  # null for runs that carry no code reference
                 code = f", code={_printable(repo)}@{_printable(sha, 7)}" if repo or sha else ""
                 token = leasing.accept(data.get("lease_token"), _log)  # None from an old coordinator
+                pytest_args = data.get("pytest_args") or None  # admin-configured options chosen for the run
 
                 print(f"[{RUNNER_ID}] Leased {chunk_id} (env={environment}{code}): {tests}")
                 in_flight.update(chunk_id=chunk_id, lease_token=token)
                 with tempfile.TemporaryDirectory(prefix="grid-allure-") as allure_dir:
                     results = run_assigned_tests(tests, environment, repo, sha,
-                                                 allure_dir if (repo or sha) else None)
+                                                 allure_dir if (repo or sha) else None, pytest_args)
                     accepted = submit_results(chunk_id, results, token)
                     in_flight.update(chunk_id=None, lease_token=None)
                     if accepted and (repo or sha):  # after the results: never delays or fails the chunk
@@ -450,6 +481,8 @@ def poll_and_execute():
         if in_flight["chunk_id"]:
             release_chunk(in_flight["chunk_id"], in_flight["lease_token"])
         report_exit()
+        if _live is not None:
+            _live.stop()
 
 
 if __name__ == "__main__":

@@ -10,6 +10,9 @@ const GRID_REFRESH_MS = 5000;
 let _gridSelectedRun = null;
 let _gridConfigLoaded = false;
 let _gridTimer = null;
+let _gridLivePods = new Set();     // pods that serve a live view (from the last pod list)
+let _gridArgDefs = [];             // extra pytest arguments configured in Admin → Grid
+let _gridEnvs = { list: [], def: '' };   // environments a run may use (Admin → Grid Environments, else the coordinator's)
 
 const _gEsc = (v) => String(v ?? '').replace(/[&<>"']/g, c => (
   { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -22,6 +25,15 @@ function _gBadge(state) {
   const s = state || 'unknown';
   return `<span class="g-badge g-${_gEsc(s)}">${_gEsc(s)}</span>`;
 }
+
+// A run can be cancelled while it is queued or running. The id travels in a data attribute (never in inline JS).
+const _gCancellable = (status) => status === 'queued' || status === 'running';
+const _gCancelBtn = (run) => (run && run.run_id && _gCancellable(run.status)
+  ? ` <button class="btn btn-sm g-cancel" data-grid-cancel="${_gEsc(run.run_id)}" title="Cancel this run">✕ Cancel</button>` : '');
+
+// Live view: a pod that runs its browser headed on a VNC display can be watched; the name travels in a data attribute.
+const _gLiveBtn = (name) => (typeof name === 'string' && name
+  ? ` <button class="btn btn-sm g-live" data-grid-live="${_gEsc(name)}" title="Watch this pod's browser live">👁 Live</button>` : '');
 
 function _gAgo(iso) {
   if (!iso) return '—';
@@ -61,6 +73,7 @@ async function loadGrid() {
 
   try {
     if (!_gridConfigLoaded) await _gridLoadConfig();
+    gridLoadTree(false);                              // once, and again whenever the active repo changes
     await Promise.all([_gridLoadPods(), _gridLoadRuns()]);
   } catch (e) {
     sub.textContent = `— ${e.message}`;
@@ -80,14 +93,120 @@ function _gridTick() {
 
 // ── New run form ──────────────────────────────────────────────────────────────
 
+// ── Extra pytest arguments (Admin → Grid) ─────────────────────────────────────
+// The words a run's arguments become on the pod, as the runner builds them: separate → [flag, value],
+// joined → [flag=value], switch → [flag]. Only for display; the server checks the choice again.
+function _gridArgWords(args) {
+  return _gList(args).flatMap(a => {
+    if (!a || typeof a.flag !== 'string') return [];
+    if (a.style === 'switch') return [a.flag];
+    return a.style === 'joined' ? [`${a.flag}=${a.value}`] : [a.flag, String(a.value ?? '')];
+  });
+}
+
+// The run's arguments for the current choice in the form (mirrors grid_args.resolve).
+function _gridChosenArgs(defs, selection, environment) {
+  return _gList(defs).flatMap(d => {
+    if (!d || typeof d.flag !== 'string') return [];
+    if (d.kind === 'environment') return environment ? [{ flag: d.flag, style: d.style, value: environment }] : [];
+    if (d.kind === 'switch') return selection[d.flag] ? [{ flag: d.flag, style: 'switch', value: null }] : [];
+    const value = selection[d.flag];
+    return value ? [{ flag: d.flag, style: d.style, value }] : [];
+  });
+}
+
+function _gridArgSelection() {
+  const selection = {};
+  document.querySelectorAll('#gridArgs [data-grid-arg]').forEach(el => {
+    selection[el.dataset.gridArg] = el.type === 'checkbox' ? el.checked : el.value;
+  });
+  return selection;
+}
+
+// The run's environment: the "Run's environment" argument's dropdown, or the default environment without one.
+function _gridRunEnvironment() {
+  const el = document.querySelector('#gridArgs [data-grid-env]');
+  return el ? el.value : (_gridEnvs.def || '');
+}
+
+function _gridUpdateArgPreview() {
+  const env = _gridRunEnvironment();
+  const words = _gridArgWords(_gridChosenArgs(_gridArgDefs, _gridArgSelection(), env));
+  const args = words.length ? words.map(w => (/\s/.test(w) ? `'${w}'` : w)).join(' ') : 'none';
+  const envNote = document.querySelector('#gridArgs [data-grid-env]') || !env ? '' : `Environment: ${env} (default) · `;
+  document.getElementById('gridEnvArg').textContent = `${envNote}Pod arguments: ${args}`;
+}
+
+// Built with DOM calls: labels, options and values come from the Admin Panel and are never parsed as HTML.
+function _gridRenderArgs(defs) {
+  const box = document.getElementById('gridArgs');
+  box.replaceChildren();
+  _gList(defs).forEach(d => {
+    if (!d || typeof d.flag !== 'string') return;
+    const field = document.createElement('div');
+    field.className = 'field';
+    const label = document.createElement('label');
+    label.textContent = `${d.label || d.flag} `;
+    const hint = document.createElement('span');
+    hint.className = 'hint';
+    hint.textContent = d.flag;
+    label.append(hint);
+    let input;
+    if (d.kind === 'environment') {
+      // The run's environment and this option's value: one dropdown of the environments a run may use.
+      input = document.createElement('select');
+      _gList(_gridEnvs.list).forEach(env => {
+        const o = document.createElement('option');
+        o.value = String(env); o.textContent = String(env); o.selected = env === _gridEnvs.def;
+        input.append(o);
+      });
+      input.dataset.gridEnv = '1';
+      input.addEventListener('change', _gridUpdateArgPreview);
+      field.append(label, input);
+      box.append(field);
+      return;
+    }
+    if (d.kind === 'switch') {
+      input = document.createElement('input');
+      input.type = 'checkbox';
+      input.checked = d.default === true;
+      const wrap = document.createElement('label');
+      wrap.className = 'checkbox-label';
+      wrap.append(input, document.createTextNode(` pass ${d.flag}`));
+      field.append(label, wrap);
+    } else {
+      input = document.createElement('select');
+      const options = (d.required ? [] : [['', '(not passed)']]).concat(_gList(d.values).map(v => [String(v), String(v)]));
+      options.forEach(([value, text]) => {
+        const o = document.createElement('option');
+        o.value = value; o.textContent = text; o.selected = value === (d.default || '');
+        input.append(o);
+      });
+      field.append(label, input);
+    }
+    input.dataset.gridArg = d.flag;
+    input.addEventListener('change', _gridUpdateArgPreview);
+    box.append(field);
+  });
+}
+
 async function _gridLoadConfig() {
   const cfg = await _gFetch('/api/grid/config');
-  document.getElementById('gridEnv').innerHTML = _gList(cfg.environments).map(e =>
-    `<option value="${_gEsc(e)}"${e === cfg.default_environment ? ' selected' : ''}>${_gEsc(e)}</option>`).join('');
+  _gridEnvs = { list: _gList(cfg.environments), def: cfg.default_environment || _gList(cfg.environments)[0] || '' };
+  try {
+    _gridArgDefs = _gList((await _gFetch('/api/grid/pytest-args')).arguments);
+  } catch (e) {
+    _gridArgDefs = [];
+  }
+  _gridRenderArgs(_gridArgDefs);
+  _gridUpdateArgPreview();
   document.getElementById('gridBrowsers').innerHTML = _gList(cfg.browsers).map(b =>
     `<label><input type="checkbox" value="${_gEsc(b)}"${b === cfg.default_browser ? ' checked' : ''}/> ${_gEsc(b)}</label>`).join('');
   document.getElementById('gridChunk').value = cfg.default_chunk_size;
   document.getElementById('gridTests').addEventListener('input', _gridCountTests);
+  document.getElementById('gridTests').addEventListener('change', () => { _gridSelFromText(); _gridRenderTree(); });
+  document.getElementById('gridTreeFilter').addEventListener('input', _gridRenderTree);
+  _gridApplyCollapsed();
   _gridConfigLoaded = true;
 }
 
@@ -96,32 +215,17 @@ function _gridTestList() {
 }
 
 function _gridCountTests() {
-  document.getElementById('gridTestCount').textContent = `${_gridTestList().length} selected`;
+  const ids = _gridTestList();
+  const tests = typeof _gridTree !== 'undefined' && _gridTree ? _gridTestCountOf(ids) : ids.length;   // grid_picker.js
+  document.getElementById('gridTestCount').textContent = ids.length
+    ? `${ids.length} selected${tests !== ids.length ? ` (≈${tests} tests)` : ''}` : '0 selected';
 }
 
-// The repo chosen on the Executor tab — what "Load from repo" lists and what a run is snapshotted from.
+// The active repo (Repository tab; the Executor keeps it in its #repo field) — what the picker lists and what a run
+// is snapshotted from.
 function _gridRepoPath() {
-  return (document.getElementById('repo').value || document.getElementById('repoSelect').value || '').trim();
-}
-
-async function gridLoadFromRepo() {
-  const msg = document.getElementById('gridStartMsg');
-  const repo = _gridRepoPath();
-  if (!repo) { msg.className = 'grid-msg err'; msg.textContent = 'Select a repo on the Executor tab first'; return; }
-  try {
-    const data = await _gFetch(`/api/tests?repo=${encodeURIComponent(repo)}`);
-    const prefix = repo.replace(/[\\/]+$/, '');
-    const files = Object.values(data.tree || {}).flat().map(p => {
-      const norm = String(p).replace(/\\/g, '/');
-      const base = prefix.replace(/\\/g, '/');
-      return norm.startsWith(base + '/') ? norm.slice(base.length + 1) : norm;
-    });
-    document.getElementById('gridTests').value = [...new Set(files)].join('\n');
-    _gridCountTests();
-    msg.className = 'grid-msg'; msg.textContent = `Loaded ${files.length} test files`;
-  } catch (e) {
-    msg.className = 'grid-msg err'; msg.textContent = e.message;
-  }
+  const active = typeof _repoWs !== 'undefined' && _repoWs ? ((_repoWs.repos || []).find(r => r.active) || {}).path : '';
+  return (document.getElementById('repo').value || document.getElementById('repoSelect').value || active || '').trim();
 }
 
 async function gridStartRun() {
@@ -136,8 +240,9 @@ async function gridStartRun() {
   const repoPath = _gridRepoPath();
   const payload = {
     tests, browsers,
-    environment: document.getElementById('gridEnv').value,
+    environment: _gridRunEnvironment(),
     chunk_size: parseInt(document.getElementById('gridChunk').value, 10) || 3,
+    pytest_args: _gridArgSelection(),
   };
   if (repoPath) payload.repo_path = repoPath;       // run from a snapshot of this repo's committed state
 
@@ -167,6 +272,23 @@ async function gridStartRun() {
   }
 }
 
+// ── Cancel a queued or running run ────────────────────────────────────────────
+
+async function gridCancelRun(runId) {
+  const msg = document.getElementById('gridStartMsg');
+  if (!confirm(`Cancel ${runId}?\n\nChunks still waiting in the queue are dropped. A chunk that is already running ` +
+               'finishes on its pod, but its results are discarded. Finished chunks keep their results.')) return;
+  try {
+    const out = await _gFetch(`/api/grid/runs/${encodeURIComponent(runId)}/cancel`, { method: 'POST' });
+    msg.className = 'grid-msg';
+    msg.textContent = `Cancelled ${runId}: ${_gNum(out.cancelled_chunks)} chunk(s) stopped`;
+  } catch (e) {
+    msg.className = 'grid-msg err'; msg.textContent = `Could not cancel ${runId}: ${e.message}`;
+  }
+  await Promise.all([_gridLoadRuns().catch(() => {}), _gridLoadPods().catch(() => {})]);
+  if (_gridSelectedRun === runId) _gridLoadRunDetail(runId);
+}
+
 // ── Pods ──────────────────────────────────────────────────────────────────────
 
 function _gridPodCountsHtml(counts) {
@@ -185,6 +307,7 @@ function _gridPodRowsHtml(pods) {
       <td class="g-mono">${p.run_id ? `<a href="#" data-grid-run="${_gEsc(p.run_id)}">${_gEsc(p.run_id)}</a>` : '—'}${p.current_chunk ? `<br>${_gEsc(p.current_chunk)}` : ''}</td>
       <td>${_gEsc(p.environment || '—')}</td>
       <td>${_gAgo(p.last_seen)}</td>
+      <td>${p.live_view === true ? _gLiveBtn(p.name) : ''}</td>
     </tr>`;
   }).join('');
 }
@@ -195,9 +318,10 @@ async function _gridLoadPods() {
   document.getElementById('gridPodSource').textContent = k.enabled
     ? (k.error ? `· Kubernetes: ${k.error}` : '· live from OpenShift')
     : '· from runner heartbeats (not running in a cluster)';
+  _gridLivePods = new Set(_gList(data.pods).filter(p => p && p.live_view === true && typeof p.name === 'string').map(p => p.name));
   document.getElementById('gridPodCounts').innerHTML = _gridPodCountsHtml(data.counts);
   document.getElementById('gridPodBody').innerHTML = _gridPodRowsHtml(data.pods) ||
-    '<tr><td colspan="6" style="text-align:center;color:var(--text-dim);padding:24px;">No pods yet — start a run</td></tr>';
+    '<tr><td colspan="7" style="text-align:center;color:var(--text-dim);padding:24px;">No pods yet — start a run</td></tr>';
 }
 
 // ── Runs ──────────────────────────────────────────────────────────────────────
@@ -215,7 +339,7 @@ function _gridRunRowsHtml(runs, selected) {
       <td>${_gAgo(r.created_at)}</td>
       <td>${_gEsc(r.environment)}</td>
       <td>${_gEsc(_gList(r.browsers).join(', '))}</td>
-      <td>${_gBadge(r.status)}${r.outcome ? ' ' + _gBadge(r.outcome) : ''}</td>
+      <td>${_gBadge(r.status)}${r.outcome ? ' ' + _gBadge(r.outcome) : ''}${_gCancelBtn(r)}</td>
       <td title="${_gEsc(tip)}">
         <div class="g-progress">
           <span style="width:${pct(passed)}%;background:var(--green);"></span>
@@ -244,7 +368,9 @@ function gridOpenRun(runId) {
 }
 
 function _gridDetailTitleHtml(run) {
-  return `${_gEsc(run.run_id)} · ${_gEsc(run.environment)} · ${_gEsc(_gList(run.browsers).join(', '))} ${_gBadge(run.status)}${run.outcome ? ' ' + _gBadge(run.outcome) : ''}`;
+  const words = _gridArgWords(run.pytest_args);
+  const args = words.length ? ` <span class="hint g-mono" title="Extra pytest arguments of this run">pytest ${_gEsc(words.join(' '))}</span>` : '';
+  return `${_gEsc(run.run_id)} · ${_gEsc(run.environment)} · ${_gEsc(_gList(run.browsers).join(', '))} ${_gBadge(run.status)}${run.outcome ? ' ' + _gBadge(run.outcome) : ''}${_gCancelBtn(run)}${args}`;
 }
 
 function _gridDetailRowsHtml(run) {
@@ -259,7 +385,7 @@ function _gridDetailRowsHtml(run) {
         <td class="g-mono">${_gEsc(String(c.chunk_id ?? '').replace(String(run.run_id ?? '') + '-', ''))}</td>
         <td>${_gEsc(c.browser)}</td>
         <td>${_gBadge(c.status)}</td>
-        <td class="g-mono">${_gEsc(c.assigned_runner || '—')}</td>
+        <td class="g-mono">${_gEsc(c.assigned_runner || '—')}${c.status === 'running' && _gridLivePods.has(c.assigned_runner) ? _gLiveBtn(c.assigned_runner) : ''}</td>
         <td><ul class="g-tests">${items}</ul></td>
         <td>${c.status === 'completed' ? `<button class="btn btn-sm" data-grid-log="${_gEsc(c.chunk_id)}">View</button>` : ''}</td>
       </tr>`;
@@ -293,11 +419,88 @@ async function gridShowLog(chunkId) {
   }
 }
 
+// ── Live view (noVNC, loaded on first use) ────────────────────────────────────
+//
+// Amplify relays the viewer's WebSocket to the pod's VNC server (routes/grid_live.py); the browser never talks to a
+// pod. View-only: a watcher cannot click or type into a running test (the pod's VNC server refuses input too).
+
+let _gridRfb = null;
+
+function _gridLiveStatus(text) {
+  document.getElementById('gridLiveStatus').textContent = text;
+}
+
+function gridCloseLive() {
+  if (_gridRfb) { try { _gridRfb.disconnect(); } catch (e) { /* already gone */ } }
+  _gridRfb = null;
+  document.getElementById('gridLiveScreen').replaceChildren();
+  document.getElementById('gridLiveModal').style.display = 'none';
+}
+
+async function gridOpenLive(pod) {
+  gridCloseLive();
+  const modal = document.getElementById('gridLiveModal');
+  document.getElementById('gridLiveTitle').textContent = `Live view — ${pod}`;
+  _gridLiveStatus('Connecting…');
+  modal.style.display = 'flex';
+  let view;
+  try {
+    view = await _gFetch(`/api/grid/pods/${encodeURIComponent(pod)}/view`);
+  } catch (e) {
+    _gridLiveStatus(e.message);
+    return;
+  }
+  if (view.chunk_id) document.getElementById('gridLiveTitle').textContent = `Live view — ${pod} · ${view.chunk_id}`;
+  let RFB;
+  try {
+    RFB = (await import('/static/vendor/novnc/core/rfb.js')).default;
+  } catch (e) {
+    _gridLiveStatus('The live viewer could not be loaded');
+    return;
+  }
+  if (document.getElementById('gridLiveModal').style.display === 'none') return;     // closed while loading
+  const scheme = location.protocol === 'https:' ? 'wss:' : 'ws:';
+  const url = `${scheme}//${location.host}/api/grid/pods/${encodeURIComponent(pod)}/vnc`;
+  const rfb = new RFB(document.getElementById('gridLiveScreen'), url,
+    { credentials: { password: String(view.password || '') }, wsProtocols: ['binary'], shared: true });
+  rfb.viewOnly = true;
+  rfb.scaleViewport = true;
+  rfb.background = '#000';
+  rfb.addEventListener('connect', () => _gridLiveStatus('● Live'));
+  rfb.addEventListener('securityfailure', () => _gridLiveStatus('The pod refused the viewer (password)'));
+  rfb.addEventListener('disconnect', (e) => {
+    if (_gridRfb !== rfb) return;
+    _gridLiveStatus(e.detail && e.detail.clean ? 'Disconnected — the pod finished or stopped serving' : 'Connection lost — the pod may have finished');
+  });
+  _gridRfb = rfb;
+}
+
+function gridLiveFullscreen() {
+  const screen = document.getElementById('gridLiveScreen');
+  if (screen.requestFullscreen) screen.requestFullscreen().catch(() => {});
+}
+
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape' && _gridRfb && !document.fullscreenElement) gridCloseLive();
+});
+
 // ── Wiring (event delegation: ids never go through inline JS strings) ─────────
 
 document.addEventListener('click', (e) => {
   const from = e.target && e.target.closest ? e.target : null;
   if (!from || !from.closest('#page-grid')) return;
+  const cancel = from.closest('[data-grid-cancel]');          // before the row: the button sits inside a clickable row
+  if (cancel) { e.preventDefault(); e.stopPropagation(); gridCancelRun(cancel.dataset.gridCancel); return; }
+  const live = from.closest('[data-grid-live]');
+  if (live) { e.preventDefault(); e.stopPropagation(); gridOpenLive(live.dataset.gridLive); return; }
+  if (from.closest('[data-grid-live-close]')) { gridCloseLive(); return; }
+  if (from.closest('[data-grid-live-full]')) { gridLiveFullscreen(); return; }
+  const treeBtn = from.closest('[data-grid-tree]');
+  if (treeBtn) { _gridTreeAction(treeBtn.dataset.gridTree); return; }
+  const fold = from.closest('[data-grid-fold]');
+  if (fold) { e.preventDefault(); e.stopPropagation(); _gridToggleSection(fold.closest('[data-grid-collapse]')); return; }
+  const section = from.closest('[data-grid-collapse]');
+  if (section && !from.closest('button, a, input, select')) { _gridToggleSection(section); return; }
   const run = from.closest('[data-grid-run]');
   if (run) { e.preventDefault(); gridOpenRun(run.dataset.gridRun); return; }
   const log = from.closest('[data-grid-log]');

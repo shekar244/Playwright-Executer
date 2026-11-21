@@ -3,4 +3,4 @@
 # the Dockerfile COPYs, so the venv, .git, the Amplify sources and the coordinator's own tests are never sent.
 **
 !coordinator/*.py
-!coordinator/requirements.txt
+!coordinator-requirements.txt

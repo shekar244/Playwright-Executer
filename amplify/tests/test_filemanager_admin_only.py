@@ -102,11 +102,11 @@ def test_an_admin_can_land_on_the_file_manager_but_regular_users_fall_back(admin
 
 def test_the_fallback_skips_hidden_tabs_too(admin, user):
     admin.post("/api/admin/ui-tabs", json={"ui_tabs": {"executor": False}, "default_tab": "filemanager"})
-    assert user.get("/api/config").get_json()["default_tab"] == "dashboard"
+    assert user.get("/api/config").get_json()["default_tab"] == "repository"
 
 
 def test_an_admin_cannot_leave_regular_users_with_no_tab(admin):
-    only_fm = {k: False for k in ("executor", "dashboard", "grid", "zephyr", "insights", "tools")}
+    only_fm = {k: False for k in ("executor", "repository", "dashboard", "grid", "zephyr", "testdata", "insights", "tools")}
     r = admin.post("/api/admin/ui-tabs", json={"ui_tabs": {**only_fm, "filemanager": True}})
     assert r.status_code == 400 and "regular users" in r.get_json()["error"]
     assert ss.load_ui_tabs()["executor"] is True                                  # nothing was saved

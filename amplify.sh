@@ -40,14 +40,14 @@ PYTHON="$VENV/bin/python"
 echo "[INFO] Using venv Python: $PYTHON"
 
 # ----------------------------------------------------------
-# Install requirements.txt when anything the app imports is missing
-# (first run, or after requirements.txt changes). Covers the server
+# Install amplify-requirements.txt when anything the app imports is missing
+# (first run, or after amplify-requirements.txt changes). Covers the server
 # (flask, bcrypt, PyJWT, ...) and Jira Insights (streamlit, plotly, ...).
 # ----------------------------------------------------------
 if ! "$PYTHON" -c "import flask, bcrypt, jwt, yaml, openpyxl, streamlit, plotly, pandas, pygwalker, streamlit_sortables" 2>/dev/null; then
     echo ""
     echo "[INFO] Installing requirements (first run takes a minute)..."
-    "$PYTHON" -m pip install --quiet -r "$EXECUTER_ROOT/requirements.txt"
+    "$PYTHON" -m pip install --quiet -r "$EXECUTER_ROOT/amplify-requirements.txt"
 fi
 
 # ----------------------------------------------------------

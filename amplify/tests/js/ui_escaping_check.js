@@ -107,7 +107,10 @@ async function checkGrid() {
         { nodeid: H3, outcome: H4, duration: `0.1</span>${H0}`, message: H5 },
         null, 'junk',
       ] }],
-    })).concat([{ chunk_id: runId + '-x', status: 'completed', results: 'junk', tests: 'junk' }, null, 'junk']),
+    })).concat([{ chunk_id: runId + '-x', status: 'completed', results: 'junk', tests: 'junk' }, null, 'junk',
+      { chunk_id: runId + '-live', status: 'running', assigned_runner: H0, tests: [H1] },
+      { chunk_id: runId + '-done', status: 'completed', assigned_runner: H0, tests: [H1] },
+      { chunk_id: runId + '-notlive', status: 'running', assigned_runner: H1, tests: [H1] }]),
   };
   const runs = { runs: [
     { run_id: runId, created_at: H0, environment: H1, browsers: [H0], status: H4, outcome: H5, total_tests: H0, passed: H0, failed: H1,
@@ -117,8 +120,9 @@ async function checkGrid() {
     null, 'junk',
   ] };
   const pods = { kubernetes: { enabled: true, error: H0 }, counts: { [H0]: H1, [H2]: -3, ok: 4 },
-    pods: [{ name: H0, node: H1, browser: H2, state: H3, reason: H4, run_id: runId, current_chunk: H5, environment: H6, last_seen: H0 },
-      { name: null, run_id: H4 }, null, 'junk'] };
+    pods: [{ name: H0, node: H1, browser: H2, state: H3, reason: H4, run_id: runId, current_chunk: H5, environment: H6, last_seen: H0,
+      live_view: true },
+      { name: H1, live_view: 'true' }, { name: H2, live_view: 1 }, { name: null, run_id: H4, live_view: true }, null, 'junk'] };
   const files = { respond: (url) => {
     if (url.startsWith('/api/grid/pods')) return json(pods);
     if (url.startsWith('/api/grid/runs?')) return json(runs);
@@ -158,6 +162,73 @@ async function checkGrid() {
   clickOn('[data-grid-log]', { gridLog: logIds[0] });
   if (opened[0] !== runId || logged[0] !== logIds[0]) problems.push('grid: the click handler did not pass the exact id on');
   if (!listeners.click) problems.push('grid: no delegated click handler');
+
+  // The Cancel button: only queued and running runs get one, the id travels in a data attribute, and a click on it
+  // passes the exact id on without also opening the row it sits in.
+  const cancellable = [
+    { run_id: H3, status: 'queued', browsers: [H0], environment: H1, chunks: { completed: 0, total: 1 }, requested_by: H2 },
+    { run_id: H1, status: 'running', browsers: [], chunks: {}, requested_by: null },
+    { run_id: H4, status: 'completed', browsers: [], chunks: {} },
+    { run_id: H5, status: 'cancelled', browsers: [], chunks: {} },
+    { run_id: H6, status: H0, browsers: [], chunks: {} },
+  ];
+  const cancelRows = evalIn(ctx, `_gridRunRowsHtml(${JSON.stringify(cancellable)}, null)`);
+  audit(cancelRows, 'grid cancel rows');
+  const cancelIds = attr(cancelRows, 'data-grid-cancel');
+  if (cancelIds.length !== 2 || cancelIds[0] !== H3 || cancelIds[1] !== H1) {
+    problems.push('grid cancel: only queued and running runs get a Cancel button, with the exact id in the data attribute');
+  }
+  const cancelTitle = evalIn(ctx, `_gridDetailTitleHtml(${JSON.stringify({ run_id: H3, status: 'queued', environment: H1, browsers: [H0] })})`);
+  audit(cancelTitle, 'grid cancel title');
+  if (attr(cancelTitle, 'data-grid-cancel')[0] !== H3) problems.push('grid cancel: the run detail title lost the id');
+  if (/data-grid-cancel/.test(evalIn(ctx, `_gridDetailTitleHtml(${JSON.stringify({ run_id: 'r', status: 'completed' })})`))) {
+    problems.push('grid cancel: a finished run must not offer Cancel');
+  }
+  const cancelled = [];
+  ctx.gridCancelRun = (id) => cancelled.push(id);
+  listeners.click({
+    preventDefault() {}, stopPropagation() {},
+    target: { closest: (sel) => (sel === '#page-grid' ? {} : sel === '[data-grid-cancel]' ? { dataset: { gridCancel: cancelIds[0] } }
+      : sel === '[data-grid-run]' ? { dataset: { gridRun: 'WRONG' } } : null) },
+  });
+  if (cancelled[0] !== H3 || opened.length > 1) problems.push('grid cancel: a click on Cancel must pass the exact id on and must not also open the run');
+
+  // Live view: a button only for pods that say live_view === true (and, in the run detail, only on a running chunk of
+  // such a pod); the pod name travels in a data attribute and a click passes it on exactly, without opening the run.
+  const livePods = attr(parts.pods, 'data-grid-live');
+  if (livePods.length !== 1 || livePods[0] !== H0) problems.push('grid live: only pods with live_view === true get a Live button, with the exact name');
+  const liveChunks = attr(parts.detail, 'data-grid-live');
+  if (liveChunks.length !== 1 || liveChunks[0] !== H0) problems.push('grid live: only a running chunk on a live pod gets a Live button');
+  const watched = [];
+  ctx.gridOpenLive = (name) => watched.push(name);
+  listeners.click({
+    preventDefault() {}, stopPropagation() {},
+    target: { closest: (sel) => (sel === '#page-grid' ? {} : sel === '[data-grid-live]' ? { dataset: { gridLive: livePods[0] } }
+      : sel === '[data-grid-run]' ? { dataset: { gridRun: 'WRONG' } } : null) },
+  });
+  if (watched[0] !== H0 || opened.length > 1) problems.push('grid live: a click on Live must pass the exact pod name on and must not also open the run');
+  if (evalIn(ctx, '_gLiveBtn(null)') !== '' || evalIn(ctx, '_gLiveBtn(5)') !== '') problems.push('grid live: no button without a pod name');
+
+  // Extra pytest arguments: shown in the run detail title (escaped), formed exactly as the runner forms them.
+  const argTitle = evalIn(ctx, `_gridDetailTitleHtml(${JSON.stringify({ run_id: 'r', status: 'completed', browsers: [],
+    pytest_args: [{ flag: '--env', style: 'separate', value: H0 }, { flag: H1, style: 'joined', value: H2 }, null, 'junk',
+      { flag: '--lf', style: 'switch', value: null }] })})`);
+  audit(argTitle, 'grid pytest args title');
+  mustContainEscaped(argTitle, 'grid pytest args title');
+  const words = JSON.parse(evalIn(ctx, `JSON.stringify(_gridArgWords(${JSON.stringify([
+    { flag: '--env', style: 'separate', value: 'qa3' }, { flag: '--channel', style: 'joined', value: 'msedge' },
+    { flag: '--lf', style: 'switch', value: null }, { flag: '-m', style: 'separate', value: 'smoke and not slow' }])}))`));
+  if (JSON.stringify(words) !== JSON.stringify(['--env', 'qa3', '--channel=msedge', '--lf', '-m', 'smoke and not slow'])) {
+    problems.push(`grid pytest args: words formed wrongly: ${JSON.stringify(words)}`);
+  }
+  const chosen = JSON.parse(evalIn(ctx, `JSON.stringify(_gridChosenArgs(${JSON.stringify([
+    { flag: '--env', kind: 'environment', style: 'separate' }, { flag: '-m', kind: 'choice', style: 'separate', values: ['smoke'] },
+    { flag: '--lf', kind: 'switch', style: 'switch' }, { flag: '--x', kind: 'choice', style: 'joined', values: ['a'] }])},
+    ${JSON.stringify({ '-m': 'smoke', '--lf': true, '--x': '' })}, 'qa3'))`));
+  if (JSON.stringify(chosen) !== JSON.stringify([{ flag: '--env', style: 'separate', value: 'qa3' },
+    { flag: '-m', style: 'separate', value: 'smoke' }, { flag: '--lf', style: 'switch', value: null }])) {
+    problems.push(`grid pytest args: the chosen arguments are wrong: ${JSON.stringify(chosen)}`);
+  }
 }
 
 // ── dashboard.js ──────────────────────────────────────────────────────────────

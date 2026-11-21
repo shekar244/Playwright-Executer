@@ -23,11 +23,11 @@ Scaffold the repository with the following exact layout:
 distributed-playwright-openshift/
 ├── Dockerfile.coordinator
 ├── Dockerfile.grid-runner
+├── coordinator-requirements.txt
+├── runner-requirements.txt
 ├── coordinator/
-│   ├── requirements.txt
 │   └── coordinator.py
 ├── runner/
-│   ├── requirements.txt
 │   ├── runner_client.py
 │   └── conftest.py
 ├── scripts/
@@ -47,7 +47,7 @@ distributed-playwright-openshift/
 
 ### Step 1: Central Coordination Tier (`coordinator/`)
 
-#### `coordinator/requirements.txt`
+#### `coordinator-requirements.txt`
 
 ```text
 fastapi==0.115.6
@@ -65,8 +65,8 @@ Use a lightweight slim image since the coordinator does not require browser bina
 FROM python:3.12-slim
 
 WORKDIR /app
-COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+COPY coordinator-requirements.txt .
+RUN pip install --no-cache-dir -r coordinator-requirements.txt
 
 COPY coordinator.py .
 
@@ -222,14 +222,28 @@ def get_summary(db: Session = Depends(get_db)):
 
 ### Step 2: Ephemeral Runner Tier (`runner/`)
 
-#### `runner/requirements.txt`
+#### `runner-requirements.txt`
 
 ```text
 pytest==8.3.4
 pytest-xdist==3.6.1
 playwright==1.49.0
 requests==2.32.3
+allure-pytest==2.16.2
+python-dotenv==1.2.4
+pytest-playwright==0.10.0
+pytest-html==4.2.0
+pymysql==1.2.4
+pyyaml==6.0.4
+anthropic==2.12.0
+openai==3.57.0
+trcli==1.16.0
+allure-combine==1.0.11
+python-dateutil==4.0.0
+faker==40.63.0
 ```
+
+The runner image is the test setup, ready before any pod starts: the browser, Python 3.12 and every package the test repos import are baked in, and nothing is installed when a chunk runs. A repo's own `requirements.txt` is **not** read on the pods; when a test repo needs another package, add it (pinned) to `runner-requirements.txt` and rebuild and push the runner images.
 
 #### `Dockerfile.grid-runner`
 
@@ -267,9 +281,9 @@ RUN curl -sSL https://packages.microsoft.com/keys/microsoft.asc | gpg --dearmor 
 
 WORKDIR /app
 
-COPY runner/requirements.txt .
+COPY runner-requirements.txt .
 RUN python -m pip install --no-cache-dir --upgrade pip && \
-    python -m pip install --no-cache-dir -r requirements.txt
+    python -m pip install --no-cache-dir -r runner-requirements.txt
 
 # Install Playwright OS system dependencies without downloading extra browsers
 RUN playwright install-deps chromium
@@ -661,12 +675,15 @@ A run can carry the code it tests and yields one Allure 3 report. All coordinato
 | `PUT /chunks/{chunk_id}/allure` | Raw tar.gz. 404 unknown chunk, 409 not completed, 400 unsafe/corrupt archive, 413 over `MAX_ALLURE_BYTES`; overwriting (retry) is allowed. |
 | `GET /runs/{run_id}/report/info` | Cheap, never generates: `available`, `chunks_with_allure`, `chunks_total`, `cached`. |
 | `GET /runs/{run_id}/report` | `text/html`, `ETag`, `Cache-Control: no-store`, 304 on `If-None-Match`. 404 no Allure data, 503 CLI missing (or busy, with `Retry-After: 5`), 502 generation failed, 504 timeout. |
-| `GET /runs`, `/runs/{id}` | Runs carry `repo`/`sha`; `chunk_details[*].has_allure` says whether a chunk's archive exists. |
+| `GET /runs`, `/runs/{id}` | Runs carry `repo`/`sha`; `chunk_details[*].has_allure` says whether a chunk's archive exists. A run's `status` is `queued`, `running`, `completed` or `cancelled`; `chunks` counts `pending`, `running`, `completed` and `cancelled`. |
+| `POST /runs/{run_id}/cancel` | **Full token only** (a pod cannot cancel). Every `pending` or `running` chunk of the run becomes `cancelled`; finished chunks keep their results, so a partly done run ends as `cancelled` with its counts. Answers `cancelled_chunks` plus the run summary. 404 unknown run. Idempotent: a finished or already cancelled run is unchanged. A cancelled chunk is never leased again (KEDA's pending count drops and runners scale down). A runner that is mid-chunk finishes its pytest, and its `POST /results/submit` is then refused with **403** `This chunk's run was cancelled`: runners treat 403 on submit as "this pod no longer holds the chunk", drop the results and carry on (any other error would be retried and end the pod). The check precedes the lease-token check, because a chunk without a token would otherwise accept the write. |
 
 **Environment variables** (all optional; defaults shown)
 
 | Variable | Default | Meaning |
 |---|---|---|
+| `SUPPORTED_BROWSERS`, `DEFAULT_BROWSER` | all five, `edge` | Comma list of the browsers the coordinator accepts and offers (`edge`, `chrome`, `chromium`, `firefox`, `webkit`; unknown names are ignored), and the one a run gets when none is chosen. Limit it to browsers that have runner images: a run for any other waits in the queue forever. The local Docker stack sets both to `chromium`. |
+| `SUPPORTED_ENVIRONMENTS`, `DEFAULT_ENVIRONMENT` | `dev,qa,perf,prod`, `dev` | Comma list of target environments the coordinator validates and offers, and the default environment for a run. Amplify can override these choices in **Admin Panel → Grid**, while the coordinator still performs the final validation. |
 | `CODE_DIR` / `ALLURE_DIR` / `REPORT_DIR` | `/data/code` / `/data/allure` / `/data/reports` | Stores, all on the coordinator-only `/data` volume. |
 | `MAX_CODE_BYTES` | 104857600 | Largest code archive. |
 | `MAX_ALLURE_BYTES` | 52428800 | Largest per-chunk Allure archive. |
@@ -674,6 +691,27 @@ A run can carry the code it tests and yields one Allure 3 report. All coordinato
 | `ALLURE3_BIN` | `allure` | The Allure 3 CLI: a command, `npx` (= `npx allure`), or the npm bin folder (`echo $(npm config get prefix)/bin`). |
 | `REPORT_TIMEOUT_SECONDS`, `REPORT_CONCURRENCY` | 120, 1 | CLI timeout and wait-for-a-slot limit; at most this many generations at once. |
 | `CODE_RETENTION_DAYS`, `ALLURE_RETENTION_DAYS` | 30, 14 | Older code archives, or Allure archives and cached reports, are deleted (by mtime, swept hourly); reusing a snapshot (`PUT` of an existing one, `GET`/`HEAD`) or building a report touches its files, so retention counts from last use. |
+
+**Extra pytest arguments** (Amplify's Admin Panel → Grid → *Pod pytest arguments*; chosen per run in the Grid tab)
+
+An admin defines which pytest options a run passes to the pods and the values users may pick: *Run's environment* (a dropdown of the environment names given on that row; the choice is the run's environment — the coordinator's `SUPPORTED_ENVIRONMENTS` must include them — and the option's value, e.g. `--env qa3`; this replaces the Admin → Grid *Grid Environments* fields, whose saved values still apply while the row lists none), *Pick from values* (a dropdown; optional unless *Required*) or *On/off switch* (the bare option). Format *separate* gives `--env qa3`, *joined* `--env=qa3`. Nothing is passed until an admin defines something (the environment always reaches the pods as `TEST_ENV`), and every option must exist in the test repo (its `conftest.py` or a plugin), or pytest stops with "unrecognized arguments".
+
+- `POST /api/runs` takes `pytest_args: [{"flag", "style": "separate"|"joined"|"switch", "value"}]` (at most 20, each option once). The coordinator stores them on the run and on every chunk, returns them with `GET /runs`, `/runs/{id}` and in the lease (`pytest_args`, `[]` when none), and announces the `pytest-args` feature; Amplify refuses to start a run with arguments on a coordinator without it, rather than have them dropped.
+- The runner places the words after its own options and before the `--` that precedes the test ids. A chunk whose arguments break the rules fails with the reason instead of running without them.
+- The same rules are applied in `amplify/grid_args.py`, `coordinator/pytest_args.py` and `runner/pytest_args.py` (a test keeps them identical): an option is `-x` or `--name`; values are 1-200 printable characters and, in the separate style, cannot start with `-`; short options cannot be joined; a switch has no value. Options the runner sets itself are reserved: `-p -n --numprocesses --maxprocesses --dist --alluredir -o --override-ini --headed --basetemp --rootdir --confcutdir --pyargs -h --help -V --version`.
+- The gridtest plugin no longer registers `--env` (a repo that defines `--env` itself, like p13n-mktg-exp-qe-automation, failed at start-up with a conflicting option); the baked sample suite registers it in its own `tests/conftest.py`.
+
+**Live view** (watching a pod's browser while its tests run; Amplify's Grid tab → **👁 Live**)
+
+A runner started with `GRID_LIVE_VIEW=1` (the default in the runner manifests and in `scripts/local_pod_launcher.py`) starts `Xvfb :99` and `x11vnc` on port **5900**, view-only and behind a random 8-character password, then registers with the coordinator. pytest gets `DISPLAY=:99`, `HEADLESS=false` and, when pytest-playwright is installed, `--headed`, so the browser draws on that display. If Xvfb or x11vnc cannot start, or the registration is refused, the runner logs it and runs headless as before.
+
+| Endpoint | Behaviour |
+|---|---|
+| `POST /runners/{runner_id}/view` | **Pod token.** Body `{"password": "<8-64 of A-Za-z0-9_->"}`. The coordinator records the address the request came **from** (never one in the body) and the fixed port 5900. 409 when another address registered a still-live runner of that name (all pods share the pod token); 400 when the caller has no IP address (e.g. a proxy in front of the coordinator rewrites it). |
+| `GET /runners/{runner_id}/view` | **Full token only.** `host`, `port`, `password`, `status`, `browser`, `run_id`, `chunk_id`; 404 when the pod has no live view, exited (its address and password are cleared on exit) or stopped heartbeating. |
+| `GET /pods` | Each pod carries `live_view` (true/false), never the address or password. |
+
+Amplify (`amplify/routes/grid_live.py`) is the only client: `GET /api/grid/pods/<pod>/view` returns the password to the person who started the run the pod is executing, or to an admin (a pod between runs: admins only), and `GET /api/grid/pods/<pod>/vnc` is a WebSocket (subprotocol `binary`) that Amplify relays to the pod's 5900, after the same check, refusing other origins and any address that is not a plain unicast IP. The viewer is noVNC 1.7.0 (MPL-2.0), vendored under `amplify/static/vendor/novnc/`. Amplify settings: `GRID_LIVE_VIEW_MAX` (viewers at once, default 4; each holds a gunicorn thread, so the image runs 16) and `GRID_LIVE_VIEW_MAX_SECONDS` (default 3600). In a cluster Amplify must reach the runner pods on TCP 5900 (allow it in any NetworkPolicy); nothing else needs that port, and test code in other pods can reach it only with the password. With `pytest -n 3` the three browser windows share one display and overlap; the viewer shows the one on top.
 
 **Operation notes**
 

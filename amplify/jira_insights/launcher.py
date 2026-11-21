@@ -90,7 +90,7 @@ class InsightsProcess:
                 return self.status()
             if not self._has_streamlit():
                 return {**self.status(), "error": "Streamlit is not installed for this Python "
-                        f"({sys.executable}). Run: pip install -r requirements.txt"}
+                        f"({sys.executable}). Run: pip install -r amplify-requirements.txt"}
             self.log_file.parent.mkdir(parents=True, exist_ok=True)
             log = open(self.log_file, "w", encoding="utf-8")
             try:

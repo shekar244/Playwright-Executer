@@ -28,7 +28,7 @@ def render(store: Store, ds: Dataset) -> None:
         from pygwalker import GlobalVarManager
         from pygwalker.errors import StreamlitPygwalkerApiError
     except ImportError:
-        st.warning("PyGWalker is not installed — run `pip install -r requirements.txt`.")
+        st.warning("PyGWalker is not installed — run `pip install -r amplify-requirements.txt`.")
         return
     GlobalVarManager.set_privacy("offline")      # no telemetry from a Jira workspace
 

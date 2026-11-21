@@ -36,6 +36,8 @@ def touch_runner(
     runner.run_id = run_id
     runner.environment = environment
     runner.last_seen = now
+    if status == "exited":                       # the pod is gone: so is its live view
+        runner.view_host = runner.view_secret = None
 
 
 def count_outcomes(tests: List[str], results: List[Dict[str, Any]]) -> Dict[str, int]:
@@ -84,8 +86,12 @@ def summarize_runs(db: Session, runs: List[TestRunRecord]) -> List[Dict[str, Any
     for run in runs:
         a = agg[run.run_id]
         pending, running, done = a.get("pending", 0), a.get("running", 0), a.get("completed", 0)
-        total = pending + running + done
-        status = "completed" if total and done == total else ("running" if running or done else "queued")
+        cancelled = a.get("cancelled", 0)
+        total = pending + running + done + cancelled
+        if cancelled and not (pending or running):
+            status = "cancelled"          # cancel_run leaves nothing queued or running; finished chunks keep their results
+        else:
+            status = "completed" if total and done == total else ("running" if running or done else "queued")
         outcome = "failed" if a.get("failed") else ("passed" if status == "completed" else None)
         out.append(
             {
@@ -98,10 +104,12 @@ def summarize_runs(db: Session, runs: List[TestRunRecord]) -> List[Dict[str, Any
                 "requested_by": run.requested_by,
                 "repo": run.repo,
                 "sha": run.sha,
+                "pytest_args": run.pytest_args or [],
                 "created_at": _iso(run.created_at),
                 "status": status,
                 "outcome": outcome,
-                "chunks": {"total": total, "pending": pending, "running": running, "completed": done},
+                "chunks": {"total": total, "pending": pending, "running": running, "completed": done,
+                           "cancelled": cancelled},
                 "passed": a.get("passed", 0),
                 "failed": a.get("failed", 0),
                 "skipped": a.get("skipped", 0),

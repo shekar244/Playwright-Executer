@@ -29,7 +29,7 @@ services:
 
   coordinator:
     build:
-      context: ..     # repo root; Dockerfile.coordinator.dockerignore sends only coordinator/*.py + requirements.txt
+      context: ..     # repo root; Dockerfile.coordinator.dockerignore sends only coordinator/*.py + coordinator-requirements.txt
       dockerfile: Dockerfile.coordinator
     image: amplify-grid-coordinator:local
     depends_on:
@@ -39,7 +39,13 @@ services:
       DATABASE_URL: postgresql://postgres:${PG_PASSWORD}@postgres:5432/grid
       API_TOKEN: ${GRID_API_TOKEN:?run scripts/local-up.sh or create config/.env}
       POD_API_TOKEN: ${POD_API_TOKEN:?run scripts/local-up.sh or create config/.env}
-      SUPPORTED_ENVIRONMENTS: dev,qa,perf,prod
+      # Must include every environment Amplify's Admin → Grid offers (it checks its own list, then the coordinator
+      # checks this one): qa3/qa4/int are p13n-mktg-exp-qe-automation's --env choices.
+      SUPPORTED_ENVIRONMENTS: dev,qa,perf,prod,qa3,qa4,int
+      # Only the browsers that have a runner image here (chromium: Edge and Chrome are amd64-only), so the Grid tab
+      # never offers, or defaults to, a browser whose runs would wait in the queue forever.
+      SUPPORTED_BROWSERS: chromium
+      DEFAULT_BROWSER: chromium
     volumes:
       - coordinator-data:/data
     ports:

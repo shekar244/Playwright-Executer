@@ -13,12 +13,13 @@ Deployable on **Docker**, **OpenShift**, **Render.com**, or any container platfo
 | **Executor** | Clone repos via Git, create venvs, pip install, run pytest with full control: browser, suite, file, test filter (-k), marker (-m), workers (-n), headed/headless, extra args |
 | **Reporting Dashboard** | Every test run in one view — Grid runs and your local Executor runs together. Filter by source, environment, browser, pod and time frame; see consolidated KPIs, charts (distribution, by browser, by environment, daily trend) and a pods table; drill into a run to see which pod executed each chunk, read its logs, and open its HTML reports — for Grid runs the run's Allure 3 report — without leaving the page |
 | **Grid** | Run tests on distributed Playwright runner pods (OpenShift): pick tests, environment and browsers, start a run, and watch live pod status and per-test results. The tests run from a snapshot of the Executor's selected repo at its committed `HEAD` (uncommitted changes are not included and the tab says so). Needs a coordinator: an admin sets it in **Admin Panel → Grid Coordinator** (or via `GRID_COORDINATOR_URL`) |
+| **Test Data** | Browse the active cloned repository with a collapsible folder tree, upload local files of any type to a selected folder, replace existing files with the same name, and delete files. Uploads stay inside the user's workspace and never expose or modify `.git` internals |
 | **Test Management** | Full Zephyr for Jira Cloud — import tests, bulk upload results, view/mark executions, hierarchical metrics |
 | **File Manager** | **Admins only.** Browse and edit `.json`, `.yaml`, `.env`, `.csv`, `.xlsx` files with dedicated editors per format. It reaches any path on the server (including the saved Jira / Zephyr / Grid secrets), so its tab is shown to admins only and its endpoints reject everyone else |
 | **AI Studio** | AI-powered test assistance |
 | **Jira Insights** | Streamlit-based reporting — pull Jira issues with JQL, build pivot reports and charts, or a **Table** report of just the columns you pick (downloadable as CSV and Excel; the **Key** column links to the issue in Jira). **Sprint Reports** include stories and defects carried forward out of each sprint, and KPI tiles can be plain, full colour or gradient (runs on port 8501) |
 | **Config** | Repository config, features/scripts, git commands, CLI tools, Allure settings, JFrog Artifactory, field mappings |
-| **Admin Panel** | User management, password resets, enable/disable accounts, promote/demote admins, usage metrics, activity log, server secrets, tab and Jira Insights option visibility for all users |
+| **Admin Panel** | Tabbed admin portal: Overview, Users, Server Config, Grid, Tab Visibility, Jira Insights and Activity. Includes user management, password resets, server secrets, Grid settings and server-wide UI visibility controls |
 
 ---
 
@@ -80,10 +81,10 @@ docker run -p 8080:8080 -p 8501:8501 \
 bash amplify.sh
 ```
 
-On first run the launcher creates `./venv` (Python 3.13 preferred), installs `requirements.txt` into it — including the Jira Insights dependencies — initializes the database and opens http://amplify-qea:7777. Jira Insights starts from its tab using the same venv. To run without the launcher:
+On first run the launcher creates `./venv` (Python 3.13 preferred), installs `amplify-requirements.txt` into it — including the Jira Insights dependencies — initializes the database and opens http://amplify-qea:7777. Jira Insights starts from its tab using the same venv. To run without the launcher:
 
 ```bash
-python3 -m venv venv && venv/bin/pip install -r requirements.txt
+python3 -m venv venv && venv/bin/pip install -r amplify-requirements.txt
 venv/bin/python -m amplify.server
 ```
 
@@ -121,7 +122,8 @@ See [k8s/README.md](k8s/README.md) — Ingress + Kustomize manifests for any clu
 Every user gets a completely isolated workspace:
 - **Config** — separate `config.json` per user
 - **History** — separate `report_history.json` per user
-- **Repos** — cloned repos stored in user's workspace
+- **Repos** — cloned repos stored in the user's workspace, `/app/data/workspaces/<user id>/repos/<name>` (Amplify's data folder: the `amplify-data` volume locally, the `amplify-data-pvc` PVC in OpenShift; runner pods never see it — a Grid run sends them a snapshot of the committed code). Managed in the **Repository** tab: the active repo (what the Executor runs and the Grid snapshots), its branch and last commit, pull, switch branch, the user's other clones, clone a new one. Hide the Executor in Admin → Tab Visibility and users land on the Repository tab
+- **Access tokens (PATs)** — saved per repo in `repo_configs.json` (mode 0600), never returned to a browser and never written into a repo's `.git/config` (tests run inside that folder): git gets the token for each call from its environment. Clones made by older versions kept the token in their remote URL; it is moved into the saved settings and the URL cleaned the first time the Repository tab, the repo status or the saved repos are read
 - **Jira Insights** — datasets and reports per user
 - No cross-user data visibility
 
@@ -139,7 +141,7 @@ Accessible only to admin users (via user dropdown menu):
 | **Metrics** | Total users, active today/week, events, disk usage |
 | **Activity Log** | Who did what, when, from which IP |
 | **Server Secrets** | Configure Jira/Zephyr credentials (admin only) |
-| **Grid Coordinator** | Set the Grid coordinator URL and API token for every user. Saving checks the connection and reports how many environments and browsers the coordinator offers. The token is write-only — never shown again. Overrides `GRID_COORDINATOR_URL` / `GRID_API_TOKEN`; clear the URL to fall back to them |
+| **Grid** | Set the Grid coordinator URL and API token for every user, configure the environment choices shown in the Grid tab, choose the default environment, and define optional pytest arguments passed to runner pods. Saving checks the coordinator connection. The token is write-only. Saved coordinator values override `GRID_COORDINATOR_URL` / `GRID_API_TOKEN` |
 | **Tab Visibility** | Choose which main tabs and Config sub-tabs every user sees, and which tab they **land on** after signing in or reloading (default: Executor; if the chosen tab is later hidden, users land on the first visible tab). Server-wide, admin only |
 | **Jira Insights Options** | Choose which Insights sidebar options (JQL / Zephyr / Sprint / Upload, Excluded fields, Colour theme) and views (Dashboard, Sprint Reports, Report Builder, Explorer, Data) every user sees. Hidden options are not rendered at all |
 
@@ -236,7 +238,7 @@ The UI adapts to phone and tablet screens:
 Jira Insights additionally requires: `streamlit`, `pygwalker`, `plotly`, `pandas`
 
 ```bash
-pip install -r requirements.txt
+pip install -r amplify-requirements.txt
 ```
 
 ---
@@ -246,7 +248,7 @@ pip install -r requirements.txt
 ```
 amplify-qea/
 ├── amplify.sh / amplify.bat         # Local launchers
-├── requirements.txt
+├── amplify-requirements.txt / coordinator-requirements.txt / runner-requirements.txt   # Python deps of each image
 ├── Dockerfile
 ├── opns/                            # OpenShift manifests (Routes, OpenShift registry)
 │   ├── amplify-deployment.yaml / amplify-deployment-insights.yaml
@@ -284,6 +286,7 @@ amplify-qea/
     │   ├── executor.py              # Test runs, discovery, features, venv
     │   ├── config.py                # Config read/write
     │   ├── dashboard.py             # Results, history, reports
+    │   ├── testdata.py              # Test Data upload/list/delete
     │   ├── zephyr.py                # Zephyr/Jira integration
     │   ├── filemanager.py           # File browse/read/write
     │   ├── git.py                   # Git commands
@@ -341,14 +344,18 @@ amplify-qea/
 
 | Method | Route | Purpose |
 |---|---|---|
-| POST | `/api/repo/clone` | Clone or pull a git repo |
-| POST | `/api/repo/pull` | Pull latest |
-| GET | `/api/repo/branches` | List branches |
+| GET | `/api/repo/workspace` | Where the repos live, each clone (remote, branch, last commit, uncommitted changes, whether a token is saved) and the saved repos |
+| POST | `/api/repo/use` | Make one of the user's clones the active repo `{name}` |
+| POST | `/api/repo/clone` | Clone or pull a git repo `{url, branch, token}`, or a saved one `{name}`; saves the repo and its token |
+| POST | `/api/repo/pull` | Pull the active repo (or `{name}`) |
+| GET / POST | `/api/repo/branches` | Branches of the active repo / of a remote `{url, token}` before cloning (the token never goes in a URL) |
 | POST | `/api/repo/checkout` | Switch branch |
-| GET | `/api/repo/status` | Repo + venv status |
+| GET | `/api/repo/status` | Active repo + venv status (remote, branch, last commit, `has_token`) |
+| POST | `/api/repo/token` | Set or remove a repo's access token `{name, token \| clear_token}` |
+| POST | `/api/repo/remove` | Delete a clone from the workspace `{name}` (its saved URL and token stay) |
 | POST | `/api/repo/venv/create` | Create .venv |
 | POST | `/api/repo/venv/install` | pip install (SSE stream) |
-| GET/POST/DELETE | `/api/repo/configs` | Saved repo presets |
+| GET/POST/DELETE | `/api/repo/configs` | Saved repos (Config → Repo): `has_token`, never the token; an empty token on save keeps the saved one |
 
 ### Executor
 
@@ -369,12 +376,24 @@ amplify-qea/
 |---|---|---|
 | GET | `/api/grid/status` · `/config` · `/pods` | Coordinator reachable? · environments and browsers · runner pods |
 | GET | `/api/grid/runs` · `/api/grid/runs/<id>` · `/api/grid/chunks/<id>` | Runs, one run's chunks, a chunk's pytest output |
-| POST | `/api/grid/runs` | Start a run `{tests, environment, browsers, chunk_size[, repo_path]}`. With `repo_path` (the Executor's repo, its top-level folder) the answer also has `repo`, `sha`, `dirty` and `code_source`, and `warning` when the coordinator did not confirm them. A body or field of the wrong type is a JSON `400` (`tests`: list of text, `chunk_size`: whole number 1–10) |
+| POST | `/api/grid/runs/<id>/cancel` | Cancel a **queued or running** run (a **✕ Cancel** button in the Grid tab). Only the person who started it, or an admin, may. Queued chunks are dropped at once; a chunk already running finishes on its pod but its results are discarded; finished chunks keep theirs. The run then shows as *cancelled* in the Grid tab and the dashboard |
+| GET | `/api/grid/test-tree` | The New run test picker: the active repo's `tests/` as folders → files → tests (read with `ast`, never imported). A ticked folder or file sends whole files; a file expanded to single tests sends their node ids (`tests/x/test_a.py::TestA::test_b`). Every section of the Grid tab collapses (expanded by default, remembered per browser) |
+| GET | `/api/grid/pytest-args` | The extra pytest arguments an admin configured (Admin Panel → Grid → *Pod pytest arguments*): the New run form shows a dropdown or checkbox for each and a preview of the words (`Pod arguments: --env qa3 -m smoke`); the *Run's environment* row's dropdown (its values are the environment names) is also the run's environment, so the form has no separate Environment field; `POST /api/grid/runs` takes the picks as `pytest_args: {option: value \| true/false}`, checked against that list, and the runner passes them to pytest before the test ids |
+| GET | `/api/grid/pods/<pod>/view`, `/api/grid/pods/<pod>/vnc` (WebSocket) | **Live view** of a runner pod's browser (a **👁 Live** button on live pods in the Grid tab's pod list and on running chunks in the run detail; opens a view-only noVNC popup). Only the person who started the run the pod is executing, or an admin. Pods must run with `GRID_LIVE_VIEW=1` (headed browser on Xvfb, x11vnc on port 5900); Amplify relays the viewer to the pod, so users never reach a pod directly |
+| POST | `/api/grid/runs` | Start a run `{tests, environment, browsers, chunk_size[, repo_path, pytest_args]}`. Environment names come from the server/administrator Grid configuration. `pytest_args` contains per-run choices for admin-configured pytest options. With `repo_path` (the Executor's repo, its top-level folder) the answer also has `repo`, `sha`, `dirty` and `code_source`, and `warning` when the coordinator did not confirm them. A body or field of the wrong type is a JSON `400` |
 
-**How a Grid run gets its code.** With `repo_path`, Amplify finds the repo's git top-level (it must be a git work tree, and not inside Amplify's data directory — except your own clones in your workspace), takes `HEAD`'s `sha`, builds `git archive --format=tar.gz <sha>` (at most 100 MiB and 100,000 entries — the runners' limits; committed symlinks are refused) and delivers it: unpacked into `GRID_CODE_DIR/<repo>/<sha>/` when that shared volume is set (`code_source: "volume"`), otherwise sent to the coordinator (`"coordinator"`, or `"cached"` when it already had that commit). The run carries `(repo, sha)`; each pod runs its tests from that immutable snapshot. Uncommitted and untracked files are never included (`dirty: true` warns). Without `repo_path` the pods run the tests baked into their image, as before.
+**How a Grid run gets its code.** With `repo_path`, Amplify finds the repo's git top-level (it must be a git work tree, and not inside Amplify's data directory — except your own clones in your workspace), takes `HEAD`'s `sha`, builds `git archive --format=tar.gz <sha>` (at most 100 MiB and 100,000 entries — the runners' limits; committed symlinks are refused) and delivers it: unpacked into `GRID_CODE_DIR/<repo>/<sha>/` when that shared volume is set (`code_source: "volume"`), otherwise sent to the coordinator (`"coordinator"`, or `"cached"` when it already had that commit). The run carries `(repo, sha)`; each pod runs its tests from that immutable snapshot. Uncommitted and untracked files are never included (`dirty: true` warns). The pods run the snapshot with the Python packages baked into the runner image (`runner-requirements.txt`): a repo's own `requirements.txt` is not installed, so a package a test repo needs goes into that file and the runner images are rebuilt. Without `repo_path` the pods run the tests baked into their image, as before.
 
 - **Select the repo's top-level folder.** The pods unpack the whole repo and run from its top-level, so a sub-folder is refused with a `400` that names the top-level folder to select (the Grid tab shows the message).
 - **The coordinator must be current.** Before packaging, Amplify asks the coordinator's `GET /api/config` for `features` and needs `"code-delivery"` in it, else `502` *"The Grid coordinator is too old for code delivery — update it"*. After `POST /api/runs` the coordinator must echo the same `repo` and `sha`; if not, the answer carries a `warning` and the tab shows it (the pods may then run their image's tests).
+
+### Test Data
+
+| Method | Route | Purpose |
+|---|---|---|
+| GET | `/api/testdata/tree?folder=<folder>` | List collapsible repository folders and files in the selected folder |
+| POST | `/api/testdata/upload` | Upload one or more local files as `multipart/form-data` (`folder`, `files`); existing files with the same name are replaced atomically |
+| DELETE | `/api/testdata/file` | Delete a named file from a validated repository folder |
 
 **Shared volume (`GRID_CODE_DIR`).** Back it with a **ReadWriteMany** volume (an RWX PVC) mounted read-write in Amplify at `GRID_CODE_DIR` and **read-only** in every runner at its `GRID_CODE_ROOT` (the same folder). Amplify's uid needs write access to it (set the pod's `fsGroup`/`runAsUser` accordingly); the runners may run as any uid — Amplify creates `<repo>/` and each snapshot folder `0755` (files `0644`, or `0755` if executable) regardless of its umask, so they can read everything. A snapshot is up to 1 GiB unpacked and one is kept per distinct commit, so size the volume for the commits you expect inside the retention window. **Retention:** each run that uses a snapshot touches its folder, and after every delivery Amplify removes snapshot folders nobody has used for `GRID_CODE_RETENTION_DAYS` (default 30; `0` keeps them for ever) and half-extracted `.<sha>-*.tmp` folders older than a day. The pruning is bounded (at most 10 folders and 5 seconds per delivery, so a backlog clears over several runs), never touches the snapshot just used, never follows a symlink, and never leaves `GRID_CODE_DIR`.
 

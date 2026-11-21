@@ -30,6 +30,8 @@ from amplify.routes.admin       import bp as admin_bp
 from amplify.routes.admin_bootstrap import bp as bootstrap_bp
 from amplify.routes.repo        import bp as repo_bp
 from amplify.routes.grid        import bp as grid_bp
+from amplify.routes.grid_live   import bp as grid_live_bp
+from amplify.routes.testdata    import bp as testdata_bp
 from amplify.auth_utils import verify_jwt
 from amplify.models.db import init_db
 from amplify.models.user import User
@@ -50,6 +52,8 @@ app.register_blueprint(admin_bp)
 app.register_blueprint(bootstrap_bp)
 app.register_blueprint(repo_bp)
 app.register_blueprint(grid_bp)
+app.register_blueprint(grid_live_bp)
+app.register_blueprint(testdata_bp)
 
 @app.before_request
 def before_request():

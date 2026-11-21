@@ -24,6 +24,7 @@ POD_ENDPOINTS = {
     ("POST", "/api/chunks/{chunk_id}/release"),
     ("POST", "/api/runners/{runner_id}/heartbeat"),
     ("POST", "/api/runners/{runner_id}/exit"),
+    ("POST", "/api/runners/{runner_id}/view"),
     ("GET", "/api/code/{repo}/{sha}"),
     ("HEAD", "/api/code/{repo}/{sha}"),
 }
@@ -33,6 +34,8 @@ FULL_ONLY_ENDPOINTS = {
     ("POST", "/api/runs"),
     ("GET", "/api/runs"),
     ("GET", "/api/runs/{run_id}"),
+    ("POST", "/api/runs/{run_id}/cancel"),
+    ("GET", "/api/runners/{runner_id}/view"),
     ("GET", "/api/chunks/{chunk_id}"),
     ("GET", "/api/pods"),
     ("GET", "/api/results/summary"),
@@ -193,6 +196,7 @@ POD_CALLS = [
     ("POST", "/api/chunks/nope/release", "runner_id=w1", b"", 200),
     ("POST", "/api/runners/w1/heartbeat", "", b"", 200),
     ("POST", "/api/runners/w1/exit", "", b"", 200),
+    ("POST", "/api/runners/w1/view", "", b'{"password": "abcdefgh"}', 400),   # the test client has no IP address
     ("GET", f"/api/code/demo/{SHA}", "", b"", 404),
     ("HEAD", f"/api/code/demo/{SHA}", "", b"", 404),
 ]

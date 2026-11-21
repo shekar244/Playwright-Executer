@@ -57,7 +57,7 @@ _LEASE = text(
         LIMIT 1
         FOR UPDATE SKIP LOCKED
     )
-    RETURNING chunk_id, tests, run_id, environment, browser, repo, sha, lease_token;
+    RETURNING chunk_id, tests, run_id, environment, browser, repo, sha, lease_token, pytest_args;
     """
 )
 

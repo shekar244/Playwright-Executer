@@ -27,6 +27,6 @@ Documentation lives in `docs/`: `ARCHITECTURE.md` (Amplify's multi-tenant design
 ## Running things
 
 - **Amplify** (Python 3.13, `venv/`): `venv/bin/python -m pytest amplify/tests` (about 3 minutes; `test_ui_escaping.py` needs `node` and is skipped without it).
-- **Grid** (Python 3.12, like its images): `pip install -r coordinator/requirements.txt -r runner/requirements.txt`, then `pytest coordinator/tests` and `pytest runner/tests`. Tests that need a real PostgreSQL run only when `GRID_TEST_DATABASE_URL` points at a scratch database.
+- **Grid** (Python 3.12, like its images): `pip install -r coordinator-requirements.txt -r runner-requirements.txt`, then `pytest coordinator/tests` and `pytest runner/tests`. Tests that need a real PostgreSQL run only when `GRID_TEST_DATABASE_URL` points at a scratch database.
 - Always pass a path to pytest: the root `pytest.ini` sets `testpaths = tests`, so a bare `pytest` runs only the Playwright sample suite.
 - **Local stack**: `scripts/local-up.sh` starts Amplify (http://localhost:8080), the coordinator and PostgreSQL; `python3 scripts/local_pod_launcher.py` then starts runner containers for queued chunks.

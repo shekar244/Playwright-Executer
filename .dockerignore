@@ -63,3 +63,5 @@ runner/
 src/
 tests/
 pytest.ini
+coordinator-requirements.txt
+runner-requirements.txt

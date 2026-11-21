@@ -36,7 +36,7 @@ Then refresh the **📈 Jira Insights** tab and it should connect.
 
 ### 1. Install Dependencies
 
-All dependencies are in `requirements.txt` but confirm Streamlit is installed:
+All dependencies are in `amplify-requirements.txt` but confirm Streamlit is installed:
 
 ```bash
 pip install streamlit

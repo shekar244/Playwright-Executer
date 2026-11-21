@@ -24,7 +24,7 @@ VIEWS = [k for k in ALL_INSIGHTS if k.startswith("view_")]
 # ── catalogs ──────────────────────────────────────────────────────────────────
 
 def test_catalogs_cover_every_tab_and_option():
-    assert {"grid", "tools", "insights"} <= set(ALL_TABS)
+    assert {"grid", "tools", "insights", "testdata"} <= set(ALL_TABS)
     assert set(CFG_TABS) == {"cfg_features", "cfg_repo", "cfg_git", "cfg_tools",
                              "cfg_allure", "cfg_jfrog", "cfg_mapping", "cfg_zephyr"}
     assert len(SOURCES) == 4 and len(VIEWS) == 5 and {"excluded_fields", "colour_theme"} <= set(ALL_INSIGHTS)
@@ -190,7 +190,9 @@ def test_a_tab_hidden_later_falls_back_and_returns_when_shown_again(admin):
 
 
 def test_with_executor_hidden_the_fallback_is_the_first_visible_tab(admin):
-    admin.post("/api/admin/ui-tabs", json={"ui_tabs": {"executor": False, "dashboard": False}})
+    admin.post("/api/admin/ui-tabs", json={"ui_tabs": {"executor": False}})
+    assert ss.load_default_tab() == "repository"            # hide the Executor: users land on the Repository tab
+    admin.post("/api/admin/ui-tabs", json={"ui_tabs": {"executor": False, "repository": False, "dashboard": False}})
     assert ss.load_default_tab() == "grid"
 
 

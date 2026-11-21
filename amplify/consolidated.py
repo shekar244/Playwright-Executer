@@ -141,7 +141,8 @@ def normalize_grid_run(detail: Mapping) -> dict:
             # Nothing reported per test. Queued / running: still to come (None). Finished: the pod's pytest
             # died before reporting (collection error, crash) — an error, not "pending"; its logs say why.
             finished = c.get("status") == "completed"
-            outcome = ("error" if _num(c.get("failed")) else "unknown") if finished else None
+            outcome = ("error" if _num(c.get("failed")) else "unknown") if finished else (
+                "cancelled" if c.get("status") == "cancelled" else None)       # cancelled tests will never run
             tests = [{"name": n, "outcome": outcome, "duration_s": None, "message": None}
                      for n in pc.texts(c.get("tests"))]
         chunks.append({
@@ -236,6 +237,8 @@ def run_status(run: Mapping) -> str:
         return "running"
     if "pending" in states:
         return "queued" if states == {"pending"} else "running"
+    if "cancelled" in states:       # the coordinator's cancel: nothing is queued or running; finished chunks keep their counts
+        return "cancelled"
     return "failed" if totals["failed"] or totals["broken"] else "passed"
 
 

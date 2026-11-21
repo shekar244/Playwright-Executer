@@ -73,6 +73,13 @@ def test_snapshot_args_have_no_alluredir_without_allure(runner, monkeypatch):
     args = runner.build_pytest_args(TESTS, snapshot=True, alluredir="/tmp/al")
 
     assert not any(a.startswith("--alluredir") for a in args)
+
+
+def test_extra_arguments_go_after_the_runners_own_and_before_the_test_ids(runner):
+    args = runner.build_pytest_args(TESTS, snapshot=True, extra=["--env", "prod", "-m", "smoke"])
+
+    i = args.index("--env")
+    assert args[i:i + 5] == ["--env", "prod", "-m", "smoke", "--"] and args[-2:] == TESTS
     assert "gridtest.results_plugin" in args and "gridtest.allure_labels" in args
 
 

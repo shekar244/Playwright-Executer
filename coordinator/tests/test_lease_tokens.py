@@ -96,7 +96,7 @@ class LeaseSession:
         self.calls.append((" ".join(str(statement).split()), params))
         token = params["lease_token"]
         row = SimpleNamespace(chunk_id="c-1", tests=["tests/test_a.py"], run_id=RUN, environment="qa",
-                              browser="chrome", repo=None, sha=None, lease_token=token)
+                              browser="chrome", repo=None, sha=None, lease_token=token, pytest_args=None)
         return SimpleNamespace(fetchone=lambda: row if self.has_chunk else None)
 
     def get(self, *_a, **_k):
@@ -118,7 +118,8 @@ def test_lease_with_lease_tokens_stores_and_returns_a_fresh_secret(coordinator):
     assert [first["lease_token"], second["lease_token"]] == stored   # what is returned is what is stored
     assert first["lease_token"] != second["lease_token"]            # a re-lease gets a fresh one
     sql = db.calls[0][0]
-    assert "lease_token = :lease_token" in sql and sql.rstrip(";").endswith("lease_token")  # SET and RETURNING
+    returning = sql.rstrip(";").rpartition("RETURNING")[2]
+    assert "lease_token = :lease_token" in sql and "lease_token" in returning.split(", ")        # SET and RETURNING
 
 
 def test_lease_without_the_parameter_creates_no_token_and_the_response_is_unchanged(coordinator):
@@ -126,7 +127,8 @@ def test_lease_without_the_parameter_creates_no_token_and_the_response_is_unchan
     leased = coordinator.lease_chunk(runner_id="w1", browser="chrome", db=db)
     assert db.calls[0][1]["lease_token"] is None
     assert "lease_token" not in leased
-    assert set(leased) == {"chunk_id", "tests", "run_id", "environment", "browser", "repo", "sha"}
+    assert set(leased) == {"chunk_id", "tests", "run_id", "environment", "browser", "repo", "sha", "pytest_args"}
+    assert leased["pytest_args"] == []                       # a run without extra arguments
 
 
 def test_no_chunk_leased_means_no_token_and_a_404(coordinator):
@@ -313,7 +315,8 @@ def test_the_lease_token_is_never_in_any_get_response(populated, coordinator, mo
               "/api/pods": ["/api/pods"], "/api/results/summary": ["/api/results/summary"],
               "/api/runs/{run_id}/report/info": [f"/api/runs/{RUN}/report/info"],
               "/api/runs/{run_id}/report": [f"/api/runs/{RUN}/report"],
-              "/api/code/{repo}/{sha}": ["/api/code/demo/" + "a" * 40]}
+              "/api/code/{repo}/{sha}": ["/api/code/demo/" + "a" * 40],
+              "/api/runners/{runner_id}/view": ["/api/runners/w1/view"]}
     # The lease response carries the secret by design; every other GET route must be walked here.
     assert set(walked) | {"/api/runner/lease"} == _get_routes(coordinator), "a new GET endpoint is not walked"
     for urls in walked.values():

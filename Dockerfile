@@ -52,9 +52,9 @@ RUN chown -R 0:0 /app && chmod -R g=u /app
 
 # ── Python dependencies ───────────────────────────────────────────────────────
 # Copy requirements first so Docker layer-caches the pip install step.
-# The layer is only rebuilt when requirements.txt changes.
-COPY requirements.txt .
-RUN pip install --no-cache-dir --trusted-host pypi.org --trusted-host pypi.python.org --trusted-host files.pythonhosted.org -r requirements.txt
+# The layer is only rebuilt when amplify-requirements.txt changes.
+COPY amplify-requirements.txt .
+RUN pip install --no-cache-dir --trusted-host pypi.org --trusted-host pypi.python.org --trusted-host files.pythonhosted.org -r amplify-requirements.txt
 
 # ── Application source ────────────────────────────────────────────────────────
 COPY . .
@@ -80,4 +80,4 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=15s --retries=3 \
     CMD python -c "import urllib.request; urllib.request.urlopen('http://localhost:8080/login', timeout=5)" || exit 1
 
 # ── Start command ─────────────────────────────────────────────────────────────
-CMD ["sh", "-c", "python -m amplify.models.db && gunicorn amplify.server:app --bind 0.0.0.0:8080 --workers 1 --threads 8 --timeout 300 --access-logfile - --error-logfile -"]
+CMD ["sh", "-c", "python -m amplify.models.db && gunicorn amplify.server:app --bind 0.0.0.0:8080 --workers 1 --threads 16 --timeout 300 --access-logfile - --error-logfile -"]

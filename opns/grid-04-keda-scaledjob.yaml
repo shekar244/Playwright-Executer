@@ -73,6 +73,11 @@ objects:
             # whole pytest process group is killed and the chunk is reported as failed ("Chunk timed out").
             # - name: GRID_CHUNK_TIMEOUT_SECONDS
             #   value: "1800"
+            # Live view (Grid tab -> Live): the browser runs headed on a virtual display that x11vnc serves on port 5900,
+            # view-only, behind a random per-pod password that only Amplify can fetch (full token). Amplify must reach
+            # the pods on 5900 (mind NetworkPolicies). Headed browsers cost some CPU: "0" keeps the pods headless.
+            - name: GRID_LIVE_VIEW
+              value: "1"
             resources:
               requests:
                 cpu: "1500m"

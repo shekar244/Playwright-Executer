@@ -24,7 +24,7 @@ class RecordingSession:
 
 def test_config_lists_the_features_clients_can_probe(coordinator):
     features = coordinator.get_config()["features"]
-    assert features == ["code-delivery", "allure-reports", "lease-tokens", "pod-token"]
+    assert features == ["code-delivery", "allure-reports", "lease-tokens", "pod-token", "live-view", "pytest-args"]
     assert isinstance(features, list) and all(isinstance(f, str) for f in features)
 
 

@@ -3,3 +3,17 @@ pytest-xdist==3.6.1
 playwright==1.49.0
 requests==2.32.3
 allure-pytest==2.16.2
+# What the test repos run on the Grid import (p13n-mktg-exp-qe-automation's requirements.txt, minus flask).
+# pytest-playwright's page/browser fixtures are overridden by a repo's own conftest.py where it defines them.
+python-dotenv==1.2.4
+pytest-playwright==0.10.0
+pytest-html==4.2.0
+pymysql==1.2.4
+pyyaml==6.0.4
+anthropic==2.12.0
+openai==3.57.0
+trcli==1.16.0
+allure-combine==1.0.11
+# Imported by its tests but missing from its requirements.txt.
+python-dateutil==4.0.0
+faker==40.63.0

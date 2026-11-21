@@ -1,0 +1,81 @@
+<!-- ── Test Data page ── -->
+<div id="page-testdata" style="display:none;flex:1;min-height:0;">
+  <aside class="td-left">
+    <div class="td-tree-header">
+      <span class="td-tree-title">Repository folders</span>
+      <button type="button" class="btn btn-sm" id="tdRefresh" title="Refresh folders">⟳</button>
+    </div>
+    <div class="td-tree" id="tdFolderTree"></div>
+  </aside>
+
+  <main class="td-right">
+    <div class="td-right-header">
+      <div>
+        <div class="section-title" style="margin:0;"><span class="stitle-icon">🧪</span>Test Data</div>
+        <div class="td-current-folder" id="tdCurrentFolder">Repository root</div>
+      </div>
+      <div class="td-toolbar">
+        <label class="btn td-upload-button" for="tdFiles">Choose local files</label>
+        <input id="tdFiles" type="file" multiple style="display:none;">
+        <button type="button" class="btn btn-accent" id="tdUploadBtn" disabled>Upload</button>
+      </div>
+    </div>
+
+    <div class="td-drop" id="tdDrop">
+      <div id="tdSelected">Drop files here or choose files from your computer</div>
+    </div>
+    <div id="tdStatus" class="hint"></div>
+
+    <div class="td-table-wrap">
+      <table class="history-tbl td-table">
+        <thead>
+          <tr><th>Name</th><th>Size</th><th>Modified</th><th style="width:90px;">Action</th></tr>
+        </thead>
+        <tbody id="tdFileRows">
+          <tr><td colspan="4" class="hint">Select a repository folder.</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </main>
+</div>
+
+<style>
+  #page-testdata { flex-direction:row; min-height:0; }
+  .td-left {
+    width:280px; flex-shrink:0; background:var(--surface);
+    border-right:1px solid var(--border); display:flex; flex-direction:column; overflow:hidden;
+  }
+  .td-tree-header {
+    min-height:46px; padding:8px 10px; border-bottom:1px solid var(--border);
+    display:flex; align-items:center; justify-content:space-between; gap:8px;
+  }
+  .td-tree-title { font-size:12px; font-weight:700; }
+  .td-tree { flex:1; overflow-y:auto; padding:6px 4px; }
+  .td-folder {
+    display:flex; align-items:center; gap:7px; width:100%; border:none; border-radius:5px;
+    background:transparent; color:var(--text-muted); cursor:pointer; text-align:left;
+    padding:6px 9px; font-size:12px; font-family:var(--font);
+  }
+  .td-folder-row { display:flex; align-items:center; width:100%; }
+  .td-folder-toggle {
+    width:22px; height:24px; flex-shrink:0; border:none; background:transparent;
+    color:var(--text-dim); cursor:pointer; text-align:center; padding:0;
+  }
+  .td-folder-toggle.empty { visibility:hidden; }
+  .td-folder-toggle:hover { color:var(--accent); }
+  .td-folder:hover { background:var(--surface2); color:var(--text); }
+  .td-folder.selected { background:var(--accent-glow); color:var(--accent); font-weight:700; }
+  .td-folder-name { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .td-right {
+    flex:1; min-width:0; display:flex; flex-direction:column; gap:10px;
+    padding:14px 16px; overflow:auto; background:var(--log-bg);
+  }
+  .td-right-header { display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap; }
+  .td-current-folder { margin-top:4px; color:var(--text-dim); font-size:11px; font-family:var(--mono); }
+  .td-toolbar { display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
+  .td-upload-button { cursor:pointer; height:34px; display:flex; align-items:center; }
+  .td-drop { border:1px dashed var(--border); border-radius:var(--radius); padding:18px; text-align:center; color:var(--text-dim); background:var(--surface2); }
+  .td-drop.dragging { border-color:var(--accent); background:rgba(137,180,250,.08); }
+  .td-table-wrap { overflow:auto; border:1px solid var(--border); border-radius:var(--radius); }
+  .td-table { width:100%; }
+</style>

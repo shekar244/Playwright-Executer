@@ -14,8 +14,8 @@ WORKDIR /app
 
 RUN chown -R 0:0 /app && chmod -R g=u /app
 
-COPY requirements.txt .
-RUN pip install --no-cache-dir --trusted-host pypi.org --trusted-host pypi.python.org --trusted-host files.pythonhosted.org -r requirements.txt
+COPY amplify-requirements.txt .
+RUN pip install --no-cache-dir --trusted-host pypi.org --trusted-host pypi.python.org --trusted-host files.pythonhosted.org -r amplify-requirements.txt
 
 COPY . .
 

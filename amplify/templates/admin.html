@@ -30,6 +30,19 @@
 
     /* ── Content container ── */
     .admin-body { max-width: 1200px; margin: 0 auto; padding: 20px 24px; }
+    .admin-tabs {
+      display:flex; gap:4px; margin-bottom:16px; overflow-x:auto;
+      border-bottom:1px solid var(--border); scrollbar-width:thin;
+    }
+    .admin-tab {
+      border:none; border-bottom:2px solid transparent; background:transparent;
+      color:var(--text-dim); padding:9px 12px 8px; font-size:12px; font-weight:600;
+      white-space:nowrap; cursor:pointer; font-family:var(--font);
+    }
+    .admin-tab:hover { color:var(--text); }
+    .admin-tab.active { color:var(--accent); border-bottom-color:var(--accent); }
+    .admin-tab-pane { display:none; }
+    .admin-tab-pane.active { display:block; }
 
     /* ── Metric cards ── */
     .metrics-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px; margin-bottom: 20px; }
@@ -71,6 +84,9 @@
     .admin-table tr:hover td { background: var(--accent-glow); }
     .admin-table .user-primary { font-weight: 600; }
     .admin-table .mono { font-family: var(--mono); font-size: 11px; color: var(--text-dim); }
+    #gridArgsTable td { padding: 6px 8px; }
+    #gridArgsTable input[type=text], #gridArgsTable select { width: 100%; min-width: 90px; }
+    #gridArgsTable code { font-family: var(--mono); font-size: 11px; white-space: nowrap; }
 
     /* ── Badges ── */
     .badge-role {
@@ -182,11 +198,21 @@
 
 <!-- ── Body ── -->
 <div class="admin-body">
+  <nav class="admin-tabs" aria-label="Admin sections">
+    <button type="button" class="admin-tab active" data-admin-tab="overview">Overview</button>
+    <button type="button" class="admin-tab" data-admin-tab="users">Users</button>
+    <button type="button" class="admin-tab" data-admin-tab="server">Server Config</button>
+    <button type="button" class="admin-tab" data-admin-tab="grid">Grid</button>
+    <button type="button" class="admin-tab" data-admin-tab="tabs">Tab Visibility</button>
+    <button type="button" class="admin-tab" data-admin-tab="insights">Jira Insights</button>
+    <button type="button" class="admin-tab" data-admin-tab="activity">Activity</button>
+  </nav>
 
-  <!-- Metrics -->
-  <div class="metrics-grid" id="metricsGrid"></div>
+  <div class="admin-tab-pane active" id="admin-pane-overview">
+    <div class="metrics-grid" id="metricsGrid"></div>
+  </div>
 
-  <!-- Users table -->
+  <div class="admin-tab-pane" id="admin-pane-users">
   <div class="admin-section">
     <div class="admin-section-header">
       Users <span class="count-badge" id="userCount">0</span>
@@ -203,8 +229,9 @@
     </table>
     </div>
   </div>
+  </div>
 
-  <!-- Server Secrets (Jira / Zephyr) -->
+  <div class="admin-tab-pane" id="admin-pane-server">
   <div class="admin-section">
     <div class="admin-section-header">
       Server Secrets — Jira / Zephyr
@@ -227,8 +254,9 @@
       <div id="secretsStatus" class="hint" style="display:none;"></div>
     </div>
   </div>
+  </div>
 
-  <!-- Grid coordinator (the Grid tab's environments, browsers and runs come from here) -->
+  <div class="admin-tab-pane" id="admin-pane-grid">
   <div class="admin-section">
     <div class="admin-section-header">
       Grid Coordinator
@@ -251,7 +279,36 @@
     </div>
   </div>
 
-  <!-- Tab visibility (applies to every user) -->
+  <div class="admin-section">
+    <div class="admin-section-header">
+      Pod pytest arguments
+      <span class="count-badge" id="gridArgsBadge">loading</span>
+    </div>
+    <div style="padding:16px 18px;display:flex;flex-direction:column;gap:12px;">
+      <div class="hint">The pytest options every Grid run passes to the runner pods, and the values users may pick for them
+        in the Grid tab's <strong>New run</strong> form. <em>Run's environment</em> is a dropdown of its values (the environment names, which the
+        coordinator's <code>SUPPORTED_ENVIRONMENTS</code> must include): the choice is the run's environment (TEST_ENV on
+        the pods, the Runs list) and this option's value (e.g. <code>--env qa3</code>); <em>Pick from values</em> becomes a dropdown (values separated by commas);
+        <em>On/off switch</em> passes the bare option when ticked. The options must exist in the test repo (its
+        <code>conftest.py</code> or a plugin) or pytest stops with "unrecognized arguments". Applies to every user.</div>
+      <div class="grid-scroll" style="overflow-x:auto;">
+        <table class="admin-table" id="gridArgsTable" style="width:100%;min-width:980px;">
+          <thead><tr><th>Label in Grid tab</th><th>pytest option</th><th>Value comes from</th><th>Format</th>
+            <th>Values (comma-separated)</th><th>Default</th><th>Required</th><th>Passed as</th><th></th></tr></thead>
+          <tbody id="gridArgsBody"></tbody>
+        </table>
+      </div>
+      <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
+        <button class="btn" type="button" onclick="addGridArg()">+ Add argument</button>
+        <button class="btn btn-accent" type="button" onclick="saveGridArgs()">Save pytest arguments</button>
+        <span id="gridArgsStatus" class="hint"></span>
+      </div>
+      <div id="gridArgsReserved" class="hint"></div>
+    </div>
+  </div>
+  </div>
+
+  <div class="admin-tab-pane" id="admin-pane-tabs">
   <div class="admin-section">
     <div class="admin-section-header">Tab Visibility — all users</div>
     <div style="padding:16px 18px;display:flex;flex-direction:column;gap:14px;">
@@ -277,8 +334,9 @@
       </div>
     </div>
   </div>
+  </div>
 
-  <!-- Jira Insights options (applies to every user) -->
+  <div class="admin-tab-pane" id="admin-pane-insights">
   <div class="admin-section">
     <div class="admin-section-header">Jira Insights Options — all users</div>
     <div style="padding:16px 18px;display:flex;flex-direction:column;gap:14px;">
@@ -299,14 +357,16 @@
       </div>
     </div>
   </div>
+  </div>
 
-  <!-- Activity feed -->
+  <div class="admin-tab-pane" id="admin-pane-activity">
   <div class="admin-section">
     <div class="admin-section-header">
       Recent Activity <span class="count-badge" id="activityCount">0</span>
     </div>
     <div class="activity-feed" id="activityList">
       <div class="admin-empty">Loading...</div>
+    </div>
     </div>
   </div>
 </div>
@@ -342,6 +402,18 @@ function cycleTheme() {
   document.getElementById('themeIcon').textContent = _ADM_ICONS[next] || '☀️';
   try { localStorage.setItem('amplify-theme', next); } catch(e){}
 }
+function switchAdminTab(tab) {
+  document.querySelectorAll('[data-admin-tab]').forEach(button => {
+    button.classList.toggle('active', button.dataset.adminTab === tab);
+  });
+  document.querySelectorAll('.admin-tab-pane').forEach(pane => {
+    pane.classList.toggle('active', pane.id === `admin-pane-${tab}`);
+  });
+  document.querySelector(`#admin-pane-${tab}`)?.scrollIntoView({ block: 'start' });
+}
+document.querySelectorAll('[data-admin-tab]').forEach(button => {
+  button.addEventListener('click', () => switchAdminTab(button.dataset.adminTab));
+});
 (function() {
   let t = 'light'; try { t = localStorage.getItem('amplify-theme') || 'light'; } catch(e){}
   document.getElementById('themeIcon').textContent = _ADM_ICONS[t] || '☀️';
@@ -585,6 +657,114 @@ async function saveGridCoordinator() {
   loadActivity();
 }
 
+// ── Grid pytest arguments ────────────────────────────────────────────────────
+// Built with DOM calls (never innerHTML), so labels, options and values typed here cannot inject markup.
+let _gridArgs = [];
+const _GA_KINDS = [['environment', "Run's environment"], ['choice', 'Pick from values'], ['switch', 'On/off switch']];
+const _GA_STYLES = [['separate', '--opt value'], ['joined', '--opt=value']];
+
+function _gaEl(tag, props, children) {
+  const el = Object.assign(document.createElement(tag), props || {});
+  (children || []).forEach(c => el.append(c));
+  return el;
+}
+
+function _gaSelect(options, value, onchange, disabled) {
+  const sel = _gaEl('select', { disabled: !!disabled, onchange });
+  options.forEach(([v, label]) => sel.append(_gaEl('option', { value: v, textContent: label, selected: v === value })));
+  return sel;
+}
+
+function _gaPassedAs(a) {
+  if (!a.flag) return '';
+  if (a.kind === 'switch') return a.default ? `${a.flag}` : `${a.flag} (when ticked)`;
+  const value = a.default || (a.values || [])[0] || (a.kind === 'environment' ? '<environment>' : '<value>');
+  return a.style === 'joined' ? `${a.flag}=${value}` : `${a.flag} ${value}`;
+}
+
+function renderGridArgs() {
+  const body = document.getElementById('gridArgsBody');
+  body.replaceChildren();
+  _gridArgs.forEach((a, i) => {
+    const preview = _gaEl('code', { textContent: _gaPassedAs(a) });
+    const refresh = () => { preview.textContent = _gaPassedAs(a); };
+    const label = _gaEl('input', { type: 'text', value: a.label || '', placeholder: 'Environment', maxLength: 60,
+      oninput: (e) => { a.label = e.target.value; } });
+    const flag = _gaEl('input', { type: 'text', value: a.flag || '', placeholder: '--env', maxLength: 66,
+      oninput: (e) => { a.flag = e.target.value.trim(); refresh(); } });
+    const kind = _gaSelect(_GA_KINDS, a.kind, (e) => { a.kind = e.target.value; renderGridArgs(); });
+    const style = _gaSelect(_GA_STYLES, a.style === 'joined' ? 'joined' : 'separate',
+      (e) => { a.style = e.target.value; refresh(); }, a.kind === 'switch');
+    const values = _gaEl('input', { type: 'text', value: (a.values || []).join(', '),
+      placeholder: a.kind === 'environment' ? 'qa3, int, prod' : 'smoke, regression', disabled: a.kind === 'switch',
+      onchange: (e) => { a.values = e.target.value.split(',').map(v => v.trim()).filter(Boolean); renderGridArgs(); } });
+    let def;
+    if (a.kind === 'choice') {
+      def = _gaSelect([['', '(not passed)'], ...(a.values || []).map(v => [v, v])], a.default || '',
+        (e) => { a.default = e.target.value; refresh(); });
+    } else if (a.kind === 'switch') {
+      def = _gaEl('label', { className: 'checkbox-label' }, [
+        _gaEl('input', { type: 'checkbox', checked: !!a.default, onchange: (e) => { a.default = e.target.checked; refresh(); } }),
+        _gaEl('span', { textContent: 'on' })]);
+    } else {
+      def = _gaSelect((a.values || []).map(v => [v, v]), a.default || (a.values || [])[0] || '',
+        (e) => { a.default = e.target.value; refresh(); });
+    }
+    const required = _gaEl('input', { type: 'checkbox', checked: !!a.required, disabled: a.kind !== 'choice',
+      onchange: (e) => { a.required = e.target.checked; } });
+    const remove = _gaEl('button', { type: 'button', className: 'btn btn-sm', textContent: '✕', title: 'Remove',
+      onclick: () => { _gridArgs.splice(i, 1); renderGridArgs(); } });
+    body.append(_gaEl('tr', {}, [label, flag, kind, style, values, def, required, preview, remove]
+      .map(c => _gaEl('td', {}, [c]))));
+  });
+  if (!_gridArgs.length) {
+    body.append(_gaEl('tr', {}, [_gaEl('td', { colSpan: 9, className: 'hint',
+      textContent: 'No extra arguments: runs pass only the tests (the environment still reaches the pods as TEST_ENV).' })]));
+  }
+  const badge = document.getElementById('gridArgsBadge');
+  badge.textContent = `${_gridArgs.length} argument${_gridArgs.length === 1 ? '' : 's'}`;
+}
+
+function addGridArg() {
+  _gridArgs.push({ label: '', flag: '', kind: 'choice', style: 'separate', values: [], default: '', required: false });
+  renderGridArgs();
+}
+
+async function loadGridArgs() {
+  const d = await api('/api/admin/grid/pytest-args');
+  _gridArgs = (d.arguments || []).map(a => ({ ...a }));
+  document.getElementById('gridArgsReserved').textContent =
+    `Set by the runner itself, so not configurable: ${(d.reserved || []).join(' ')}`;
+  renderGridArgs();
+}
+
+async function saveGridArgs() {
+  const status = document.getElementById('gridArgsStatus');
+  status.style.color = 'var(--accent)';
+  status.textContent = 'Saving…';
+  const r = await api('/api/admin/grid/pytest-args', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ arguments: _gridArgs.map(a => {
+      const out = { label: a.label, flag: a.flag, kind: a.kind };
+      if (a.kind !== 'switch') out.style = a.style === 'joined' ? 'joined' : 'separate';
+      if (a.kind === 'choice') Object.assign(out, { values: a.values || [], default: a.default || '', required: !!a.required });
+      if (a.kind === 'environment') Object.assign(out, { values: a.values || [], default: a.default || '' });
+      if (a.kind === 'switch') out.default = !!a.default;
+      return out;
+    }) }),
+  });
+  if (!r.ok) {
+    status.style.color = 'var(--red)';
+    status.textContent = r.error || 'Save failed';
+    return;
+  }
+  _gridArgs = r.arguments.map(a => ({ ...a }));
+  renderGridArgs();
+  status.style.color = 'var(--green)';
+  status.textContent = 'Saved — new Grid runs use these arguments';
+  loadActivity();
+}
+
 // Tab Visibility and Jira Insights Options are both {key: bool} maps rendered from a
 // server-side catalog, so the checkboxes can never drift from what the server accepts.
 const _flagSets = {
@@ -653,6 +833,7 @@ loadUsers();
 loadActivity();
 loadServerSecrets();
 loadGridCoordinator();
+loadGridArgs();
 loadFlags('tabs');
 loadFlags('insights');
 </script>

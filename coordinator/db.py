@@ -32,6 +32,7 @@ class TestRunRecord(Base):
     requested_by = Column(String, nullable=True)
     repo = Column(String, nullable=True)  # code snapshot the run's tests execute from
     sha = Column(String, nullable=True)
+    pytest_args = Column(JSON, nullable=True)  # [{"flag", "style", "value"}]: extra pytest options of the run
     created_at = Column(DateTime(timezone=True), default=_utcnow, index=True)
 
 
@@ -54,6 +55,7 @@ class TestChunkRecord(Base):
     # Per-lease secret (see leasing.py): set at lease time, kept after completion, NULL while the
     # chunk is pending. Never serialised in any response except the lease response.
     lease_token = Column(String, nullable=True)
+    pytest_args = Column(JSON, nullable=True)  # copied from the run: what the lease hands the runner
     created_at = Column(DateTime(timezone=True), default=_utcnow)
     updated_at = Column(DateTime(timezone=True), default=_utcnow, onupdate=_utcnow)
 
@@ -69,6 +71,10 @@ class RunnerRecord(Base):
     environment = Column(String, nullable=True)
     started_at = Column(DateTime(timezone=True), default=_utcnow)
     last_seen = Column(DateTime(timezone=True), default=_utcnow)
+    # Live view (headed browser on a virtual display, served by x11vnc on LIVE_VIEW_PORT): the pod's address as
+    # the coordinator saw it when the pod registered, and the VNC password. Never set from what the pod claims.
+    view_host = Column(String, nullable=True)
+    view_secret = Column(String, nullable=True)
 
 
 # Columns added after the first release; create_all() never alters existing tables.
@@ -84,6 +90,10 @@ _MIGRATIONS = [
     "ALTER TABLE test_queue ADD COLUMN IF NOT EXISTS repo VARCHAR",
     "ALTER TABLE test_queue ADD COLUMN IF NOT EXISTS sha VARCHAR",
     "ALTER TABLE test_queue ADD COLUMN IF NOT EXISTS lease_token VARCHAR",
+    "ALTER TABLE test_runs ADD COLUMN IF NOT EXISTS pytest_args JSON",
+    "ALTER TABLE test_queue ADD COLUMN IF NOT EXISTS pytest_args JSON",
+    "ALTER TABLE runners ADD COLUMN IF NOT EXISTS view_host VARCHAR",
+    "ALTER TABLE runners ADD COLUMN IF NOT EXISTS view_secret VARCHAR",
 ]
 
 

@@ -30,7 +30,46 @@
   .g-idle, .g-passed, .g-completed, .g-ok { background:var(--green-glow); color:var(--green); }
   .g-starting, .g-queued, .g-pending, .g-skipped { background:var(--yellow-glow); color:var(--yellow); }
   .g-failed, .g-lost, .g-error { background:var(--red-glow); color:var(--red); }
-  .g-exited { background:var(--surface3); color:var(--text-dim); }
+  .g-exited, .g-cancelled { background:var(--surface3); color:var(--text-dim); }
+  .g-cancel { margin-left:6px; padding:1px 8px; font-size:11px; }
+  /* Collapsible sections (expanded by default; the choice is remembered in this browser). */
+  #page-grid [data-grid-collapse] { cursor:pointer; user-select:none; }
+  #page-grid [data-grid-collapse]::before { content:'▾'; display:inline-block; width:14px; color:var(--text-dim); }
+  #page-grid .g-collapsed [data-grid-collapse]::before { content:'▸'; }
+  #page-grid .dash-card.g-collapsed > :not(.dash-card-title) { display:none !important; }
+  #page-grid [data-grid-collapse] { display:flex; align-items:center; gap:6px; }
+  #page-grid .g-fold { margin-left:auto; padding:0 8px; font-size:14px; line-height:20px; }
+  /* New run and Runner pods sit side by side: a collapsed one squeezes to a narrow column and the other widens. */
+  @media (min-width: 901px) {
+    .grid-top:has(> .dash-card.g-collapsed:first-child) { grid-template-columns:200px 1fr; }
+    .grid-top:has(> .dash-card.g-collapsed:last-child) { grid-template-columns:1fr 200px; }
+    .grid-top:has(> .dash-card.g-collapsed:first-child):has(> .dash-card.g-collapsed:last-child) { grid-template-columns:1fr 1fr; }
+  }
+  .grid-top > .dash-card.g-collapsed .dash-card-title { white-space:nowrap; overflow:hidden; }
+  .grid-top > .dash-card.g-collapsed .dash-card-title .hint { display:none; }
+  /* Test picker */
+  .g-tree-bar { display:flex; gap:6px; align-items:center; margin-bottom:6px; }
+  .g-tree-bar input { flex:1; min-width:120px; }
+  .g-tree { max-height:360px; overflow:auto; border:1px solid var(--border); border-radius:var(--radius);
+    background:var(--input-bg, var(--surface)); padding:6px 4px; font-size:12px; }
+  .g-tree ul { list-style:none; margin:0; padding-left:16px; }
+  .g-tree > ul { padding-left:0; }
+  .g-node { display:flex; align-items:center; gap:5px; padding:2px 4px; border-radius:4px; white-space:nowrap; }
+  .g-node:hover { background:var(--accent-glow); }
+  .g-caret { width:14px; text-align:center; cursor:pointer; color:var(--text-dim); flex-shrink:0; }
+  .g-node input { margin:0; flex-shrink:0; }
+  .g-node .g-name { overflow:hidden; text-overflow:ellipsis; }
+  .g-node .g-count { color:var(--text-dim); font-size:11px; }
+  .g-node.g-test .g-name { font-family:var(--mono); font-size:11px; }
+  .g-astext summary { cursor:pointer; font-size:12px; color:var(--text-dim); margin-top:4px; }
+  .g-live { margin-left:6px; padding:1px 8px; font-size:11px; color:var(--accent); border-color:var(--accent); }
+  .g-live-modal { position:fixed; inset:0; z-index:1000; background:rgba(0,0,0,.65); display:flex;
+    align-items:center; justify-content:center; }
+  .g-live-box { width:min(1280px,94vw); height:min(820px,90vh); display:flex; flex-direction:column;
+    background:var(--surface); border:1px solid var(--border); border-radius:10px; overflow:hidden; }
+  .g-live-head { display:flex; align-items:center; gap:10px; padding:8px 12px; border-bottom:1px solid var(--border); }
+  .g-live-title { font-weight:600; flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .g-live-screen { flex:1; background:#000; overflow:hidden; }
   .g-progress { height:6px; width:110px; border-radius:3px; background:var(--surface3); overflow:hidden; display:flex; }
   .g-progress > span { display:block; height:100%; }
   .g-clickable { cursor:pointer; }
@@ -57,14 +96,14 @@
     </div>
 
     <div class="grid-top">
-      <!-- ── New run: tests + environment + browsers ─────────────────────── -->
+      <!-- ── New run: pytest arguments + browsers + tests ───────────────────── -->
       <div class="dash-card">
-        <div class="dash-card-title">New run</div>
+        <div class="dash-card-title" data-grid-collapse="newrun" title="Collapse / expand">New run</div>
         <div class="grid-form">
-          <div class="field">
-            <label for="gridEnv">Environment</label>
-            <select id="gridEnv"></select>
-          </div>
+          <!-- The pytest arguments configured in Admin → Grid (filled by _gridRenderArgs in grid.js). The one set to
+               "Run's environment" is the run's environment too (TEST_ENV on the pods, the Runs list). -->
+          <div id="gridArgs" style="display:contents;"></div>
+          <p class="grid-hint" id="gridEnvArg" style="margin-top:-6px;">Pod arguments: none</p>
           <div class="field">
             <label>Browsers <span class="hint">(each test runs once per browser)</span></label>
             <div class="grid-browsers" id="gridBrowsers"></div>
@@ -74,14 +113,24 @@
             <input type="number" id="gridChunk" value="3" min="1" max="10" />
           </div>
           <div class="field">
-            <label for="gridTests">Tests <span class="hint">(pytest paths or node ids, one per line)</span></label>
-            <textarea id="gridTests" spellcheck="false" placeholder="tests/test_sample.py&#10;tests/test_login.py::test_valid_login"></textarea>
-            <div class="grid-actions">
-              <button class="btn btn-sm" onclick="gridLoadFromRepo()" title="List test files from the repo selected on the Executor tab">Load from repo</button>
-              <span class="grid-msg" id="gridTestCount">0 selected</span>
+            <label>Tests <span class="hint" id="gridTreeRepo"></span></label>
+            <!-- Folder → file → test picker (filled by _gridRenderTree in grid.js). A folder or file checkbox selects
+                 everything under it; expand a file to pick single tests. -->
+            <div class="g-tree-bar">
+              <input type="search" id="gridTreeFilter" placeholder="Filter files and tests…" autocomplete="off">
+              <button type="button" class="btn btn-sm" data-grid-tree="expand" title="Expand every folder and file">Expand</button>
+              <button type="button" class="btn btn-sm" data-grid-tree="collapse" title="Collapse to the top folders">Collapse</button>
+              <button type="button" class="btn btn-sm" data-grid-tree="clear" title="Unselect everything">Clear</button>
+              <button type="button" class="btn btn-sm" data-grid-tree="reload" title="Read the repository's tests again">⟳</button>
             </div>
-            <p class="grid-hint" id="gridTestsHint">Tests run from a snapshot of the selected repo’s committed state
-              (the repo chosen on the Executor tab, its top-level folder) — uncommitted changes are not included.</p>
+            <div class="g-tree" id="gridTree"><div class="grid-hint">Loading the repository's tests…</div></div>
+            <div class="grid-actions"><span class="grid-msg" id="gridTestCount">0 selected</span></div>
+            <details class="g-astext">
+              <summary>Selection as text <span class="hint">(pytest paths or node ids, one per line — editable)</span></summary>
+              <textarea id="gridTests" spellcheck="false" placeholder="tests/test_sample.py&#10;tests/test_login.py::test_valid_login"></textarea>
+            </details>
+            <p class="grid-hint" id="gridTestsHint">Tests run from a snapshot of the active repository’s committed state
+              (Repository tab) — uncommitted changes are not included.</p>
           </div>
           <div class="grid-actions">
             <button class="btn btn-accent" id="gridStartBtn" onclick="gridStartRun()">▶ Start run</button>
@@ -93,12 +142,12 @@
 
       <!-- ── Pods ─────────────────────────────────────────────────────────── -->
       <div class="dash-card">
-        <div class="dash-card-title">Runner pods <span class="hint" id="gridPodSource" style="text-transform:none;letter-spacing:0;"></span></div>
+        <div class="dash-card-title" data-grid-collapse="pods" title="Collapse / expand">Runner pods <span class="hint" id="gridPodSource" style="text-transform:none;letter-spacing:0;"></span></div>
         <div class="grid-pills" id="gridPodCounts"></div>
         <div class="grid-scroll">
           <table class="history-tbl">
-            <thead><tr><th>Pod</th><th>Browser</th><th>Status</th><th>Run / chunk</th><th>Env</th><th>Last seen</th></tr></thead>
-            <tbody id="gridPodBody"><tr><td colspan="6" style="text-align:center;color:var(--text-dim);padding:24px;">No pods yet — start a run</td></tr></tbody>
+            <thead><tr><th>Pod</th><th>Browser</th><th>Status</th><th>Run / chunk</th><th>Env</th><th>Last seen</th><th>Live</th></tr></thead>
+            <tbody id="gridPodBody"><tr><td colspan="7" style="text-align:center;color:var(--text-dim);padding:24px;">No pods yet — start a run</td></tr></tbody>
           </table>
         </div>
       </div>
@@ -106,7 +155,7 @@
 
     <!-- ── Runs ───────────────────────────────────────────────────────────── -->
     <div class="dash-card">
-      <div class="dash-card-title">Runs</div>
+      <div class="dash-card-title" data-grid-collapse="runs" title="Collapse / expand">Runs</div>
       <div class="grid-scroll">
         <table class="history-tbl">
           <thead><tr><th>Run</th><th>Started</th><th>Environment</th><th>Browsers</th><th>Status</th><th>Progress</th>
@@ -118,7 +167,7 @@
 
     <!-- ── Run detail ─────────────────────────────────────────────────────── -->
     <div class="dash-card" id="gridDetailCard" style="display:none;">
-      <div class="dash-card-title"><span id="gridDetailTitle">Run</span></div>
+      <div class="dash-card-title" data-grid-collapse="detail" title="Collapse / expand"><span id="gridDetailTitle">Run</span></div>
       <div class="grid-scroll" style="max-height:480px;">
         <table class="history-tbl">
           <thead><tr><th>Chunk</th><th>Browser</th><th>Status</th><th>Pod</th><th>Tests</th><th>Log</th></tr></thead>
@@ -126,6 +175,19 @@
         </table>
       </div>
       <pre class="g-log" id="gridLog" style="display:none;"></pre>
+    </div>
+
+    <!-- ── Live view of a runner pod's browser (filled by gridOpenLive in grid.js) ── -->
+    <div class="g-live-modal" id="gridLiveModal" style="display:none;" role="dialog" aria-modal="true" aria-labelledby="gridLiveTitle">
+      <div class="g-live-box">
+        <div class="g-live-head">
+          <span class="g-live-title" id="gridLiveTitle">Live view</span>
+          <span class="hint" id="gridLiveStatus"></span>
+          <button type="button" class="btn btn-sm" data-grid-live-full title="Full screen">⤢</button>
+          <button type="button" class="btn btn-sm" data-grid-live-close title="Close (Esc)">✕</button>
+        </div>
+        <div class="g-live-screen" id="gridLiveScreen"></div>
+      </div>
     </div>
 
   </div>
