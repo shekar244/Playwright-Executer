@@ -34,6 +34,11 @@ function _repoWhen(iso) {
   return d && !isNaN(d) ? d.toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' }) : '';
 }
 
+function _repoSslBadge(on) {
+  return _repoEl('span', { className: 'repo-badge' + (on ? ' on' : ' warn'), textContent: on ? 'checked' : 'not checked',
+    title: on ? 'git verifies the server certificate' : 'git skips the server certificate check for this repository' });
+}
+
 function _repoTokenBadge(has) {
   return _repoEl('span', { className: 'repo-badge' + (has ? ' on' : ''), textContent: has ? 'saved' : 'none' });
 }
@@ -65,6 +70,9 @@ function _repoRenderActive(ws) {
   if (active.has_token) {
     tok.append(' ', _repoEl('button', { className: 'btn btn-sm', textContent: 'Remove', onclick: () => repoClearToken(active.name) }));
   }
+  document.getElementById('repoActSsl').replaceChildren(_repoSslBadge(active.ssl_verify !== false), ' ',
+    _repoEl('button', { className: 'btn btn-sm', textContent: active.ssl_verify === false ? 'Check it again' : 'Skip the check',
+      onclick: () => repoSetSslVerify(active.name, active.ssl_verify === false) }));
   const h = active.head || {};
   document.getElementById('repoActSha').textContent = (h.sha || '').slice(0, 7);
   document.getElementById('repoActSubject').textContent = h.subject || '';
@@ -92,6 +100,8 @@ function _repoRenderList(ws) {
     const name = _repoEl('div', {}, [_repoEl('strong', { textContent: r.name })]);
     if (r.active) name.append(' ', _repoEl('span', { className: 'repo-badge on', textContent: 'active' }));
     if (r.dirty) name.append(' ', _repoEl('span', { className: 'repo-badge warn', textContent: 'changes' }));
+    if (r.ssl_verify === false) name.append(' ', _repoEl('span', { className: 'repo-badge warn', textContent: 'certificate not checked',
+      title: 'git skips the server certificate check for this repository' }));
     body.append(_repoEl('tr', {}, [
       _repoEl('td', {}, [name]),
       _repoEl('td', { className: 'repo-mono', textContent: r.branch || '—' }),
@@ -205,6 +215,17 @@ async function repoClearToken(name) {
   }
 }
 
+async function repoSetSslVerify(name, on) {
+  if (!on && !confirm(`Skip the git server's certificate check for ${name}?\n\nUse this only when the server's (corporate / self-signed) certificate can't be installed in the pod. The connection stays encrypted but is no longer verified, so the access token could be intercepted.`)) return;
+  try {
+    await _repoPost('/api/repo/ssl-verify', { name, ssl_verify: on });
+    _repoMsg('repoActMsg', on ? 'The certificate is checked again' : 'The certificate check is off for this repository', on ? 'ok' : 'err');
+    loadRepository();
+  } catch (e) {
+    _repoMsg('repoActMsg', e.message, 'err');
+  }
+}
+
 async function repoRemove(name) {
   if (!confirm(`Delete the clone of ${name} from your workspace?\nUncommitted changes in it are lost. Its saved URL and token stay.`)) return;
   try {
@@ -222,7 +243,8 @@ async function repoFetchRemoteBranches() {
   const sel = document.getElementById('repoCloneBranch');
   _repoMsg('repoCloneMsg', 'Listing branches…');
   try {
-    const d = await _repoPost('/api/repo/branches', { url, token: document.getElementById('repoCloneToken').value.trim() });
+    const d = await _repoPost('/api/repo/branches', { url, token: document.getElementById('repoCloneToken').value.trim(),
+      ssl_verify: !document.getElementById('repoCloneNoVerify').checked });
     sel.replaceChildren(_repoEl('option', { value: '', textContent: 'default' }),
       ...(d.branches || []).map(b => _repoEl('option', { value: b, textContent: b })));
     _repoMsg('repoCloneMsg', `${(d.branches || []).length} branches`, 'ok');
@@ -253,7 +275,8 @@ function repoClone() {
   const url = document.getElementById('repoCloneUrl').value.trim();
   if (!url) { _repoMsg('repoCloneMsg', 'Enter the Git URL', 'err'); return; }
   _repoDoClone({ url, branch: document.getElementById('repoCloneBranch').value,
-    token: document.getElementById('repoCloneToken').value.trim() });
+    token: document.getElementById('repoCloneToken').value.trim(),
+    ssl_verify: !document.getElementById('repoCloneNoVerify').checked });
 }
 
 function repoCloneSaved(name) {

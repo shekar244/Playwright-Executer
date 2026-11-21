@@ -9,6 +9,12 @@ only). They are never written into a repo's .git/config either — tests run ins
 A git command that talks to the remote gets the token for that one call: an inline credential helper reads it from
 the AMPLIFY_GIT_TOKEN environment variable of that git process. Clones made before this kept the token in the remote
 URL; migrate_embedded_credentials() moves it into the saved settings and cleans the URL.
+
+Certificate check: off for a saved repo with ssl_verify: false (its git server presents a certificate this pod cannot
+verify — a corporate CA that cannot be installed in the image). Remote git commands for that repo then run with
+`-c http.sslVerify=false`: the connection is still encrypted but no longer authenticated, so anyone able to intercept
+it could read the PAT. Prefer giving git the CA instead: GIT_SSL_CAINFO=<a CA file, e.g. a mounted ConfigMap> on the
+deployment (git reads it itself; no install needed). GIT_SSL_NO_VERIFY=true there turns the check off for every repo.
 """
 from __future__ import annotations
 
@@ -96,14 +102,32 @@ def credential_args(url: str) -> list[str]:
     return ["-c", "credential.helper=", "-c", f"credential.helper={helper}"]
 
 
-def run_git(args: list[str], cwd, token: str | None = None, url: str = "", timeout: int = GIT_TIMEOUT) -> tuple[int, str]:
-    """(exit code, output) of `git <args>`; with a token, git gets it for this call only, from its environment."""
+def git_env(token: str | None, url: str = "", ssl_verify: bool = True) -> dict:
+    """Environment for a git command Amplify does not build itself (Config → Git): the same token hand-off and
+    certificate choice as run_git, given through GIT_CONFIG_COUNT/KEY/VALUE (git 2.31+) instead of -c options."""
+    pairs = [] if ssl_verify else [("http.sslVerify", "false")]
+    env = {}
+    if token:
+        args = credential_args(url)                       # ["-c", "credential.helper=", "-c", "credential.helper=…"]
+        pairs += [tuple(a.split("=", 1)) for a in args[1::2]]
+        env["AMPLIFY_GIT_TOKEN"] = token
+    if pairs:
+        env["GIT_CONFIG_COUNT"] = str(len(pairs))
+        for i, (key, value) in enumerate(pairs):
+            env[f"GIT_CONFIG_KEY_{i}"], env[f"GIT_CONFIG_VALUE_{i}"] = key, value
+    return env
+
+
+def run_git(args: list[str], cwd, token: str | None = None, url: str = "", timeout: int = GIT_TIMEOUT,
+            ssl_verify: bool = True) -> tuple[int, str]:
+    """(exit code, output) of `git <args>`; with a token, git gets it for this call only, from its environment.
+    ssl_verify=False skips the server certificate check for this call (see the module docstring)."""
     env = os.environ.copy()
     env["GIT_TERMINAL_PROMPT"] = "0"
-    prefix: list[str] = []
+    prefix: list[str] = [] if ssl_verify else ["-c", "http.sslVerify=false"]
     if token:
         env["AMPLIFY_GIT_TOKEN"] = token
-        prefix = credential_args(url)
+        prefix += credential_args(url)
     try:
         proc = subprocess.run(["git", *prefix, *args], cwd=str(cwd), capture_output=True, text=True,
                               timeout=timeout, env=env)
@@ -142,19 +166,21 @@ def save_configs(user_id: int, configs: list[dict]) -> None:
 def public(config: dict) -> dict:
     """What a browser may see of a saved repo: everything but the token."""
     return {"name": config.get("name", ""), "url": config.get("url", ""), "branch": config.get("branch", ""),
-            "has_token": bool(config.get("token"))}
+            "has_token": bool(config.get("token")), "ssl_verify": config.get("ssl_verify") is not False}
 
 
 def upsert(user_id: int, name: str, url: str, branch: str | None = None, token: str | None = None,
-           clear_token: bool = False) -> dict:
-    """Save a repo's settings. The token is write-only: None keeps the saved one, clear_token removes it."""
+           clear_token: bool = False, ssl_verify: bool | None = None) -> dict:
+    """Save a repo's settings. The token is write-only: None keeps the saved one, clear_token removes it.
+    ssl_verify None keeps the saved choice (checked, by default)."""
     url, embedded = split_credentials(normalize_url(url))
     token = token or embedded
     configs = load_configs(user_id)
     current = next((c for c in configs if c["name"] == name), None) or \
         next((c for c in configs if _same_remote(c["url"], url)), None) or {}
     entry = {"name": name, "url": url, "branch": current.get("branch", "") if branch is None else branch,
-             "token": "" if clear_token else (token or current.get("token", ""))}
+             "token": "" if clear_token else (token or current.get("token", "")),
+             "ssl_verify": (current.get("ssl_verify") is not False) if ssl_verify is None else bool(ssl_verify)}
     configs = [c for c in configs if c is not current and c["name"] != name] + [entry]
     save_configs(user_id, configs)
     return entry
@@ -170,6 +196,14 @@ def token_for(user_id: int, url: str = "", name: str = "") -> str:
             if c.get("token"):
                 return c["token"]
     return ""
+
+
+def ssl_verify_for(user_id: int, url: str = "", name: str = "") -> bool:
+    """False only when the saved repo says to skip the certificate check."""
+    for c in load_configs(user_id):
+        if (name and c["name"] == name) or _same_remote(c["url"], url):
+            return c.get("ssl_verify") is not False
+    return True
 
 
 def migrate_embedded_credentials(user_id: int) -> list[str]:
@@ -201,7 +235,8 @@ def describe(user_id: int, path: Path, active: bool = False) -> dict:
     return {"name": path.name, "path": str(path), "active": active, "remote": url,
             "branch": branch.strip() if code == 0 else "", "dirty": dirty,
             "head": {"sha": sha, "subject": subject, "author": author, "date": date},
-            "saved": saved is not None, "has_token": bool(saved and saved.get("token"))}
+            "saved": saved is not None, "has_token": bool(saved and saved.get("token")),
+            "ssl_verify": not (saved and saved.get("ssl_verify") is False)}
 
 
 def remove_clone(user_id: int, name: str) -> bool:

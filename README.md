@@ -123,7 +123,7 @@ Every user gets a completely isolated workspace:
 - **Config** — separate `config.json` per user
 - **History** — separate `report_history.json` per user
 - **Repos** — cloned repos stored in the user's workspace, `/app/data/workspaces/<user id>/repos/<name>` (Amplify's data folder: the `amplify-data` volume locally, the `amplify-data-pvc` PVC in OpenShift; runner pods never see it — a Grid run sends them a snapshot of the committed code). Managed in the **Repository** tab: the active repo (what the Executor runs and the Grid snapshots), its branch and last commit, pull, switch branch, the user's other clones, clone a new one. Hide the Executor in Admin → Tab Visibility and users land on the Repository tab
-- **Access tokens (PATs)** — saved per repo in `repo_configs.json` (mode 0600), never returned to a browser and never written into a repo's `.git/config` (tests run inside that folder): git gets the token for each call from its environment. Clones made by older versions kept the token in their remote URL; it is moved into the saved settings and the URL cleaned the first time the Repository tab, the repo status or the saved repos are read
+- **Access tokens (PATs)** — saved per repo in `repo_configs.json` (mode 0600), never returned to a browser and never written into a repo's `.git/config` (tests run inside that folder): git gets the token for each call from its environment. Config → Git commands get it (and the repo's certificate choice) the same way. Clones made by older versions kept the token in their remote URL; it is moved into the saved settings and the URL cleaned the first time the Repository tab, the repo status or the saved repos are read
 - **Jira Insights** — datasets and reports per user
 - No cross-user data visibility
 
@@ -353,6 +353,7 @@ amplify-qea/
 | GET | `/api/repo/status` | Active repo + venv status (remote, branch, last commit, `has_token`) |
 | POST | `/api/repo/token` | Set or remove a repo's access token `{name, token \| clear_token}` |
 | POST | `/api/repo/remove` | Delete a clone from the workspace `{name}` (its saved URL and token stay) |
+| POST | `/api/repo/ssl-verify` | Check (`true`, default) or skip (`false`) the git server's TLS certificate for one repo `{name, ssl_verify}` — every git call for that repo then follows it (clone, pull, branch refresh, remote branch list, Config → Git commands). For a server whose corporate / self-signed CA can't be installed in the pod; the connection stays encrypted but unverified, so the token could be intercepted. Better: mount the CA file and set `GIT_SSL_CAINFO=<path>` on the Amplify deployment (git reads it itself; `GIT_SSL_NO_VERIFY=true` there skips the check for every repo) |
 | POST | `/api/repo/venv/create` | Create .venv |
 | POST | `/api/repo/venv/install` | pip install (SSE stream) |
 | GET/POST/DELETE | `/api/repo/configs` | Saved repos (Config → Repo): `has_token`, never the token; an empty token on save keeps the saved one |

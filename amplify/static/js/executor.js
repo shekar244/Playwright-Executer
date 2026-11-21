@@ -1429,7 +1429,8 @@ async function loadCfgRepoList() {
     url.textContent = c.url;
     const meta = document.createElement('div');
     meta.style.cssText = 'font-size:10px;margin-top:1px;';
-    meta.textContent = `⎇ ${c.branch || 'default'} · ${c.has_token ? '🔑 access token saved' : 'no access token'}`;
+    meta.textContent = `⎇ ${c.branch || 'default'} · ${c.has_token ? '🔑 access token saved' : 'no access token'}`
+      + (c.ssl_verify === false ? ' · ⚠ certificate not checked' : '');
     meta.style.color = c.has_token ? 'var(--green)' : 'var(--text-dim)';
     info.append(name, url, meta);
     const clone = document.createElement('button');

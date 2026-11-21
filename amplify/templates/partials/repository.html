@@ -43,6 +43,7 @@
           <dt>Name</dt><dd><strong id="repoActName"></strong> <span id="repoActDirty"></span></dd>
           <dt>Remote</dt><dd class="repo-mono" id="repoActRemote"></dd>
           <dt>Access token</dt><dd id="repoActToken"></dd>
+          <dt>Certificate</dt><dd id="repoActSsl"></dd>
           <dt>Branch</dt>
           <dd style="display:flex;gap:8px;align-items:center;">
             <select id="repoBranchSelect" style="min-width:200px;"></select>
@@ -67,6 +68,12 @@
             <input type="text" id="repoCloneUrl" placeholder="https://github.com/org/repo.git" autocomplete="off"></div>
           <div class="field"><label for="repoCloneToken">Access token (PAT) <span class="hint">for private repos — saved for this repo, never shown again</span></label>
             <input type="password" id="repoCloneToken" placeholder="ghp_… / github_pat_…" autocomplete="new-password"></div>
+          <label class="checkbox-label" style="gap:8px;align-items:flex-start;">
+            <input type="checkbox" id="repoCloneNoVerify">
+            <span>Skip the git server's certificate check <span class="hint">— only for a server whose (corporate / self-signed)
+              certificate can't be installed in the pod. The connection stays encrypted but is no longer verified, so the
+              access token could be intercepted.</span></span>
+          </label>
           <div class="field"><label for="repoCloneBranch">Branch</label>
             <div style="display:flex;gap:6px;"><select id="repoCloneBranch" style="flex:1;"><option value="">default</option></select>
               <button class="btn btn-sm" onclick="repoFetchRemoteBranches()" title="List the remote's branches">↻</button></div></div>

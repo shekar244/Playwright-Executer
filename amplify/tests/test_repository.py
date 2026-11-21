@@ -84,7 +84,8 @@ def test_saved_settings_are_private_to_the_server_and_the_token_is_write_only(da
     path = data_dir / "workspaces" / "1" / "repo_configs.json"
     assert stat.S_IMODE(path.stat().st_mode) == 0o600
     assert rs.token_for(1, URL) == TOKEN and rs.load_configs(1)[0]["branch"] == "dev"
-    assert rs.public(rs.load_configs(1)[0]) == {"name": "qe-tests", "url": URL, "branch": "dev", "has_token": True}
+    assert rs.public(rs.load_configs(1)[0]) == {"name": "qe-tests", "url": URL, "branch": "dev", "has_token": True,
+                                                "ssl_verify": True}
     rs.upsert(1, "qe-tests", URL, clear_token=True)
     assert rs.token_for(1, URL) == ""
 
@@ -155,7 +156,7 @@ def test_a_token_can_be_set_and_removed_and_the_configs_never_return_it(client, 
 
     assert client.post("/api/repo/token", json={"name": "qe-tests", "token": TOKEN}).get_json()["has_token"] is True
     configs = client.get("/api/repo/configs").get_json()
-    assert configs == [{"name": "qe-tests", "url": URL, "branch": "", "has_token": True}]
+    assert configs == [{"name": "qe-tests", "url": URL, "branch": "", "has_token": True, "ssl_verify": True}]
     assert client.post("/api/repo/token", json={"name": "qe-tests", "clear_token": True}).get_json()["has_token"] is False
     assert client.post("/api/repo/token", json={"name": "nope", "token": "x"}).status_code == 404
 
@@ -181,7 +182,7 @@ def test_removing_a_clone_keeps_its_saved_settings_and_clears_the_active_repo(cl
 def test_cloning_saves_the_repo_and_never_puts_the_token_in_the_remote(client, data_dir, monkeypatch):
     calls = []
 
-    def fake_git(args, cwd, token=None, url="", timeout=120):
+    def fake_git(args, cwd, token=None, url="", timeout=120, ssl_verify=True):
         calls.append((args, token))
         if args[0] == "clone":
             dest = Path(args[-1])
@@ -202,7 +203,8 @@ def test_cloning_saves_the_repo_and_never_puts_the_token_in_the_remote(client, d
 def test_a_saved_repo_is_cloned_by_name_with_its_saved_token(client, data_dir, monkeypatch):
     rs.upsert(1, "qe-tests", URL, branch="dev", token=TOKEN)
     calls = []
-    monkeypatch.setattr(rs, "run_git", lambda args, cwd, token=None, url="", timeout=120: calls.append((args, token)) or (1, "nope"))
+    monkeypatch.setattr(rs, "run_git", lambda args, cwd, token=None, url="", timeout=120, ssl_verify=True:
+                        calls.append((args, token)) or (1, "nope"))
 
     client.post("/api/repo/clone", json={"name": "qe-tests"})
 
@@ -212,3 +214,76 @@ def test_a_saved_repo_is_cloned_by_name_with_its_saved_token(client, data_dir, m
 
 def test_remote_branches_take_the_token_in_the_body_never_the_address(client):
     assert client.get(f"/api/repo/branches?url={URL}&token={TOKEN}").status_code == 400
+
+
+# ── skipping the git server's certificate check (a CA that cannot be installed in the pod) ──
+
+def test_the_certificate_check_is_on_unless_a_repo_turns_it_off(monkeypatch):
+    seen = []
+    monkeypatch.setattr(rs.subprocess, "run", lambda cmd, **kw: seen.append(cmd) or subprocess.CompletedProcess(cmd, 0, "", ""))
+
+    rs.run_git(["fetch"], "/tmp", TOKEN, URL)
+    rs.run_git(["fetch"], "/tmp", TOKEN, URL, ssl_verify=False)
+
+    assert "http.sslVerify=false" not in seen[0]
+    assert seen[1][:3] == ["git", "-c", "http.sslVerify=false"] and TOKEN not in " ".join(seen[1])
+
+
+def test_the_choice_is_saved_per_repo_kept_on_later_saves_and_shown(data_dir):
+    assert rs.upsert(1, "qe", URL, ssl_verify=False)["ssl_verify"] is False
+    rs.upsert(1, "qe", URL, branch="dev")                                  # None keeps the saved choice
+
+    assert rs.ssl_verify_for(1, URL) is False and rs.ssl_verify_for(1, "https://github.com/acme/other.git") is True
+    assert rs.public(rs.load_configs(1)[0])["ssl_verify"] is False
+    rs.upsert(1, "qe", URL, ssl_verify=True)
+    assert rs.ssl_verify_for(1, URL) is True
+
+
+def test_cloning_with_the_check_off_saves_it_and_later_pulls_use_it(client, data_dir, monkeypatch):
+    calls = []
+
+    def fake_git(args, cwd, token=None, url="", timeout=120, ssl_verify=True):
+        calls.append((args[0], ssl_verify))
+        if args[0] == "clone":
+            dest = Path(args[-1])
+            dest.mkdir(parents=True)
+            git("init", "-q", "-b", "main", cwd=dest)
+            git("remote", "add", "origin", args[-2], cwd=dest)
+        return 0, "ok"
+
+    monkeypatch.setattr(rs, "run_git", fake_git)
+    assert client.post("/api/repo/clone", json={"url": URL, "ssl_verify": False}).status_code == 201
+    client.post("/api/repo/pull", json={})
+    client.get("/api/repo/branches")
+
+    assert ("clone", False) in calls and ("pull", False) in calls and ("fetch", False) in calls
+    assert client.get("/api/repo/workspace").get_json()["repos"][0]["ssl_verify"] is False
+
+
+def test_the_check_can_be_switched_per_repo(client, data_dir):
+    make_clone(1)
+
+    assert client.post("/api/repo/ssl-verify", json={"name": "qe-tests", "ssl_verify": False}).get_json()["ssl_verify"] is False
+    assert rs.ssl_verify_for(1, URL) is False
+    assert client.post("/api/repo/ssl-verify", json={"name": "qe-tests", "ssl_verify": True}).get_json()["ssl_verify"] is True
+    assert client.post("/api/repo/ssl-verify", json={"name": "qe-tests", "ssl_verify": "no"}).status_code == 400
+    assert client.post("/api/repo/ssl-verify", json={"name": "nope", "ssl_verify": False}).status_code == 404
+
+
+def test_config_git_commands_get_the_token_and_certificate_choice_through_their_environment(tmp_path):
+    """Config → Git runs the user's own git commands: they must reach the remote like Amplify's own calls do."""
+    env = dict(os.environ, **rs.git_env(TOKEN, URL, ssl_verify=False), GIT_TERMINAL_PROMPT="0")
+
+    ssl = subprocess.run(["git", "config", "--get", "http.sslVerify"], capture_output=True, text=True, env=env, cwd=tmp_path)
+    cred = subprocess.run(["git", "credential", "fill"], input="protocol=https\nhost=github.com\n\n",
+                          capture_output=True, text=True, env=env, cwd=tmp_path)
+
+    assert ssl.stdout.strip() == "false"
+    assert "username=x-access-token" in cred.stdout and f"password={TOKEN}" in cred.stdout
+    assert all(TOKEN not in v for k, v in rs.git_env(TOKEN, URL).items() if k != "AMPLIFY_GIT_TOKEN")
+
+
+def test_without_a_token_or_a_skipped_check_nothing_is_added():
+    assert rs.git_env(None, URL) == {}
+    assert rs.git_env(None, URL, ssl_verify=False) == {"GIT_CONFIG_COUNT": "1", "GIT_CONFIG_KEY_0": "http.sslVerify",
+                                                       "GIT_CONFIG_VALUE_0": "false"}

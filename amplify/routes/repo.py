@@ -14,6 +14,7 @@ tokens are kept: saved server-side, never returned to a browser, never written i
   GET  /api/repo/status        — active repo + venv status
   POST /api/repo/token         — set or remove the access token of a saved repo {name, token | clear_token}
   POST /api/repo/remove        — delete a clone from the workspace {name}
+  POST /api/repo/ssl-verify    — check (true) or skip (false) the git server's certificate for a repo {name, ssl_verify}
   POST /api/repo/venv/create   — create .venv in the active repo
   POST /api/repo/venv/install  — pip install -r requirements.txt
   GET  /api/repo/configs       — saved repos (has_token, never the token)
@@ -59,6 +60,16 @@ def _set_active(path: Path | str) -> None:
 
 def _token_for_repo(path: str | Path) -> str:
     return rs.token_for(g.user.id, rs.remote_url(Path(path)), Path(path).name)
+
+
+def _ssl_for_repo(path: str | Path) -> bool:
+    return rs.ssl_verify_for(g.user.id, rs.remote_url(Path(path)), Path(path).name)
+
+
+def _ssl_choice(body: dict, url: str = "", name: str = "") -> bool:
+    """The request's ssl_verify when it gives one (true/false), else the saved choice (checked by default)."""
+    value = body.get("ssl_verify")
+    return value if isinstance(value, bool) else rs.ssl_verify_for(g.user.id, url, name)
 
 
 def _location() -> dict:
@@ -111,19 +122,20 @@ def clone_repo():
     if not url.lower().startswith(("https://", "http://", "ssh://", "git@")):
         return jsonify({"error": "Use an https:// (or ssh) Git URL"}), 400
     token = token or embedded or rs.token_for(g.user.id, url, name)
+    ssl_verify = _ssl_choice(body, url, name)
     name = name or url.rstrip("/").split("/")[-1].removesuffix(".git")
     repo_dir = rs.repo_path(g.user.id, name)
 
     if repo_dir.exists() and (repo_dir / ".git").is_dir():
         rs.run_git(["remote", "set-url", "origin", url], repo_dir)       # never a token in .git/config
-        code, out = rs.run_git(["pull"], repo_dir, token, url)
+        code, out = rs.run_git(["pull"], repo_dir, token, url, ssl_verify=ssl_verify)
         if code != 0:
             return jsonify({"error": f"Pull failed: {out}"}), 500
         if branch:
             code, out = rs.run_git(["checkout", branch], repo_dir)
             if code != 0:
                 return jsonify({"error": f"Checkout failed: {out}"}), 500
-        rs.upsert(g.user.id, repo_dir.name, url, branch=branch or None, token=token or None)
+        rs.upsert(g.user.id, repo_dir.name, url, branch=branch or None, token=token or None, ssl_verify=ssl_verify)
         _set_active(repo_dir)
         ActivityLog.record(g.user.id, "repo_pull", f"Pulled {repo_dir.name}", request.remote_addr)
         return jsonify({"ok": True, "action": "pulled", "name": repo_dir.name, "path": str(repo_dir), "output": out})
@@ -132,10 +144,10 @@ def clone_repo():
         shutil.rmtree(repo_dir, ignore_errors=True)       # a leftover that is not a git repo
 
     cmd = ["clone", "--progress"] + (["--branch", branch] if branch else []) + [url, str(repo_dir)]
-    code, out = rs.run_git(cmd, rs.repos_dir(g.user.id), token, url, timeout=300)
+    code, out = rs.run_git(cmd, rs.repos_dir(g.user.id), token, url, timeout=300, ssl_verify=ssl_verify)
     if code != 0:
         return jsonify({"error": f"Clone failed: {out}"}), 500
-    rs.upsert(g.user.id, repo_dir.name, url, branch=branch, token=token or None)
+    rs.upsert(g.user.id, repo_dir.name, url, branch=branch, token=token or None, ssl_verify=ssl_verify)
     _set_active(repo_dir)
     ActivityLog.record(g.user.id, "repo_clone", f"Cloned {repo_dir.name} from {url}", request.remote_addr)
     return jsonify({"ok": True, "action": "cloned", "name": repo_dir.name, "path": str(repo_dir), "output": out}), 201
@@ -149,7 +161,7 @@ def pull_repo():
     repo = rs.clone_by_name(g.user.id, name) if name else (Path(_active_repo()) if _active_repo() else None)
     if repo is None or not repo.exists():
         return jsonify({"error": "No repo configured"}), 400
-    code, out = rs.run_git(["pull"], repo, _token_for_repo(repo), rs.remote_url(repo))
+    code, out = rs.run_git(["pull"], repo, _token_for_repo(repo), rs.remote_url(repo), ssl_verify=_ssl_for_repo(repo))
     if code != 0:
         return jsonify({"error": f"Pull failed: {out}"}), 500
     ActivityLog.record(g.user.id, "repo_pull", repo.name, request.remote_addr)
@@ -172,7 +184,8 @@ def list_branches():
             return jsonify({"error": "url required"}), 400
         url, embedded = rs.split_credentials(rs.normalize_url(url))
         token = _text(body, "token") or embedded or rs.token_for(g.user.id, url)
-        code, out = rs.run_git(["ls-remote", "--heads", url], "/tmp", token, url, timeout=30)
+        code, out = rs.run_git(["ls-remote", "--heads", url], "/tmp", token, url, timeout=30,
+                               ssl_verify=_ssl_choice(body, url))
         if code != 0:
             return jsonify({"error": f"Could not list branches: {out}"}), 500
         return jsonify({"branches": sorted(l.split("refs/heads/")[-1] for l in out.splitlines() if "refs/heads/" in l),
@@ -182,7 +195,8 @@ def list_branches():
     repo = _active_repo()
     if not repo or not Path(repo).exists():
         return jsonify({"branches": [], "current": ""})
-    rs.run_git(["fetch", "--prune"], repo, _token_for_repo(repo), rs.remote_url(Path(repo)), timeout=60)
+    rs.run_git(["fetch", "--prune"], repo, _token_for_repo(repo), rs.remote_url(Path(repo)), timeout=60,
+               ssl_verify=_ssl_for_repo(repo))
     code, out = rs.run_git(["branch", "-a", "--format=%(refname:short)"], repo)
     if code != 0:
         return jsonify({"error": out}), 500
@@ -257,6 +271,29 @@ def set_repo_token():
     entry = rs.upsert(g.user.id, name, saved["url"], token=token or None, clear_token=clear)
     ActivityLog.record(g.user.id, "repo_token", f"{'Removed' if clear else 'Set'} the access token of {name}",
                        request.remote_addr)
+    return jsonify({"ok": True, **rs.public(entry)})
+
+
+@bp.route("/api/repo/ssl-verify", methods=["POST"])
+@require_auth
+def set_repo_ssl_verify():
+    """Skip (false) or check again (true) the git server's certificate for one repo. Off is for a server whose CA
+    cannot be installed in the pod; prefer GIT_SSL_CAINFO (see repo_store)."""
+    body, bad = json_object()
+    if bad:
+        return bad
+    name, value = _text(body, "name"), body.get("ssl_verify")
+    if not isinstance(value, bool):
+        return jsonify({"error": "ssl_verify must be true or false"}), 400
+    saved = next((c for c in rs.load_configs(g.user.id) if c["name"] == name), None)
+    if saved is None:
+        clone = rs.clone_by_name(g.user.id, name)
+        if clone is None:
+            return jsonify({"error": "No such repository"}), 404
+        saved = {"name": name, "url": rs.split_credentials(rs.remote_url(clone))[0]}
+    entry = rs.upsert(g.user.id, name, saved["url"], ssl_verify=value)
+    ActivityLog.record(g.user.id, "repo_ssl_verify",
+                       f"{'Checking' if value else 'Skipping'} the git server certificate for {name}", request.remote_addr)
     return jsonify({"ok": True, **rs.public(entry)})
 
 
@@ -399,7 +436,9 @@ def save_repo_config():
     name, url, branch, token = _text(body, "name"), _text(body, "url"), _text(body, "branch"), _text(body, "token")
     if not name or not url:
         return jsonify({"error": "name and url required"}), 400
-    entry = rs.upsert(g.user.id, name, url, branch=branch, token=token or None)   # an empty token keeps the saved one
+    ssl = body.get("ssl_verify")
+    entry = rs.upsert(g.user.id, name, url, branch=branch, token=token or None,   # an empty token keeps the saved one
+                      ssl_verify=ssl if isinstance(ssl, bool) else None)
     return jsonify({"ok": True, **rs.public(entry)})
 
 

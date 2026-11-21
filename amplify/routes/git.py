@@ -78,8 +78,16 @@ def run_git_command():
                 state.broadcast("status", f"failed:{exit_code}")
             state.broadcast("done", "")
 
+        # The repo's saved access token and certificate choice (Repository tab), as for Amplify's own git calls:
+        # never written into the repo, given to this one command through its environment.
+        from pathlib import Path
+        from amplify import repo_store
+        url = repo_store.remote_url(Path(repo))
+        git_env = repo_store.git_env(repo_store.token_for(g.user.id, url, Path(repo).name), url,
+                                     repo_store.ssl_verify_for(g.user.id, url, Path(repo).name))
+
         state._runner = TestRunner(
-            cmd=cmd, cwd=repo, env_overrides={},
+            cmd=cmd, cwd=repo, env_overrides=git_env,
             on_output=on_output, on_finish=on_finish,
         )
         state._runner.start()
