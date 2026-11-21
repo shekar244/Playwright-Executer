@@ -10,7 +10,8 @@ import streamlit as st
 
 from ..charts import DEFAULT_THEME, THEMES
 from ..jira_client import JiraClient, JiraError
-from ..settings import load_jira_settings
+from ..options import get_options
+from ..settings import SETUP_BY_ADMIN, load_jira_settings
 from ..store import Store
 from ..transform import DEFAULT_SKIP_FIELDS, SKIP_FIELD_GROUPS, _ALWAYS_SPECIAL, frame_from_export, issues_to_frame
 from .. import zephyr
@@ -92,6 +93,7 @@ def _import(store: Store, name: str, upload) -> None:
 def render_sidebar(store: Store) -> Dataset | None:
     ss = st.session_state
     settings = load_jira_settings()
+    opts = get_options()          # admin-controlled option visibility
     datasets = store.list_datasets()
     by_slug = {d["slug"]: d for d in datasets}
     if "ds_pending" in ss:
@@ -108,8 +110,8 @@ def render_sidebar(store: Store) -> Dataset | None:
         if settings.configured:
             st.caption(f"🟢 Jira · {urlparse(settings.url).netloc}")
         else:
-            st.caption("⚪ Jira not configured — set it in **Config → Zephyr** "
-                       "(or JIRA_URL / JIRA_API_TOKEN), or upload an export below.")
+            st.caption("⚪ Jira isn't configured yet. " + SETUP_BY_ADMIN
+                       + (" Meanwhile you can upload a Jira export below." if opts["src_upload"] else ""))
 
         if datasets:
             if ss.get("ds_slug") not in by_slug:
@@ -163,41 +165,47 @@ def render_sidebar(store: Store) -> Dataset | None:
                 st.warning(f"Missing typical Jira columns: {', '.join(missing)}. "
                            "Reports that use them are hidden.", icon="⚠️")
 
-        with st.expander("➕ New dataset from JQL", expanded=not datasets):
-            with st.form("jql_form", border=False):
-                name = st.text_input("Name", placeholder="Release 3.2 defects",
-                                     help="Re-using a name replaces that dataset.")
-                jql = st.text_area("JQL", placeholder=_JQL_HINT, height=120)
-                max_issues = st.number_input("Max issues", min_value=50, max_value=50000, value=2000, step=500)
-                fields = st.text_input("Fields", value="*navigable",
-                                       help="Comma-separated field ids, or *navigable / *all")
-                if st.form_submit_button("Fetch issues", type="primary", width="stretch",
-                                         disabled=not settings.configured):
-                    if name.strip() and jql.strip():
-                        _pull(store, name.strip(), jql.strip(), max_issues, fields.strip())
-                    else:
-                        st.error("Name and JQL are required.")
+        if opts["src_jql"]:
+            with st.expander("➕ New dataset from JQL", expanded=not datasets):
+                with st.form("jql_form", border=False):
+                    name = st.text_input("Name", placeholder="Release 3.2 defects",
+                                         help="Re-using a name replaces that dataset.")
+                    jql = st.text_area("JQL", placeholder=_JQL_HINT, height=120)
+                    max_issues = st.number_input("Max issues", min_value=50, max_value=50000, value=2000, step=500)
+                    fields = st.text_input("Fields", value="*navigable",
+                                           help="Comma-separated field ids, or *navigable / *all")
+                    if st.form_submit_button("Fetch issues", type="primary", width="stretch",
+                                             disabled=not settings.configured):
+                        if name.strip() and jql.strip():
+                            _pull(store, name.strip(), jql.strip(), max_issues, fields.strip())
+                        else:
+                            st.error("Name and JQL are required.")
 
-        zephyr_source.render(store, settings)
+        if opts["src_zephyr"]:
+            zephyr_source.render(store, settings)
 
-        sprint_source.render(store, settings)
+        if opts["src_sprint"]:
+            sprint_source.render(store, settings)
 
-        with st.expander("⬆️ Upload Jira export (CSV / Excel)", expanded=not datasets and not settings.configured):
-            with st.form("upload_form", border=False, clear_on_submit=True):
-                up_name = st.text_input("Name", placeholder="Defects export")
-                upload = st.file_uploader("Jira export", type=["csv", "xlsx", "xls"], label_visibility="collapsed")
-                if st.form_submit_button("Import", width="stretch"):
-                    if upload is None:
-                        st.error("Choose a file first.")
-                    else:
-                        _import(store, up_name.strip(), upload)
+        if opts["src_upload"]:
+            with st.expander("⬆️ Upload Jira export (CSV / Excel)", expanded=not datasets and not settings.configured):
+                with st.form("upload_form", border=False, clear_on_submit=True):
+                    up_name = st.text_input("Name", placeholder="Defects export")
+                    upload = st.file_uploader("Jira export", type=["csv", "xlsx", "xls"], label_visibility="collapsed")
+                    if st.form_submit_button("Import", width="stretch"):
+                        if upload is None:
+                            st.error("Choose a file first.")
+                        else:
+                            _import(store, up_name.strip(), upload)
 
-        _skip_fields_config(store)
+        if opts["excluded_fields"]:
+            _skip_fields_config(store)
 
-        st.selectbox("🎨 Colour theme", list(THEMES), key="ji_theme",
-                     on_change=lambda: store.set_setting("theme", ss["ji_theme"]),
-                     help="Chart palette — every theme is checked for colour-blind safety and contrast.")
-        swatches(THEMES[ss["ji_theme"]].palette)
+        if opts["colour_theme"]:     # hidden → the saved/default theme still applies to charts
+            st.selectbox("🎨 Colour theme", list(THEMES), key="ji_theme",
+                         on_change=lambda: store.set_setting("theme", ss["ji_theme"]),
+                         help="Chart palette — every theme is checked for colour-blind safety and contrast.")
+            swatches(THEMES[ss["ji_theme"]].palette)
     return current
 
 

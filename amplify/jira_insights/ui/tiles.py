@@ -10,12 +10,13 @@ from __future__ import annotations
 
 import hashlib
 import json
+from dataclasses import replace
 
 import pandas as pd
 import streamlit as st
 from streamlit_sortables import sort_items
 
-from ..kpi import CAPTIONS, KpiSpec, Metric, evaluate, is_available
+from ..kpi import CAPTIONS, TILE_STYLES, KpiSpec, Metric, evaluate, is_available
 from ..pivot import AGGREGATIONS, distinct_values
 from ..store import Store
 from .common import Dataset
@@ -77,6 +78,7 @@ def _load_tile(tile: KpiSpec, ds: Dataset, marker: tuple) -> None:
         del ss[stale]
     ss.kpi_label, ss.kpi_icon = tile.label, tile.icon
     ss.kpi_accent = tile.accent if str(tile.accent).startswith("#") and len(tile.accent) == 7 else ACCENTS[0]
+    ss.kpi_style = tile.style if tile.style in TILE_STYLES else "default"
     ss.kpi_ratio = tile.divide_by is not None
     ss.kpi_caption = tile.caption if tile.caption in CAPTIONS else "share"
     ss.kpi_caption_text = tile.caption_text
@@ -85,12 +87,17 @@ def _load_tile(tile: KpiSpec, ds: Dataset, marker: tuple) -> None:
     ss.kpi_loaded = marker
 
 
-def _tile_from_state(tile_id: str, ds: Dataset) -> KpiSpec:
+def _tile_from_state(base: KpiSpec, ds: Dataset) -> KpiSpec:
+    """The tile as the editor shows it now. Everything the editor has no control for (id, percentage display,
+    required columns) is carried over from `base`, the saved tile."""
     ss = st.session_state
     c1, c2, c3 = st.columns([3, 1, 1])
     label = c1.text_input("Label", key="kpi_label")
     icon = c2.text_input("Icon", key="kpi_icon", max_chars=4, help="Any emoji, e.g. 🐞 📘 🎯")
     accent = c3.color_picker("Colour", key="kpi_accent")
+    style = st.radio("Card style", list(TILE_STYLES), key="kpi_style", horizontal=True, format_func=TILE_STYLES.get,
+                     help="Plain keeps the card neutral (the colour tints the icon). Full colour and Gradient fill the "
+                          "card with the colour above; the figure, label and icon switch to a readable colour on their own.")
 
     st.markdown("**Value**")
     metric = _metric_editor("kpi_m", ds)
@@ -107,8 +114,9 @@ def _tile_from_state(tile_id: str, ds: Dataset) -> KpiSpec:
     if caption == "metric":
         st.markdown("**Second metric**")
         caption_metric = _metric_editor("kpi_c", ds)
-    return KpiSpec(label.strip() or "Untitled", icon.strip() or "📊", accent, metric, divide, caption,
-                   ss.get("kpi_caption_text", ""), caption_metric, tile_id)
+    return replace(base, label=label.strip() or "Untitled", icon=icon.strip() or "📊", accent=accent, metric=metric,
+                   divide_by=divide, caption=caption, caption_text=ss.get("kpi_caption_text", ""),
+                   caption_metric=caption_metric, style=style)
 
 
 # ── Editor panel ──────────────────────────────────────────────────────────────
@@ -164,10 +172,10 @@ def render(store: Store, ds: Dataset, df: pd.DataFrame) -> None:
         if ss.get("kpi_loaded") != marker:
             _load_tile(by_id[pick], ds, marker)
 
-        edited = _tile_from_state(pick, ds)
+        edited = _tile_from_state(by_id[pick], ds)
         if is_available(edited, ds.df):
             value, caption = evaluate(edited, df, len(ds.df), ds.multi_cols)
-            st.markdown(stat_tiles_html([(edited.icon, edited.label, value, caption or "Preview", edited.accent)]),
+            st.markdown(stat_tiles_html([(edited.icon, edited.label, value, caption or "Preview", edited.accent, edited.style)]),
                         unsafe_allow_html=True)
         else:
             st.caption("Preview unavailable — this dataset lacks a column the tile uses.")

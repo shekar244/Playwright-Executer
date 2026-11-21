@@ -4,7 +4,6 @@ Blueprint: Config routes
   GET  /api/config/info         — active config path + source
   POST /api/config/features
   POST /api/config/tools
-  POST /api/config/ui-tabs
   POST /api/config/repo-root
   POST /api/config/override     — set/clear config_override_path
   POST /api/config/save-to-repo — copy active config into {repo}/config.json
@@ -16,13 +15,17 @@ from flask import Blueprint, jsonify, request, g
 from amplify.config_reader import ConfigReader, TOOL_CONFIG_FILE
 from amplify.user_config_reader import UserConfigReader
 from amplify.auth_utils import require_auth
+from amplify.server_secrets import load_default_tab, load_ui_tabs
 
 bp = Blueprint("config", __name__)
 
 @bp.route("/api/config")
 @require_auth
 def get_config():
-    return jsonify(UserConfigReader(g.user.id).load())
+    cfg = UserConfigReader(g.user.id).load()
+    cfg["ui_tabs"] = load_ui_tabs()   # server-wide, set by admins — overrides anything in the user's file
+    cfg["default_tab"] = load_default_tab(is_admin=g.user.is_admin)   # the tab they land on, also admin-set
+    return jsonify(cfg)
 
 
 @bp.route("/api/config/features", methods=["POST"])
@@ -79,23 +82,6 @@ def save_repo_root():
     except OSError as exc:
         return jsonify({"error": str(exc)}), 500
     return jsonify({"ok": True, "repo_root": resolved})
-
-
-@bp.route("/api/config/ui-tabs", methods=["POST"])
-@require_auth
-def save_ui_tabs():
-    body = request.json or {}
-    tabs = body.get("ui_tabs")
-    if not isinstance(tabs, dict):
-        return jsonify({"error": "ui_tabs must be an object"}), 400
-    reader = UserConfigReader(g.user.id)
-    cfg = reader.load()
-    cfg["ui_tabs"] = tabs
-    try:
-        reader.save(cfg)
-    except OSError as exc:
-        return jsonify({"error": str(exc)}), 500
-    return jsonify({"ok": True})
 
 
 @bp.route("/api/config/info")

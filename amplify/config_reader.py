@@ -12,6 +12,7 @@ so each project keeps its own run history.
 """
 
 import json
+import os
 from pathlib import Path
 
 # Minimal defaults — no hardcoded project names, paths, or markers.
@@ -64,11 +65,23 @@ def _read_json(path: Path) -> dict:
         return {}
 
 
+def fresh_defaults() -> dict:
+    """A copy of the defaults for a config that has nothing saved yet.
+
+    When the server provides an Allure 3 CLI (ALLURE3_BIN, which the Amplify image sets) reports default to
+    Allure 3: the Allure 2 CLI needs Java, which such a server does not have. A format the user saved wins.
+    """
+    config = _DEFAULTS.copy()
+    if os.environ.get("ALLURE3_BIN", "").strip():
+        config["allure_format"] = "allure3"
+    return config
+
+
 class ConfigReader:
     """Load, merge, and persist the executor configuration."""
 
     def load(self) -> dict:
-        config = _DEFAULTS.copy()
+        config = fresh_defaults()
 
         # Step 1: Always load the tool-level bootstrap config to get
         # repo_root and config_override_path before anything else.

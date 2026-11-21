@@ -1,16 +1,27 @@
 """
 Blueprint: Dashboard / Report routes
-  /api/dashboard
+  /api/dashboard                       — single-repo view (legacy)
+  /api/dashboard/overview              — Grid + local runs consolidated, filtered by env / browser / pod / time
+  /api/dashboard/run/<source>/<id>     — one run: chunks, pods, per-test results (the drill-down)
+  /api/dashboard/report-link  (POST)   — signed link to view a run's HTML report in the dashboard:
+                                         a local run's own report, or a Grid run's Allure report (source "grid")
+  /rv/<token>/<file>                   — serves that report (signed, per-user, short-lived)
   /api/report  /api/report/open
   /api/report/history  /api/report/history/clear
   /allure/  /allure/<path>   ← HTTP-serves the active Allure SPA directory
 """
 from __future__ import annotations
 
+import re
+import time
 import webbrowser
 from pathlib import Path
+from urllib.parse import quote
 
-from flask import Blueprint, jsonify, request, send_from_directory, g
+from flask import Blueprint, jsonify, request, send_file, send_from_directory, g
+
+from amplify import consolidated, grid_data, grid_reports, report_viewer
+from amplify import payload_coerce as pc
 
 from amplify.routes.history import (
     load_history, save_history,
@@ -19,6 +30,7 @@ from amplify.routes.history import (
 from amplify.user_config_reader import UserConfigReader
 from amplify.auth_utils import require_auth
 from amplify.report_resolver import ReportResolver
+from amplify.request_body import json_object
 
 bp = Blueprint("dashboard", __name__)
 
@@ -175,6 +187,121 @@ def get_dashboard():
         "run_history": load_history(repo, user_id=g.user.id),
         "report_path": report_path,
     })
+
+
+# ── Consolidated view (Grid + local runs) ─────────────────────────────────────
+
+_RUN_ID = re.compile(r"^[A-Za-z0-9._-]+$")
+
+
+def _filters_or_400():
+    try:
+        return consolidated.parse_filters(request.args, int(time.time() * 1000)), None
+    except ValueError as exc:
+        return None, (jsonify({"error": str(exc)}), 400)
+
+
+@bp.route("/api/dashboard/overview")
+@require_auth
+def dashboard_overview():
+    filters, bad = _filters_or_400()
+    if bad:
+        return bad
+    if filters.source == consolidated.LOCAL:
+        grid_list, grid_status = [], {"skipped": True}
+    else:
+        grid_list, grid_status = grid_data.list_runs()
+    return jsonify(consolidated.build_overview(
+        grid_list=grid_list, fetch_grid_details=grid_data.fetch_details,
+        local_records=load_history(user_id=g.user.id), filters=filters, grid_status=grid_status))
+
+
+@bp.route("/api/dashboard/run/<source>/<run_id>")
+@require_auth
+def dashboard_run(source, run_id):
+    filters, bad = _filters_or_400()
+    if bad:
+        return bad
+    if source not in (consolidated.GRID, consolidated.LOCAL) or not _RUN_ID.match(run_id):
+        return jsonify({"error": "Unknown run"}), 404
+    if source == consolidated.GRID:
+        detail, error = grid_data.get_run(run_id)
+        if detail is None:
+            return jsonify({"error": error or "Run not found"}), (502 if "unreachable" in (error or "") else 404)
+        run = consolidated.normalize_grid_run(detail)
+    else:
+        record = next((r for r in load_history(user_id=g.user.id) if consolidated.local_run_id(r) == run_id), None)
+        if record is None:
+            return jsonify({"error": "Run not found"}), 404
+        run = consolidated.normalize_local_record(record)
+    return jsonify(consolidated.build_run_detail(run, filters))
+
+
+def _grid_report_link(run_id):
+    """Link to a Grid run's Allure report. The coordinator builds it; Amplify keeps one folder per run and
+    version (see grid_reports), so the viewer token exposes just that report."""
+    try:
+        cached = grid_reports.fetch_report(run_id)
+    except grid_reports.ReportError as exc:
+        return jsonify({"error": exc.message}), exc.status
+    report_file, _ = report_viewer.resolve_report_file(str(cached))
+    if report_file is None:
+        return jsonify({"error": "That report is no longer on disk"}), 404
+    token = report_viewer.mint(g.user.id, report_file, sandbox=True)      # untrusted content: no same-origin access
+    return jsonify({"url": f"/rv/{token}/{quote(report_file.name)}", "title": f"{run_id} · run report",
+                    "file": report_file.name})
+
+
+@bp.route("/api/dashboard/report-link", methods=["POST"])
+@require_auth
+def dashboard_report_link():
+    """A link to view a run's HTML report (or one local test's) without leaving the dashboard.
+    The browser names the run and test; the path comes from this user's own history (local) or from the
+    coordinator's report for that run (grid) — never from the request."""
+    body, bad = json_object()
+    if bad:
+        return bad
+    source, run_id, uid = body.get("source"), body.get("run_id"), body.get("uid")
+    if any(v is not None and not isinstance(v, str) for v in (source, run_id, uid)):      # null is the same as absent
+        return jsonify({"error": "source, run_id and uid must be text"}), 400
+    source, run_id, uid = source or consolidated.LOCAL, run_id or "", uid or ""
+    if source not in (consolidated.GRID, consolidated.LOCAL):
+        return jsonify({"error": "source must be grid or local"}), 400
+    if source == consolidated.GRID:
+        return _grid_report_link(run_id)                 # the report covers the whole run, so uid is ignored
+    record = next((r for r in load_history(user_id=g.user.id)
+                   if isinstance(r, dict) and consolidated.local_run_id(r) == run_id), None)
+    if record is None:
+        return jsonify({"error": "Run not found"}), 404
+    raw, title = pc.text(record.get("report_path"), 4096), f"{pc.text(record.get('repo')) or 'Local run'} · run report"
+    if uid:
+        test = next((t for t in pc.dicts(record.get("tests")) if t.get("uid") == uid), None)
+        if test is None:
+            return jsonify({"error": "Test not found in that run"}), 404
+        raw, title = pc.text(test.get("report_path"), 4096) or raw, pc.text(test.get("name")) or title
+    report_file, anchor = report_viewer.resolve_report_file(raw)
+    if report_file is None:
+        return jsonify({"error": "That report is no longer on disk"}), 404
+    token = report_viewer.mint(g.user.id, report_file)
+    return jsonify({"url": f"/rv/{token}/{quote(report_file.name)}{anchor}", "title": title, "file": report_file.name})
+
+
+@bp.route("/rv/<token>/")
+@bp.route("/rv/<token>/<path:filepath>")
+@require_auth
+def serve_report_view(token: str, filepath: str = ""):
+    claims = report_viewer.verify(token)
+    if claims is None or claims["uid"] != g.user.id:        # someone else's link is just "not found"
+        return "Report not found.", 404
+    target = report_viewer.servable(claims["dir"], filepath or claims["entry"])
+    if target is None:
+        return "Report not found.", 404
+    response = send_file(target, max_age=0)
+    response.headers["Cache-Control"] = "no-store"
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    response.headers["Referrer-Policy"] = "no-referrer"
+    response.headers["Content-Security-Policy"] = report_viewer.SANDBOX_CSP if claims["sandbox"] else report_viewer.DEFAULT_CSP
+    return response
 
 
 @bp.route("/api/report")

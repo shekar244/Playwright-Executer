@@ -2,7 +2,7 @@
 import json
 from pathlib import Path
 from flask import g
-from amplify.config_reader import ConfigReader, _DEFAULTS, _read_json
+from amplify.config_reader import ConfigReader, fresh_defaults, _read_json
 from amplify.storage import get_user_config_path
 
 class UserConfigReader(ConfigReader):
@@ -15,7 +15,7 @@ class UserConfigReader(ConfigReader):
 
     def load(self) -> dict:
         """Load config from user's workspace."""
-        config = _DEFAULTS.copy()
+        config = fresh_defaults()
 
         if not self.user_id:
             return config

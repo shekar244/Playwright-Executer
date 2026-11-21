@@ -132,7 +132,12 @@
     .modal-actions { display: flex; gap: 8px; justify-content: flex-end; }
     .modal-actions .btn { min-width: 90px; }
 
+    .tabvis-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; }
+    .tabvis-title { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-dim); margin-bottom: 10px; }
+    .tabvis-list { display: flex; flex-direction: column; gap: 10px; }
+
     @media (max-width: 768px) {
+      .tabvis-grid { grid-template-columns: 1fr; gap: 16px; }
       .admin-topbar { padding: 0 12px; height: 46px; gap: 8px; }
       .admin-topbar h1 { font-size: 14px; }
       .admin-topbar .user-info { display: none; }
@@ -206,7 +211,7 @@
       <span class="count-badge" id="secretsSource">loading</span>
     </div>
     <div style="padding:16px 18px;display:flex;flex-direction:column;gap:12px;">
-      <div class="hint">Shared credentials for all users. Set via environment variables or edit here. Tokens are masked in the UI.</div>
+      <div class="hint">Shared credentials for all users. Set via environment variables or edit here. Tokens are masked in the UI. Leave a masked field alone to keep it; empty it and save to remove it.</div>
       <div class="sc-grid" style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
         <div class="field"><label style="font-size:11px;font-weight:600;">Jira URL</label><input type="text" id="sc_jira_url" placeholder="https://company.atlassian.net"></div>
         <div class="field"><label style="font-size:11px;font-weight:600;">Username</label><input type="text" id="sc_username" placeholder="user@company.com"></div>
@@ -220,6 +225,78 @@
         </div>
       </div>
       <div id="secretsStatus" class="hint" style="display:none;"></div>
+    </div>
+  </div>
+
+  <!-- Grid coordinator (the Grid tab's environments, browsers and runs come from here) -->
+  <div class="admin-section">
+    <div class="admin-section-header">
+      Grid Coordinator
+      <span class="count-badge" id="gridCoordBadge">loading</span>
+    </div>
+    <div style="padding:16px 18px;display:flex;flex-direction:column;gap:12px;">
+      <div class="hint">Where the Grid tab sends distributed runs. Without it the Grid tab can't list environments or browsers. Applies to every user. The token is never shown again once saved.</div>
+      <div class="sc-grid" style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
+        <div class="field"><label style="font-size:11px;font-weight:600;">Coordinator URL</label><input type="text" id="gc_url" placeholder="http://central-coordinator-svc:8000" autocomplete="off"></div>
+        <div class="field"><label style="font-size:11px;font-weight:600;">API Token</label><input type="password" id="gc_token" placeholder="Shared secret (X-API-Token)" autocomplete="new-password"></div>
+        <div class="field" style="display:flex;align-items:center;">
+          <label class="checkbox-label" id="gc_clear_wrap" style="gap:8px;display:none;"><input type="checkbox" id="gc_clear"><span>Remove the saved token</span></label>
+        </div>
+        <div class="field" style="display:flex;align-items:flex-end;">
+          <button class="btn btn-accent" onclick="saveGridCoordinator()" style="width:100%;">Save Grid Coordinator</button>
+        </div>
+      </div>
+      <div id="gridCoordSource" class="hint"></div>
+      <div id="gridCoordStatus" class="hint" style="display:none;"></div>
+    </div>
+  </div>
+
+  <!-- Tab visibility (applies to every user) -->
+  <div class="admin-section">
+    <div class="admin-section-header">Tab Visibility — all users</div>
+    <div style="padding:16px 18px;display:flex;flex-direction:column;gap:14px;">
+      <div class="hint">Choose which tabs appear in the app. This applies to <strong>every user, including admins</strong>. The Admin Panel itself is always available.</div>
+      <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;">
+        <label for="uiLandingTab" class="tabvis-title" style="margin:0;">Landing tab</label>
+        <select id="uiLandingTab" style="width:auto;min-width:220px;"></select>
+        <span class="hint">The tab users see first after signing in or reloading. Only visible tabs can be chosen.</span>
+      </div>
+      <div class="tabvis-grid">
+        <div>
+          <div class="tabvis-title">Main navigation</div>
+          <div class="tabvis-list" id="uiTabsMain"></div>
+        </div>
+        <div>
+          <div class="tabvis-title">Config sub-tabs</div>
+          <div class="tabvis-list" id="uiTabsCfg"></div>
+        </div>
+      </div>
+      <div class="action-row">
+        <button class="btn btn-accent" onclick="saveFlags('tabs')">Save Tab Visibility</button>
+        <span id="uiTabsStatus" class="hint" style="display:none;"></span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Jira Insights options (applies to every user) -->
+  <div class="admin-section">
+    <div class="admin-section-header">Jira Insights Options — all users</div>
+    <div style="padding:16px 18px;display:flex;flex-direction:column;gap:14px;">
+      <div class="hint">Choose which options appear inside Jira Insights. Unticked options are not shown to anyone. At least one way to create a dataset and one view must stay enabled.</div>
+      <div class="tabvis-grid">
+        <div>
+          <div class="tabvis-title">Sidebar options</div>
+          <div class="tabvis-list" id="insOptsSidebar"></div>
+        </div>
+        <div>
+          <div class="tabvis-title">Views</div>
+          <div class="tabvis-list" id="insOptsViews"></div>
+        </div>
+      </div>
+      <div class="action-row">
+        <button class="btn btn-accent" onclick="saveFlags('insights')">Save Jira Insights Options</button>
+        <span id="insOptsStatus" class="hint" style="display:none;"></span>
+      </div>
     </div>
   </div>
 
@@ -239,7 +316,8 @@
   <div class="modal-card">
     <h3>Reset Password</h3>
     <div class="modal-sub">User: <strong id="resetUser"></strong></div>
-    <input type="password" id="resetPw" placeholder="New password (min 6 characters)">
+    <input type="password" id="resetPw" placeholder="Temporary password (min 6 characters)">
+    <div class="modal-sub" style="margin-top:-8px;">This is a temporary password. The user must choose their own the next time they sign in.</div>
     <div class="modal-actions">
       <button class="btn btn-sm" onclick="closeReset()">Cancel</button>
       <button class="btn btn-accent" onclick="doReset()">Reset</button>
@@ -323,7 +401,7 @@ async function loadUsers() {
       <td class="user-primary">${u.username}</td>
       <td>${u.email || '<span style="color:var(--text-dim)">—</span>'}</td>
       <td><span class="badge-role ${u.is_admin ? 'admin' : 'user'}">${u.is_admin ? 'Admin' : 'User'}</span></td>
-      <td><span class="badge-status ${u.is_active ? 'active' : 'disabled'}">${u.is_active ? 'Active' : 'Disabled'}</span></td>
+      <td><span class="badge-status ${u.is_active ? 'active' : 'disabled'}">${u.is_active ? 'Active' : 'Disabled'}</span>${u.must_change_password ? ' <span class="badge-status disabled" title="An admin reset this password; they haven\u2019t chosen a new one yet">Must change password</span>' : ''}</td>
       <td>${fmtDate(u.last_login_at)}</td>
       <td>${fmtDate(u.created_at)}</td>
       <td class="mono">${fmtBytes(u.workspace_bytes)}</td>
@@ -372,11 +450,13 @@ function closeReset() {
 async function doReset() {
   const pw = document.getElementById('resetPw').value;
   if (pw.length < 6) return alert('Password must be at least 6 characters');
-  await api(`/api/admin/users/${_resetId}/reset`, {
+  const r = await api(`/api/admin/users/${_resetId}/reset`, {
     method: 'POST', headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ password: pw })
   });
+  if (r.error) return alert(r.error);                  // e.g. too long — keep the dialog open
   closeReset();
+  loadUsers();
   loadActivity();
 }
 
@@ -425,12 +505,11 @@ async function saveServerSecrets() {
     account_id: get('sc_account_id'),
     project_key: get('sc_project_key'),
   };
-  const apiToken = get('sc_api_token');
-  const accessKey = get('sc_access_key');
-  const secretKey = get('sc_secret_key');
-  if (apiToken && !apiToken.includes('•')) zephyr.api_token = apiToken;
-  if (accessKey && !accessKey.includes('•')) zephyr.access_key = accessKey;
-  if (secretKey && !secretKey.includes('•')) zephyr.secret_key = secretKey;
+  // A masked secret is untouched (the server keeps it); text replaces it; an emptied box removes it.
+  ['api_token', 'access_key', 'secret_key'].forEach(k => {
+    const v = get({ api_token: 'sc_api_token', access_key: 'sc_access_key', secret_key: 'sc_secret_key' }[k]);
+    if (!v.includes('•')) zephyr[k] = v;
+  });
 
   const status = document.getElementById('secretsStatus');
   status.style.display = 'block';
@@ -452,10 +531,130 @@ async function saveServerSecrets() {
   }
 }
 
+// ── Grid coordinator ─────────────────────────────────────────────────────────
+function renderGridCoordinator(d) {
+  const badge = document.getElementById('gridCoordBadge');
+  badge.textContent = d.coordinator_url ? 'configured' : 'not set';
+  badge.style.background = d.coordinator_url ? 'var(--green)' : 'var(--red)';
+  document.getElementById('gc_url').value = d.url_source === 'saved' ? d.coordinator_url : '';
+  document.getElementById('gc_url').placeholder = d.url_source === 'env' ? `${d.coordinator_url}  (from the environment)` : 'http://central-coordinator-svc:8000';
+  const token = document.getElementById('gc_token');
+  token.value = '';
+  token.placeholder = d.has_token ? 'Token saved — leave blank to keep it' : 'Shared secret (X-API-Token)';
+  document.getElementById('gc_clear').checked = false;
+  document.getElementById('gc_clear_wrap').style.display = d.token_source === 'saved' ? 'flex' : 'none';
+  const from = { saved: 'saved here', env: 'from an environment variable', none: 'not set' };
+  document.getElementById('gridCoordSource').textContent =
+    `URL: ${from[d.url_source]} · Token: ${d.has_token ? from[d.token_source] : 'not set'}. A value saved here overrides GRID_COORDINATOR_URL / GRID_API_TOKEN; clear the URL to go back to the environment variable.`;
+}
+
+async function loadGridCoordinator() {
+  renderGridCoordinator(await api('/api/admin/grid'));
+}
+
+async function saveGridCoordinator() {
+  const status = document.getElementById('gridCoordStatus');
+  status.style.display = 'block';
+  status.style.color = 'var(--accent)';
+  status.textContent = 'Saving and checking the connection…';
+  const r = await api('/api/admin/grid', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      coordinator_url: document.getElementById('gc_url').value.trim(),
+      api_token: document.getElementById('gc_token').value.trim(),
+      clear_token: document.getElementById('gc_clear').checked,
+    }),
+  });
+  if (!r.ok) {
+    status.style.color = 'var(--red)';
+    status.textContent = r.error || 'Save failed';
+    return;
+  }
+  renderGridCoordinator(r);
+  const s = r.status || {};
+  if (!s.configured) {
+    status.style.color = 'var(--yellow)';
+    status.textContent = 'Saved — no coordinator URL is set, so the Grid tab stays unavailable';
+  } else if (s.reachable) {
+    status.style.color = 'var(--green)';
+    status.textContent = `Saved — connected (${s.environments} environment${s.environments === 1 ? '' : 's'}, ${s.browsers} browser${s.browsers === 1 ? '' : 's'} available)`;
+  } else {
+    status.style.color = 'var(--red)';
+    status.textContent = `Saved, but the coordinator isn't answering: ${s.error || 'unknown error'}`;
+  }
+  loadActivity();
+}
+
+// Tab Visibility and Jira Insights Options are both {key: bool} maps rendered from a
+// server-side catalog, so the checkboxes can never drift from what the server accepts.
+const _flagSets = {
+  tabs:     { url: '/api/admin/ui-tabs',          body: 'ui_tabs',
+              groups: { main: 'uiTabsMain', config: 'uiTabsCfg' },
+              status: 'uiTabsStatus',  saved: 'Saved — users see the change on their next page load', catalog: [],
+              loaded: d => renderLanding(d.default_tab),
+              extra: () => ({ default_tab: document.getElementById('uiLandingTab').value }) },
+  insights: { url: '/api/admin/insights-options', body: 'insights_options',
+              groups: { sidebar: 'insOptsSidebar', views: 'insOptsViews' },
+              status: 'insOptsStatus', saved: 'Saved — Jira Insights picks it up within about 15 seconds', catalog: [] },
+};
+
+async function loadFlags(name) {
+  const set = _flagSets[name];
+  const d = await api(set.url);
+  set.catalog = d.catalog || [];
+  Object.entries(set.groups).forEach(([group, elId]) => {
+    document.getElementById(elId).innerHTML = set.catalog.filter(t => t.group === group).map(t => `
+      <label class="checkbox-label" style="gap:10px;cursor:pointer;">
+        <input type="checkbox" id="flag_${name}_${t.key}" ${d[set.body][t.key] ? 'checked' : ''} />
+        <span>${t.label}</span>
+      </label>`).join('');
+  });
+  if (set.loaded) set.loaded(d);
+}
+
+// Landing tab: any main tab that is ticked in the visibility list above (live, before saving).
+function renderLanding(selected) {
+  const sel = document.getElementById('uiLandingTab');
+  const main = _flagSets.tabs.catalog.filter(t => t.group === 'main');
+  const shown = key => document.getElementById(`flag_tabs_${key}`)?.checked;
+  const keep = selected || sel.value;
+  sel.innerHTML = main.map(t =>
+    `<option value="${t.key}" ${shown(t.key) ? '' : 'disabled'}>${t.label}${shown(t.key) ? '' : ' (hidden)'}</option>`).join('');
+  const usable = main.filter(t => shown(t.key));
+  sel.value = usable.some(t => t.key === keep) ? keep : (usable[0] ? usable[0].key : '');
+}
+document.getElementById('uiTabsMain').addEventListener('change', () => renderLanding());
+
+async function saveFlags(name) {
+  const set = _flagSets[name];
+  const flags = {};
+  set.catalog.forEach(t => { flags[t.key] = document.getElementById(`flag_${name}_${t.key}`).checked; });
+  const status = document.getElementById(set.status);
+  status.style.display = 'inline';
+  status.style.color = 'var(--accent)';
+  status.textContent = 'Saving…';
+  const r = await api(set.url, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ [set.body]: flags, ...(set.extra ? set.extra() : {}) }),
+  });
+  if (r.ok) {
+    status.style.color = 'var(--green)';
+    status.textContent = set.saved;
+    if (set.loaded) set.loaded(r);
+    loadActivity();
+  } else {
+    status.style.color = 'var(--red)';
+    status.textContent = r.error || 'Save failed';
+  }
+}
+
 loadMetrics();
 loadUsers();
 loadActivity();
 loadServerSecrets();
+loadGridCoordinator();
+loadFlags('tabs');
+loadFlags('insights');
 </script>
 </body>
 </html>

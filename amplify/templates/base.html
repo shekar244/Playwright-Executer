@@ -18,7 +18,6 @@
       else if (t === 'light' && window.matchMedia('(prefers-color-scheme: dark)').matches && !localStorage.getItem('amplify-theme')) document.body.classList.add('dark-theme');
     } catch (e) {}
   })();
-  {% if user %}window._amplifyUserId = {{ user.id }};{% endif %}
 </script>
 
 <header>
@@ -47,6 +46,7 @@
         {% if user.is_admin %}
         <a href="/admin" class="user-logout">Admin Panel</a>
         {% endif %}
+        <a href="/change-password" class="user-logout">Change password</a>
         <a href="javascript:logout()" class="user-logout">Logout</a>
       </div>
     </div>
@@ -56,17 +56,23 @@
 
 <nav class="tab-nav">
   <button type="button" class="tab-btn active" id="navbtn-executor" onclick="switchTab('executor')"><span class="tab-icon">⚡</span>Executor</button>
-  <button type="button" class="tab-btn" id="navbtn-dashboard" onclick="switchTab('dashboard')"><span class="tab-icon">📊</span>Dashboard</button>
+  <button type="button" class="tab-btn" id="navbtn-dashboard" onclick="switchTab('dashboard')"><span class="tab-icon">📊</span>Reporting Dashboard</button>
+  <button type="button" class="tab-btn" id="navbtn-grid" onclick="switchTab('grid')"><span class="tab-icon">🛰️</span>Grid</button>
   <button type="button" class="tab-btn" id="navbtn-zephyr" onclick="switchTab('zephyr')"><span class="tab-icon">🔷</span>Test Management</button>
+  {% if user.is_admin %}
   <button type="button" class="tab-btn" id="navbtn-filemanager" onclick="switchTab('filemanager')"><span class="tab-icon">🗂️</span>File Manager</button>
+  {% endif %}
   <button type="button" class="tab-btn" id="navbtn-insights" onclick="switchTab('insights')"><span class="tab-icon">📈</span>Jira Insights</button>
   <button type="button" class="tab-btn" id="navbtn-tools" onclick="switchTab('tools')"><span class="tab-icon">⚙️</span>Config</button>
 </nav>
 
 {% include 'partials/executor.html' %}
 {% include 'partials/dashboard.html' %}
+{% include 'partials/grid.html' %}
 {% include 'partials/testmanagement.html' %}
+{% if user.is_admin %}
 {% include 'partials/filemanager.html' %}
+{% endif %}
 {% include 'partials/insights.html' %}
 
 <!-- Status bar -->
@@ -145,7 +151,9 @@ function setRunning(running) {
 }
 
 function switchTab(tab) {
-  const pages = ['executor','tools','dashboard','zephyr','filemanager','insights'];
+  const btn = document.getElementById('navbtn-' + tab);
+  if (!btn || btn.style.display === 'none') return;   // hidden by an admin, or not available to this user
+  const pages = ['executor','tools','dashboard','grid','zephyr','filemanager','insights'];
   pages.forEach(p => {
     const el = document.getElementById('page-' + p);
     if (el) {
@@ -158,8 +166,9 @@ function switchTab(tab) {
     const key = btn.id.replace('navbtn-', '');
     btn.classList.toggle('active', key === tab);
   });
-  if (tab === 'tools')       { switchCfgTab('features'); loadTools(); loadFeatures(); loadZephyrConfig(); loadMappingConfig(); }
+  if (tab === 'tools')       { switchCfgTab(_visibleCfgTab()); loadTools(); loadFeatures(); loadZephyrConfig(); loadMappingConfig(); }
   if (tab === 'dashboard')   loadDashboard();
+  if (tab === 'grid')        loadGrid();
   if (tab === 'zephyr')      { loadZephyrConfig(); _updateZephyrContextBanners(); loadZephyrStatuses(); }
   if (tab === 'filemanager') initFileManager();
 
@@ -247,34 +256,30 @@ document.getElementById('log').addEventListener('scroll', function() {
   autoScroll = this.scrollTop + this.clientHeight >= this.scrollHeight - 20;
 });
 
-// ── UI Tab kill-switch ────────────────────────────────────────────────────────
-// Maps tab key → { navBtn id, cfgBtn id (optional) }
-const UI_TAB_MAP = {
-  executor:     { nav: 'navbtn-executor' },
-  dashboard:    { nav: 'navbtn-dashboard' },
-  zephyr:       { nav: 'navbtn-zephyr' },
-  filemanager:  { nav: 'navbtn-filemanager' },
-  insights:     { nav: 'navbtn-insights' },
-  cfg_git:      { cfg: 'ctab-git' },
-  cfg_tools:    { cfg: 'ctab-tools' },
-  cfg_mapping:  { cfg: 'ctab-mapping' },
-  cfg_zephyr:   { cfg: 'ctab-zephyr' },
-};
+// ── Tab visibility ────────────────────────────────────────────────────────────
+// Server-wide: admins choose the tabs in the Admin Panel and /api/config returns
+// the result as cfg.ui_tabs (a full key → boolean map, defaults already applied).
+// Button ids follow a convention: "<key>" → #navbtn-<key>, "cfg_<name>" → #ctab-<name>.
+function _uiTabBtn(key) {
+  return document.getElementById(key.startsWith('cfg_') ? 'ctab-' + key.slice(4) : 'navbtn-' + key);
+}
+
+function _visibleCfgTab() {
+  const btn = [...document.querySelectorAll('.cfg-tab-btn')].find(b => b.style.display !== 'none');
+  return btn ? btn.id.replace('ctab-', '') : 'features';
+}
 
 function applyUiTabs(tabs) {
-  const defaults = { executor: true, dashboard: true, zephyr: true, filemanager: true, insights: false, cfg_git: true, cfg_tools: true, cfg_mapping: true, cfg_zephyr: true };
-  const t = Object.assign({}, defaults, tabs || {});
-  Object.entries(UI_TAB_MAP).forEach(([key, ids]) => {
-    const visible = !!t[key];
-    if (ids.nav) {
-      const btn = document.getElementById(ids.nav);
-      if (btn) btn.style.display = visible ? '' : 'none';
-    }
-    if (ids.cfg) {
-      const btn = document.getElementById(ids.cfg);
-      if (btn) btn.style.display = visible ? '' : 'none';
-    }
+  Object.entries(tabs || {}).forEach(([key, visible]) => {
+    const btn = _uiTabBtn(key);
+    if (btn) btn.style.display = visible ? '' : 'none';
   });
+  // If the tab we're sitting on just got hidden, move to the first one still visible.
+  const active = document.querySelector('.tab-btn.active');
+  if (active && active.style.display === 'none') {
+    const first = [...document.querySelectorAll('.tab-btn')].find(b => b.style.display !== 'none');
+    if (first) switchTab(first.id.replace('navbtn-', ''));
+  }
 }
 
 // ── Theme picker ─────────────────────────────────────────────────────────────
@@ -383,7 +388,8 @@ async function init() {
   if (typeof loadRepoStatus === 'function') loadRepoStatus();
   if (typeof checkVenvStatus === 'function') checkVenvStatus();
   if (cfg.venv_path) { const el = document.getElementById('venvPathInput'); if (el) el.value = cfg.venv_path; }
-
+  // Land on the tab the admin chose (last, so repos are loaded before a tab that needs them opens).
+  if (cfg.default_tab && cfg.default_tab !== 'executor') switchTab(cfg.default_tab);
 
 }
 
@@ -391,6 +397,7 @@ init();
 </script>
 <script src="/static/js/executor.js"></script>
 <script src="/static/js/dashboard.js"></script>
+<script src="/static/js/grid.js"></script>
 <script src="/static/js/testmanagement.js"></script>
 <script src="/static/js/insights.js"></script>
 </body>

@@ -1,7 +1,10 @@
 # ── Amplify Insights — Standalone Streamlit App ───────────────────────────────
 #
 # Build:   docker build -f Dockerfile.insights -t amplify-insights .
-# Run:     docker run -p 8501:8501 -v amplify-data:/app/data amplify-insights
+# Run:     docker run -p 8501:8501 -v amplify-data:/app/data \
+#            -e JWT_SECRET_KEY=<the same value QEA uses> amplify-insights
+#          (Insights accepts sign-in links from QEA only when both use the same JWT_SECRET_KEY.
+#           Sharing the /app/data volume with QEA is enough if neither sets it.)
 # ─────────────────────────────────────────────────────────────────────────────
 
 ARG BASE_REGISTRY=

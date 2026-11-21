@@ -4,6 +4,7 @@
   POST /api/auth/logout    — clear session
   POST /api/auth/refresh   — refresh JWT token
   GET  /api/auth/me        — get current user info
+  POST /api/auth/change-password — change your own password (needs the current one)
 """
 import json
 from flask import Blueprint, request, jsonify, g, make_response
@@ -24,8 +25,9 @@ def register():
     if not username or len(username) < 3:
         return jsonify({"error": "Username must be at least 3 characters"}), 400
 
-    if not password or len(password) < 6:
-        return jsonify({"error": "Password must be at least 6 characters"}), 400
+    problem = User.password_problem(password)
+    if problem:
+        return jsonify({"error": problem}), 400
 
     is_first_user = User.count() == 0
 
@@ -73,6 +75,7 @@ def login():
         "ok": True,
         "user": {"id": user.id, "username": user.username, "email": user.email,
                  "is_admin": user.is_admin},
+        "must_change_password": user.must_change_password,
         "access_token": token
     }))
     response.set_cookie("access_token", token, httponly=True, secure=False, samesite="Lax", max_age=86400)
@@ -97,7 +100,42 @@ def get_me():
         "username": user.username,
         "email": user.email,
         "is_admin": user.is_admin,
+        "must_change_password": user.must_change_password,
     }), 200
+
+@bp.route("/api/auth/change-password", methods=["POST"])
+@require_auth
+def change_password():
+    """Change your own password. Always asks for the current one, so a stolen session can't lock you out;
+    it is also the one thing a user whose password an admin reset is allowed to do."""
+    data = request.get_json(silent=True)
+    if not isinstance(data, dict):
+        return jsonify({"error": "Expected a JSON object"}), 400
+    current, new = data.get("current_password"), data.get("new_password")
+    if not isinstance(current, str) or not current:
+        return jsonify({"error": "Enter your current password"}), 400
+    if not isinstance(new, str) or not new:
+        return jsonify({"error": "Enter a new password"}), 400
+
+    user = g.user
+    if User.verify_credentials(user.username, current) is None:
+        return jsonify({"error": "Current password is incorrect"}), 400
+    problem = User.password_problem(new)
+    if problem:
+        return jsonify({"error": problem}), 400
+    if new == current:
+        return jsonify({"error": "The new password must be different from the current one"}), 400
+
+    required = user.must_change_password
+    User.change_password(user.id, new)
+    ActivityLog.record(user.id, "change_password",
+                       "Password changed" + (" (required after an admin reset)" if required else ""),
+                       request.remote_addr)
+
+    token = generate_jwt(user.id)                # carry on signed in
+    response = make_response(jsonify({"ok": True, "access_token": token}))
+    response.set_cookie("access_token", token, httponly=True, secure=False, samesite="Lax", max_age=86400)
+    return response, 200
 
 @bp.route("/api/auth/refresh", methods=["POST"])
 @require_auth

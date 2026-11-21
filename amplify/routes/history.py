@@ -221,7 +221,7 @@ def _report_paths(repo: str, abs_path: str) -> tuple[str, str]:
 
 def record_run_history(
     repo: str, status: str, cfg: dict, report_info: dict | None = None,
-    user_id: int = None,
+    user_id: int = None, browser: str = "", environment: str = "local",
 ) -> None:
     """
     Append a run record to report_history.json.
@@ -301,6 +301,8 @@ def record_run_history(
         "date":            datetime.datetime.now().strftime("%Y-%m-%d %H:%M"),
         "repo":            Path(repo).name if repo else "unknown",
         "repo_root":       repo,
+        "browser":         browser,         # what the Executor ran with (older records have none)
+        "environment":     environment,     # local runs have no target environment: "local"
         "status":          status,
         "stats":           stats,
         "tests":           tests_detail,

@@ -25,8 +25,9 @@ AGGREGATIONS = {
     "Min": "min", "Max": "max", "Distinct count": "nunique",
 }
 DATE_GRAINS = {"Day": "D", "Week": "W", "Month": "M", "Quarter": "Q", "Year": "Y"}
+TABLE = "Table"                            # not a chart: the chosen columns, one row per issue
 CHART_TYPES = ("Column", "Stacked column", "Bar", "Stacked bar", "Line", "Area",
-               "Donut", "Heatmap", "Treemap", "Gauge", "Meter", "Number")
+               "Donut", "Heatmap", "Treemap", "Gauge", "Meter", "Number", TABLE)
 DIALS = ("Gauge", "Meter")                 # arc gauge · needle meter with colour bands
 SINGLE_VALUE = ("Number", *DIALS)          # rows optional: one value, or one dial per category
 
@@ -58,10 +59,18 @@ def clean_bands(cuts) -> list[float]:
     return values[:3] if len(values) >= 2 else [50.0, 80.0]
 
 
+def clean_columns(columns) -> list[str]:
+    """Column names in the order chosen, without blanks or repeats."""
+    seen: set[str] = set()
+    return [c for c in (str(c) for c in (columns if isinstance(columns, (list, tuple)) else []))
+            if c and not (c in seen or seen.add(c))]
+
+
 @dataclass
 class ReportSpec:
     name: str = "Untitled report"
     chart: str = "Column"
+    columns: list = field(default_factory=list)   # Table only: which columns, left to right
     rows: str = ""                  # category / x-axis dimension ("" only for Number)
     series: str = ""                # colour / heatmap-column dimension ("" = none)
     value: str = ""                 # numeric measure column ("" = count issues)
@@ -96,6 +105,7 @@ class ReportSpec:
         known = {f.name for f in dc_fields(cls)}
         spec = cls(**{k: v for k, v in data.items() if k in known})
         spec.gauge_bands = clean_bands(spec.gauge_bands)
+        spec.columns = clean_columns(spec.columns)
         return spec
 
     def to_dict(self) -> dict:
@@ -115,6 +125,8 @@ class ReportSpec:
         return self
 
     def required_columns(self) -> set[str]:
+        if self.chart == TABLE:
+            return set(self.columns) | set(self.filters)
         gauge = set(self.gauge_where) if self.chart in DIALS else set()
         return {c for c in (self.rows, self.series, self.value) if c} | set(self.filters) | gauge
 
@@ -273,6 +285,13 @@ def _fold(work: pd.DataFrame, col: str, spec: ReportSpec, keep: int, fold: bool 
         work[col] = work[col].where(work[col].isin(top), OTHER)
         return work
     return work[work[col].isin(top)]
+
+
+def build_table(df: pd.DataFrame, spec: ReportSpec, multi_cols=(),
+                now: pd.Timestamp | None = None) -> pd.DataFrame:
+    """A Table report: the issues that pass the filters, cut down to the chosen columns in that order."""
+    wanted = [c for c in spec.columns if c in df.columns]
+    return apply_filters(df, spec.filters, multi_cols, now=now)[wanted].reset_index(drop=True)
 
 
 def build_pivot(df: pd.DataFrame, spec: ReportSpec, multi_cols=(),

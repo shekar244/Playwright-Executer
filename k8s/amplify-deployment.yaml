@@ -1,0 +1,75 @@
+# Amplify QEA — the Flask app (login, Executor, Dashboard, Admin Panel, ...) on port 8080.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: amplify-qea
+  labels:
+    app: amplify-qea
+spec:
+  replicas: 1                 # SQLite + in-process run state: keep at 1
+  strategy:
+    type: Recreate            # never two pods writing the same SQLite file during a rollout
+  selector:
+    matchLabels:
+      app: amplify-qea
+  template:
+    metadata:
+      labels:
+        app: amplify-qea
+    spec:
+      # Private registry (e.g. JFrog)? Create the pull secret (see README) and uncomment:
+      # imagePullSecrets:
+      #   - name: registry-pull-secret
+      containers:
+        - name: amplify-qea
+          image: amplify-qea:latest           # real registry path comes from kustomization.yaml
+          ports:
+            - containerPort: 8080
+              name: http
+          env:
+            - name: CONTAINER
+              value: "1"
+            - name: PORT
+              value: "8080"
+            # Where the browser reaches Jira Insights (its own ingress host). Keep in sync with amplify-ingress.yaml.
+            - name: INSIGHTS_PUBLIC_URL
+              value: "https://insights.example.com"
+            - name: JWT_SECRET_KEY
+              valueFrom:
+                secretKeyRef: { name: amplify-secrets, key: jwt-secret-key }
+            - name: JIRA_URL
+              valueFrom:
+                secretKeyRef: { name: amplify-secrets, key: jira-url, optional: true }
+            - name: JIRA_USERNAME
+              valueFrom:
+                secretKeyRef: { name: amplify-secrets, key: jira-username, optional: true }
+            - name: JIRA_API_TOKEN
+              valueFrom:
+                secretKeyRef: { name: amplify-secrets, key: jira-api-token, optional: true }
+            - name: ZEPHYR_ACCESS_KEY
+              valueFrom:
+                secretKeyRef: { name: amplify-secrets, key: zephyr-access-key, optional: true }
+            - name: ZEPHYR_SECRET_KEY
+              valueFrom:
+                secretKeyRef: { name: amplify-secrets, key: zephyr-secret-key, optional: true }
+            - name: ZEPHYR_ACCOUNT_ID
+              valueFrom:
+                secretKeyRef: { name: amplify-secrets, key: zephyr-account-id, optional: true }
+          volumeMounts:
+            - name: amplify-data
+              mountPath: /app/data
+          resources:
+            requests: { cpu: 250m, memory: 512Mi }
+            limits:   { cpu: "2",  memory: 2Gi }
+          readinessProbe:
+            httpGet: { path: /login, port: 8080 }
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          livenessProbe:
+            httpGet: { path: /login, port: 8080 }
+            initialDelaySeconds: 15
+            periodSeconds: 30
+      volumes:
+        - name: amplify-data
+          persistentVolumeClaim:
+            claimName: amplify-data-pvc

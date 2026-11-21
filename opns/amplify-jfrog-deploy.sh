@@ -9,7 +9,7 @@
 #   3. JFrog Artifactory access (URL, username, token/password)
 #
 # Usage:
-#   ./openshift/jfrog-deploy.sh
+#   ./opns/amplify-jfrog-deploy.sh
 #
 # Environment variables (set before running, or you'll be prompted):
 #   JFROG_REGISTRY    — e.g. yourcompany.jfrog.io
@@ -92,9 +92,9 @@ echo ""
 echo "▶ Step 5: Deploying to OpenShift..."
 
 # Apply PVC, Service, Route
-oc apply -f openshift/pvc.yaml
-oc apply -f openshift/service.yaml
-oc apply -f openshift/route.yaml
+oc apply -f opns/amplify-pvc.yaml
+oc apply -f opns/amplify-service.yaml
+oc apply -f opns/amplify-route.yaml
 
 # Create app secrets if they don't exist
 if ! oc get secret amplify-secrets &>/dev/null; then
@@ -104,7 +104,7 @@ if ! oc get secret amplify-secrets &>/dev/null; then
 fi
 
 # Apply deployment with JFrog image
-sed "s|image:.*|image: ${FULL_IMAGE}|" openshift/deployment.yaml | \
+sed "s|image:.*|image: ${FULL_IMAGE}|" opns/amplify-deployment.yaml | \
   sed '/imagePullSecrets/d' | \
   sed "/spec:/a\\
 \\      imagePullSecrets:\\

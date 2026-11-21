@@ -14,7 +14,7 @@ from __future__ import annotations
 import streamlit as st
 
 from ..jira_client import JiraClient, JiraError
-from ..settings import JiraSettings, load_jira_settings
+from ..settings import SETUP_BY_ADMIN, JiraSettings, load_jira_settings
 from ..sprint_client import SprintClient
 from ..sprint_transform import sprint_issues_to_frame
 from ..store import Store
@@ -252,8 +252,7 @@ def render(store: Store, settings: JiraSettings) -> None:
     ss = st.session_state
     with st.expander("🏃 New dataset from Sprint", expanded=False):
         if not settings.configured:
-            st.caption("⚪ Jira not configured — set it in **Config → Zephyr** "
-                       "(or JIRA_URL / JIRA_API_TOKEN).")
+            st.caption("⚪ Jira isn't configured yet. " + SETUP_BY_ADMIN)
             return
         st.caption("Pull Jira issues for a sprint — builds sprint reports: burndown, velocity, "
                    "status breakdown, and carry-over analysis.")

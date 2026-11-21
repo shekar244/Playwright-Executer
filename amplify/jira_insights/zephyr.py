@@ -3,8 +3,8 @@ Zephyr test runs for Jira Insights — a thin adapter over Amplify QEA's own
 Test Management code (routes/zephyr.py).
 
 Every request goes through _z_call (Zephyr Squad Cloud, JWT-signed with the
-access key / secret key / account id from Config → Zephyr) or _jira_call (Jira
-REST with the same config), so authentication is exactly the Test Management tab's:
+access key / secret key / account id from the admin's server-wide settings) or
+_jira_call (Jira REST with the same config), so authentication is exactly the Test Management tab's:
 
   projects / versions  _jira_call  GET /project/{key}, /project/{key}/versions
   cycles               _z_call     GET  /public/rest/api/1.0/cycles/search
@@ -41,11 +41,12 @@ def default_project_key(settings=None) -> str:
 
 
 def setup_hint() -> str:
-    return "Set up Zephyr in Amplify QEA → **Config → Zephyr** (Jira URL, access key, secret key, account id)."
+    return ("⚪ Zephyr isn't configured yet. Ask an admin to set it up in Amplify QEA "
+            "(Admin Panel → Server Secrets: Jira URL, access key, secret key, account id).")
 
 
 def backend_label(settings=None) -> str:
-    return "Zephyr Squad · Config → Zephyr"
+    return "Zephyr Squad · set up by your admin"
 
 
 def _error_text(data) -> str:

@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import streamlit as st
 
-from ..pivot import (AGGREGATIONS, CHART_TYPES, DATE_GRAINS, DIALS, SINGLE_VALUE, ReportSpec, clean_bands,
+from ..pivot import (AGGREGATIONS, CHART_TYPES, DATE_GRAINS, DIALS, SINGLE_VALUE, TABLE, ReportSpec, clean_bands,
                      distinct_values)
 from ..store import Store
 from . import colors
@@ -20,17 +20,24 @@ NEW = "__new__"
 CHART_ICONS = {
     "Column": "📊", "Stacked column": "🧱", "Bar": "📶", "Stacked bar": "▤", "Line": "📈",
     "Area": "⛰️", "Donut": "🍩", "Heatmap": "🟦", "Treemap": "🔲", "Gauge": "⏲️", "Meter": "🧭",
-    "Number": "🔢",
+    "Number": "🔢", TABLE: "🗒️",
 }
 _BARS         = ("Column", "Stacked column", "Bar", "Stacked bar")
 _NORMALIZABLE = ("Stacked column", "Stacked bar", "Area")
 _CUMULATIVE   = ("Line", "Area", "Column", "Stacked column")
+_TABLE_STARTERS = ("Key", "Summary", "Issue Type", "Status", "Priority", "Assignee")
 
 
 def _default_spec(ds: Dataset) -> ReportSpec:
     rows = next((c for c in ("Status", "Issue Type", "Result", "Cycle", "Priority") if c in ds.df.columns),
                 ds.dimension_cols[0])
     return ReportSpec(name="New report", chart="Column", rows=rows)
+
+
+def _default_columns(ds: Dataset) -> list[str]:
+    """What a new Table starts with: the usual issue columns, or the dataset's first few."""
+    starters = [c for c in _TABLE_STARTERS if c in ds.df.columns]
+    return starters or list(ds.df.columns[:5])
 
 
 def _load_state(spec: ReportSpec, ds: Dataset, marker: tuple) -> None:
@@ -41,6 +48,7 @@ def _load_state(spec: ReportSpec, ds: Dataset, marker: tuple) -> None:
     whole_slice = spec.rows == "" and spec.chart in SINGLE_VALUE       # one dial / number for everything
     ss.rb_rows   = spec.rows if spec.rows in dims or whole_slice else _default_spec(ds).rows
     ss.rb_series = spec.series if spec.series in dims else ""
+    ss.rb_columns = [c for c in spec.columns if c in ds.df.columns] or _default_columns(ds)
     ss.rb_value  = spec.value if spec.value in nums else ""
     ss.rb_agg    = spec.agg if spec.agg in AGGREGATIONS else "Count"
     ss.rb_grain  = spec.date_grain if spec.date_grain in DATE_GRAINS else "Month"
@@ -126,6 +134,19 @@ def _dial_controls(ds: Dataset, chart: str) -> dict:
                 higher_is_better=bool(higher))
 
 
+def _table_controls(ds: Dataset) -> ReportSpec:
+    """Table report: pick the columns (in the order you want them) and, optionally, filter the issues."""
+    ss = st.session_state
+    options = list(ds.df.columns)
+    ss.rb_columns = [c for c in ss.get("rb_columns", []) if c in options]
+    st.multiselect("Columns", options, key="rb_columns", placeholder="Choose the columns to include…",
+                   help="Shown left to right in the order you pick them — one row per issue.")
+    with st.expander("Filters", expanded=bool(ss.get("rb_filter_cols"))):
+        filters = _filters(ds)
+    return ReportSpec(name=ss.rb_name.strip() or "Untitled report", chart=TABLE,
+                      columns=list(ss.rb_columns), filters=filters)
+
+
 def _controls(ds: Dataset) -> ReportSpec:
     ss = st.session_state
     dims, nums, dates = ds.dimension_cols, ds.numeric_cols, ds.date_cols
@@ -136,6 +157,8 @@ def _controls(ds: Dataset) -> ReportSpec:
     st.text_input("Report name", key="rb_name")
     chart = st.pills("Chart type", CHART_TYPES, key="rb_chart", required=True,
                      format_func=lambda c: f"{CHART_ICONS[c]} {c}")
+    if chart == TABLE:
+        return _table_controls(ds)
     if chart in DIALS:
         st.selectbox(f"{chart} per…", ["", *dims], key="rb_rows",
                      format_func=lambda c: c or f"— one {chart.lower()} for the whole slice —",
@@ -238,7 +261,9 @@ def render(store: Store, ds: Dataset) -> None:
             source = ReportSpec.from_dict(draft) if draft else \
                 (reports[pick] if pick != NEW else _default_spec(ds))
             _load_state(source, ds, marker)
-        spec = colors.render(store, _controls(ds), ds)
+        spec = _controls(ds)
+        if spec.chart != TABLE:                       # a table has no colours to choose
+            spec = colors.render(store, spec, ds)
         if pick != NEW:
             spec.number = reports[pick].number
         ss.rb_current, ss.rb_draft = pick, spec.to_dict()

@@ -1,0 +1,6 @@
+# Build list for Dockerfile.coordinator, whose context is the repo root. BuildKit uses this file instead of the
+# root .dockerignore (which keeps the Grid sources out of the Amplify image). Everything is excluded except what
+# the Dockerfile COPYs, so the venv, .git, the Amplify sources and the coordinator's own tests are never sent.
+**
+!coordinator/*.py
+!coordinator/requirements.txt

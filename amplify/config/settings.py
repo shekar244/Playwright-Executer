@@ -1,5 +1,7 @@
 """Application settings and configuration."""
 import os
+import secrets
+import time
 from pathlib import Path
 
 # Determine if running in container or locally
@@ -15,7 +17,38 @@ except (OSError, PermissionError):
     pass
 
 # JWT
-JWT_SECRET_KEY = os.environ.get("JWT_SECRET_KEY", "amplify-jwt-secret-change-in-prod")
+def _jwt_secret() -> str:
+    """JWT_SECRET_KEY, or — when it isn't set — a random key generated once and kept beside the database.
+
+    There is deliberately no built-in default: a well-known key would let anyone forge sessions and
+    Jira Insights sign-in links. QEA and Insights on the same host or volume find the same file and so
+    agree on the key; services deployed apart (separate volumes) must be given the same JWT_SECRET_KEY.
+    """
+    configured = os.environ.get("JWT_SECRET_KEY", "").strip()
+    if configured:
+        return configured
+    path = _DATA_ROOT / ".jwt_secret"
+    key = secrets.token_urlsafe(48)
+    try:
+        fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)   # exclusive: two apps starting
+    except FileExistsError:                                               # together agree on one key
+        for _ in range(40):
+            try:
+                existing = path.read_text(encoding="utf-8").strip()
+            except OSError:
+                break
+            if existing:
+                return existing
+            time.sleep(0.05)                                              # the other app is still writing it
+        return key
+    except OSError:
+        return key                                                        # unwritable volume: this process only
+    with os.fdopen(fd, "w", encoding="utf-8") as handle:
+        handle.write(key)
+    return key
+
+
+JWT_SECRET_KEY = _jwt_secret()
 JWT_ALGORITHM = "HS256"
 JWT_EXPIRATION_HOURS = 24
 JWT_REFRESH_EXPIRATION_DAYS = 7

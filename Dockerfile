@@ -6,6 +6,11 @@
 # ─────────────────────────────────────────────────────────────────────────────
 
 ARG BASE_REGISTRY=
+ARG NODE_VERSION=24.14.0
+
+# Stage 1: only the source of Node.js + npm for the final image (the Allure 3 CLI is installed there, below).
+FROM ${BASE_REGISTRY}node:${NODE_VERSION}-bookworm-slim AS node
+
 FROM ${BASE_REGISTRY}python:3.13-slim
 
 # ── System dependencies ───────────────────────────────────────────────────────
@@ -22,6 +27,21 @@ RUN if [ -n "$APT_PROXY" ]; then \
     apt-get update && apt-get install -y --no-install-recommends \
         git \
     && rm -rf /var/lib/apt/lists/*
+
+# ── Node.js, npm and the Allure 3 CLI (HTML report generation) ────────────────
+# `npm install -g allure` puts the CLI in $(npm config get prefix)/bin, i.e. /usr/local/bin here; ALLURE3_BIN
+# is that folder, which Amplify uses as the default for the "Allure 3 binary path" (allure3_bin) setting and
+# which makes Allure 3 the default report format. Pin another release with --build-arg ALLURE_VERSION=<x.y.z>
+# (3.16.0 is the tested one). Allure 2 needs Java and is not included.
+ARG ALLURE_VERSION=3.16.0
+COPY --from=node /usr/local/bin/node /usr/local/bin/node
+COPY --from=node /usr/local/lib/node_modules /usr/local/lib/node_modules
+RUN ln -s ../lib/node_modules/npm/bin/npm-cli.js /usr/local/bin/npm && \
+    ln -s ../lib/node_modules/npm/bin/npx-cli.js /usr/local/bin/npx && \
+    npm install -g --omit=dev --no-audit --no-fund --no-update-notifier "allure@${ALLURE_VERSION}" && \
+    npm cache clean --force
+ENV ALLURE3_BIN=/usr/local/bin
+RUN test "$(npm config get prefix)/bin" = "$ALLURE3_BIN" && "$ALLURE3_BIN/allure" --version
 
 # ── App directory ─────────────────────────────────────────────────────────────
 WORKDIR /app

@@ -7,13 +7,14 @@ from __future__ import annotations
 import io
 from dataclasses import dataclass
 from pathlib import Path
+from urllib.parse import urlsplit
 
 import pandas as pd
 import streamlit as st
 
 from ..charts import DEFAULT_THEME, PLOTLY_CONFIG, build_figure, effective_overrides, natural_height
-from ..pivot import (SINGLE_VALUE, PivotResult, ReportSpec, apply_filters, build_pivot, category_rank,
-                     distinct_values)
+from ..pivot import (SINGLE_VALUE, TABLE, PivotResult, ReportSpec, apply_filters, build_pivot, build_table,
+                     category_rank, distinct_values)
 from ..store import Store, slugify
 from .style import number_html
 
@@ -58,13 +59,43 @@ def load_dataset(root: str, slug: str, version: str) -> tuple[pd.DataFrame, dict
 
 # ── Downloads ─────────────────────────────────────────────────────────────────
 
-def download_buttons(df: pd.DataFrame, name: str, key: str, index: bool = False) -> None:
+_FORMULA_STARTS = ("=", "+", "-", "@")
+
+
+def csv_safe(df: pd.DataFrame) -> pd.DataFrame:
+    """Excel opening a CSV runs any text that starts with = + - @ as a formula, and Jira summaries are
+    free text. A leading apostrophe keeps such a cell as plain text."""
+    def fix(value):
+        return "'" + value if isinstance(value, str) and value.startswith(_FORMULA_STARTS) else value
+
+    out = df.copy()
+    for col in out.columns:
+        if not (pd.api.types.is_numeric_dtype(out[col]) or pd.api.types.is_datetime64_any_dtype(out[col])):
+            out[col] = out[col].map(fix)
+    out.index = out.index.map(fix)
+    out.columns = [fix(c) for c in out.columns]
+    return out
+
+
+@st.cache_data(show_spinner=False, max_entries=16)
+def export_bytes(df: pd.DataFrame, index: bool) -> tuple[bytes, bytes]:
+    """(CSV, XLSX) for a table — cached, so a big issue table isn't re-encoded on every rerun."""
     excel = io.BytesIO()
-    df.to_excel(excel, index=index, engine="openpyxl")
+    with pd.ExcelWriter(excel, engine="openpyxl") as writer:
+        df.to_excel(writer, index=index)
+        for row in next(iter(writer.sheets.values())).iter_rows():
+            for cell in row:
+                if cell.data_type == "f":       # openpyxl turns text starting with "=" into a live formula
+                    cell.data_type = "s"        # keep it exactly as the text it is
+    return csv_safe(df).to_csv(index=index).encode("utf-8"), excel.getvalue()
+
+
+def download_buttons(df: pd.DataFrame, name: str, key: str, index: bool = False) -> None:
+    csv, xlsx = export_bytes(df, index)
     c1, c2, _ = st.columns([1, 1, 3])
-    c1.download_button("⬇ CSV", df.to_csv(index=index).encode("utf-8"), f"{slugify(name)}.csv",
+    c1.download_button("⬇ CSV", csv, f"{slugify(name)}.csv",
                        "text/csv", key=f"{key}-csv", on_click="ignore", width="stretch")
-    c2.download_button("⬇ Excel", excel.getvalue(), f"{slugify(name)}.xlsx",
+    c2.download_button("⬇ Excel", xlsx, f"{slugify(name)}.xlsx",
                        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                        key=f"{key}-xlsx", on_click="ignore", width="stretch")
 
@@ -132,7 +163,8 @@ class PreparedReport:
     """A report's pivot, computed once so the dashboard can size a row before drawing it."""
     spec: ReportSpec
     result: PivotResult | None = None
-    note: str = ""                       # why it can't be drawn, if result is None
+    note: str = ""                       # why it can't be drawn, if there is neither result nor frame
+    frame: pd.DataFrame | None = None    # Table reports: the rows to show and download
 
     @property
     def height(self) -> int:
@@ -145,15 +177,75 @@ def prepare_report(spec: ReportSpec, ds: Dataset, df: pd.DataFrame | None = None
     missing = sorted(spec.required_columns() - set(ds.df.columns))
     if missing:
         return PreparedReport(spec, note=f"This dataset has no {', '.join(missing)} column — pick another field.")
+    if spec.chart == TABLE:
+        if not spec.columns:
+            return PreparedReport(spec, note="Choose the columns this table should show.")
+        return PreparedReport(spec, frame=build_table(ds.df if df is None else df, spec, ds.multi_cols))
     if spec.chart not in SINGLE_VALUE and not spec.rows:
         return PreparedReport(spec, note="Choose a field for Rows · X-axis.")
     return PreparedReport(spec, build_pivot(ds.df if df is None else df, spec, ds.multi_cols))
+
+
+_TABLE_HEIGHT = 380
+_ISSUE_KEY = r"[A-Z][A-Z0-9_]*-\d+"
+_KEY_FROM_LINK = r".*/(.+)$"              # a link cell shows only the issue key (the last part), not the whole address
+
+
+def jira_site(url) -> str:
+    """The Jira site address when it is a plain http(s) one, else "": nothing is ever linked to anything else
+    (no javascript: or file: links, no credentials, no query or fragment smuggled into every link)."""
+    text = str(url or "").strip().rstrip("/")
+    try:
+        parts = urlsplit(text)
+        parts.port                                                  # raises on a malformed port
+    except ValueError:
+        return ""
+    if (parts.scheme not in ("http", "https") or not parts.hostname or parts.username or parts.password
+            or parts.query or parts.fragment):
+        return ""
+    return text
+
+
+def with_issue_links(frame: pd.DataFrame, jira_url) -> tuple[pd.DataFrame, dict]:
+    """(frame to show, column_config): the Key column as links: the Jira base URL, a "/" and the key.
+
+    Jira addresses an issue as <site>/browse/<KEY>, so "/browse" is added unless the base URL already ends with it.
+
+    A Streamlit link column is a plain link in the viewer's browser: a click opens Jira in a new tab on the user's
+    own machine and never goes back to this server. The frame is only for display; downloads keep the plain keys.
+    Nothing changes unless the dataset knows its Jira site and every key really is an issue key (a Zephyr or
+    uploaded table may hold other things in a "Key" column).
+    """
+    base = jira_site(jira_url)
+    if not base or "Key" not in frame.columns:
+        return frame, {}
+    keys = frame["Key"]
+    present = keys.dropna().astype(str)
+    if present.empty or not present.str.fullmatch(_ISSUE_KEY).all():
+        return frame, {}
+    prefix = base if base.endswith("/browse") else f"{base}/browse"      # a base that already ends in /browse is used as it is
+    linked = keys.map(lambda k: f"{prefix}/{k}" if pd.notna(k) else None)
+    return frame.assign(Key=linked), {"Key": st.column_config.LinkColumn("Key", display_text=_KEY_FROM_LINK)}
+
+
+def _show_table(frame: pd.DataFrame, spec: ReportSpec, key: str, height: int | None, jira_url="") -> None:
+    """A Table report is the table itself: always shown, always downloadable, on cards and full screen."""
+    if frame.empty:
+        st.info("No issues match this report's filters.")
+        return
+    st.caption(f"{len(frame):,} rows · {len(frame.columns)} columns")
+    view, column_config = with_issue_links(frame, jira_url)
+    st.dataframe(view, width="stretch", hide_index=True, height=height or _TABLE_HEIGHT, column_config=column_config)
+    download_buttons(frame, spec.title, key=f"{key}-dl")
 
 
 def show_report(prepared: PreparedReport, ds: Dataset, *, key: str, table: str | None = None,
                 accent: str = "#7ea8ff", height: int | None = None) -> None:
     """table: None | "expander" | "full" — every chart keeps a table-view twin."""
     spec, result = prepared.spec, prepared.result
+    if prepared.frame is not None:
+        _show_table(prepared.frame, spec, key, height, ds.meta.get("jira_url"))
+        return
     if result is None:
         st.info(prepared.note)
         return

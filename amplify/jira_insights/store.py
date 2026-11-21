@@ -21,6 +21,7 @@ import pandas as pd
 
 from .kpi import EXECUTION_TILES, KpiSpec, Metric, default_tiles
 from .pivot import ReportSpec
+from .sprint_transform import CARRIED_FORWARD_FROM, add_carry_forward
 
 # Seeded into reports.json on first run so the dashboard is useful immediately.
 # Reports whose columns are missing from a dataset are skipped, not broken.
@@ -77,6 +78,18 @@ SPRINT_REPORTS = [
      "value": "Story Points", "agg": "Sum", "show_labels": True, "sort": "Value"},
     {"name": "Linked issues by relationship", "chart": "Bar", "rows": "Link Type",
      "show_labels": True, "sort": "Value"},
+]
+
+# Added once to every workspace that uses sprints, including ones seeded before these existed. "Carried Forward
+# From" lists the sprints an issue left (see sprint_transform.carried_forward_from), so counting by it puts the
+# issue under each of those sprints: one bar per sprint.
+# The "contains" pattern keeps issues that were never carried forward (the "(none)" bucket) out of the bars.
+_CARRIED = {"chart": "Column", "rows": CARRIED_FORWARD_FROM, "show_labels": True, "sort": "Label"}
+_WAS_CARRIED = {CARRIED_FORWARD_FROM: {"contains": r"^(?!\(none\)$)"}}
+SPRINT_CARRY_REPORTS = [
+    {"name": "Stories carried forward, by sprint", **_CARRIED, "filters": {"Issue Type": ["Story"], **_WAS_CARRIED}},
+    {"name": "Defects carried forward, by sprint", **_CARRIED,
+     "filters": {"Issue Type": {"contains": "bug|defect"}, **_WAS_CARRIED}},
 ]
 
 _EXECUTED, _PASSED = {"Executed": ["Yes"]}, {"Result": ["Passed"]}
@@ -142,7 +155,10 @@ class Store:
 
     def load_dataset(self, slug: str) -> tuple[pd.DataFrame, dict]:
         meta = json.loads(self._path("datasets", slug, ".json").read_text(encoding="utf-8"))
-        return pd.read_parquet(self._path("datasets", slug, ".parquet")), meta
+        # Derived, not stored: datasets saved before "Carried Forward From" existed get it too, without a re-pull.
+        df, multi = add_carry_forward(pd.read_parquet(self._path("datasets", slug, ".parquet")),
+                                      meta.get("multi_value_cols", []))
+        return df, {**meta, "multi_value_cols": multi}
 
     def delete_dataset(self, slug: str) -> None:
         for folder, ext in (("datasets", ".parquet"), ("datasets", ".json"), ("specs", ".json")):
@@ -153,9 +169,10 @@ class Store:
         """Column names without loading the data (used to check which reports fit a dataset)."""
         import pyarrow.parquet as pq
         try:
-            return set(pq.read_schema(self._path("datasets", slug, ".parquet")).names)
+            names = set(pq.read_schema(self._path("datasets", slug, ".parquet")).names)
         except (OSError, ValueError):
             return set()
+        return names | {CARRIED_FORWARD_FROM} if "Sprint" in names else names      # the derived column, as load_dataset adds it
 
     # ── Per-dataset dashboards (which reports, in what layout) ────────────────
 
@@ -275,10 +292,23 @@ class Store:
         self.set_setting("execution_starters_seeded", True)
         return True
 
+    def _seed_carry_forward_reports(self) -> bool:
+        """Add the carry-forward reports once, by name. Kept apart from the other sprint starters so that a
+        workspace that was seeded before these existed still gets them (and deleting one sticks)."""
+        if self.get_setting("sprint_carry_forward_seeded"):
+            return False
+        names = {r.name for r in self.list_reports()}
+        for report in SPRINT_CARRY_REPORTS:
+            if report["name"] not in names:
+                self.save_report(ReportSpec.from_dict(report))
+        self.set_setting("sprint_carry_forward_seeded", True)
+        return True
+
     def seed_sprint_starters(self) -> bool:
         """Add sprint reports and KPI tiles once (by name — user edits and deletions stick)."""
+        carried = self._seed_carry_forward_reports()
         if self.get_setting("sprint_starters_seeded"):
-            return False
+            return carried
         names = {r.name for r in self.list_reports()}
         for report in SPRINT_REPORTS:
             if report["name"] not in names:

@@ -174,7 +174,7 @@ def _sprint_header(store: Store, ds: Dataset) -> str:
 def _kpi_strip(store: Store, ds: Dataset, df) -> None:
     kpi_tiles = [t for t in store.list_kpis() if kpi.is_available(t, ds.df)]
     unit = "sprint items" if ds.meta.get("source") == "sprint" else "issues"
-    cells = [(t.icon, t.label, *kpi.evaluate(t, df, len(ds.df), ds.multi_cols, unit=unit), t.accent)
+    cells = [(t.icon, t.label, *kpi.evaluate(t, df, len(ds.df), ds.multi_cols, unit=unit), t.accent, t.style)
              for t in kpi_tiles]
     if cells:
         st.markdown(stat_tiles_html(cells), unsafe_allow_html=True)
@@ -210,14 +210,14 @@ def _burndown_chart(filtered, sprint_meta) -> go.Figure | None:
 def _project_boards(project: str) -> list[dict]:
     """The project's boards, fetched once per project per session."""
     from ..jira_client import JiraClient, JiraError
-    from ..settings import load_jira_settings
+    from ..settings import SETUP_BY_ADMIN, load_jira_settings
     from ..sprint_client import SprintClient
 
     cache = st.session_state.setdefault("vel_boards_cache", {})
     if project not in cache:
         settings = load_jira_settings()
         if not settings.configured:
-            st.error("Jira not configured — set it in Config → Zephyr.")
+            st.error("Jira isn't configured yet. " + SETUP_BY_ADMIN)
             return []
         try:
             with st.spinner(f"Loading boards for {project}…"):
@@ -497,6 +497,7 @@ def render(store: Store, ds: Dataset) -> None:
                    "general-purpose reports on this dataset.")
         return
 
+    store.seed_sprint_starters()      # a workspace seeded before newer sprint reports existed gets them here, once
     sprint_meta = meta.get("sprint") or {}
     ds_code = _sprint_header(store, ds)
 

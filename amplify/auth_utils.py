@@ -27,6 +27,10 @@ def verify_jwt(token: str) -> int:
     except jwt.InvalidTokenError:
         return None
 
+# While an admin-reset password is still in force, these are the only API calls a user may make.
+_ALLOWED_WHILE_PASSWORD_CHANGE_REQUIRED = {"auth.change_password", "auth.logout", "auth.get_me"}
+
+
 def require_auth(f):
     """Decorator to protect routes with JWT authentication."""
     @wraps(f)
@@ -56,6 +60,10 @@ def require_auth(f):
 
         if not user.is_active:
             return jsonify({"error": "Account is disabled"}), 403
+
+        if user.must_change_password and request.endpoint not in _ALLOWED_WHILE_PASSWORD_CHANGE_REQUIRED:
+            return jsonify({"error": "You must choose a new password before continuing.",
+                            "code": "password_change_required"}), 403
 
         g.user = user
         return f(*args, **kwargs)

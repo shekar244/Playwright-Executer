@@ -1,0 +1,15 @@
+# Build list for Dockerfile.grid-runner, whose context is the repo root. BuildKit uses this file instead of the
+# root .dockerignore (which keeps the Grid sources out of the Amplify image). Everything is excluded except what
+# the Dockerfile COPYs, so the venv, .git and the Amplify sources are never sent to the builder.
+**
+!runner/runner_client.py
+!runner/chunk_runner.py
+!runner/code_download.py
+!runner/tar_guard.py
+!runner/lease_token.py
+!runner/requirements.txt
+!pytest.ini
+!src/
+!tests/
+**/__pycache__
+**/*.pyc

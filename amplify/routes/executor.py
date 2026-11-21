@@ -95,22 +95,33 @@ def _find_allure_bin(configured: str, want_v2: bool) -> str:
       any setup where the allure executable is only reachable through npx.
 
     Resolution order (no version check — trust what is configured):
-      1. Explicit path from config (allure2_bin / allure3_bin):
+      1. Explicit path from config (allure2_bin / allure3_bin). For Allure 3 an empty value falls back
+         to the ALLURE3_BIN environment variable (the Amplify image sets it); a saved value always wins:
            • "npx" keyword → verify npx is on PATH, return sentinel "npx"
            • File path     → used as-is if it exists
+           • Folder        → the allure executable inside it, e.g. what
+                             `echo $(npm config get prefix)/bin` prints after `npm install -g allure`
       2. PATH lookup via shutil.which (finds .cmd/.bat/.exe on Windows).
       3. Well-known install locations per platform.
     """
     import platform
 
+    configured = (configured or "").strip()
+    if not configured and not want_v2:
+        configured = os.environ.get("ALLURE3_BIN", "").strip()
+
     if configured:
         # Support "npx" (or "npx allure") as a keyword for Allure 3 npm installs
-        if configured.strip().lower().startswith("npx"):
+        if configured.lower().startswith("npx"):
             if shutil.which("npx"):
                 return _NPX_SENTINEL
             return ""
         p = Path(configured)
-        if p.exists():
+        if p.is_dir():
+            for name in ("allure", "allure.cmd", "allure.exe", "allure.bat"):
+                if (p / name).is_file():
+                    return str(p / name)
+        elif p.exists():
             return str(p)
 
     # PATH lookup — most reliable when no path is configured.
@@ -526,8 +537,9 @@ def _generate_reports(repo: str, cfg: dict) -> dict:
         )
     if fmt in ("allure3", "both") and not bin3:
         warnings.append(
-            "Allure 3 binary not found — set allure3_bin in Config → Allure "
-            "(e.g. allure  or  /usr/local/bin/allure3)"
+            "Allure 3 binary not found — install it with  npm install -g allure  and set allure3_bin in "
+            "Config → Allure to the folder  echo $(npm config get prefix)/bin  prints (or to the allure "
+            "executable, or leave it empty if allure is on PATH)"
         )
 
     if not bin2 and not bin3:
@@ -874,6 +886,7 @@ def run_tests():
         history_dir.mkdir(parents=True, exist_ok=True)
 
         _run_user_id = g.user.id
+        _run_browser = str(body.get("browser", "chromium") or "chromium")
 
         state.broadcast("cmd", _display_cmd(cmd, repo))
         state._is_running = True
@@ -898,7 +911,8 @@ def run_tests():
             n_pertest = len(report_info.get("pertest", {}))
             if n_pertest:
                 state.broadcast("line", f"[Report] ✓  {n_pertest} individual test report(s) generated")
-            record_run_history(repo, run_status, cfg, report_info=report_info, user_id=_run_user_id)
+            record_run_history(repo, run_status, cfg, report_info=report_info, user_id=_run_user_id,
+                               browser=_run_browser)
             state.broadcast("done", "")
 
         python = cmd[0] if cmd else sys.executable

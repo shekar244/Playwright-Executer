@@ -90,8 +90,7 @@ def test_public_url_override(monkeypatch):
     assert status["public_url"] == "https://insights.apps.example.com"
 
 
-def test_flask_routes_delegate_to_the_process(monkeypatch):
-    from flask import Flask
+def test_flask_routes_delegate_to_the_process(monkeypatch, admin):
     from amplify.routes import insights
 
     fake = mock.Mock()
@@ -99,12 +98,22 @@ def test_flask_routes_delegate_to_the_process(monkeypatch):
     fake.start.return_value = {"error": "Streamlit is not installed"}
     fake.stop.return_value = {"running": False}
     monkeypatch.setattr(insights, "process", fake)
-    app = Flask(__name__)
-    app.register_blueprint(insights.bp)
-    client = app.test_client()
 
-    assert client.get("/api/insights/status").json == {"running": False}
-    started = client.post("/api/insights/start")
+    assert admin.get("/api/insights/status").json == {"running": False}
+    started = admin.post("/api/insights/start")
     assert started.status_code == 500 and "not installed" in started.json["error"]
-    assert client.post("/api/insights/stop").status_code == 200
+    assert admin.post("/api/insights/stop").status_code == 200
     fake.stop.assert_called_once()
+
+
+def test_launcher_routes_require_login(monkeypatch, app):
+    from amplify.routes import insights
+
+    fake = mock.Mock()
+    monkeypatch.setattr(insights, "process", fake)
+    anon = app.test_client()
+    assert anon.get("/api/insights/status").status_code == 401
+    assert anon.post("/api/insights/start").status_code == 401
+    assert anon.post("/api/insights/stop").status_code == 401
+    fake.start.assert_not_called()
+    fake.stop.assert_not_called()

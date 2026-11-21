@@ -1,249 +1,249 @@
-<!-- ── Dashboard page ── -->
+<!-- ══════════════════════════════════════════════════════════════════════════
+     Reporting Dashboard (#page-dashboard)
+     Grid runs and local Executor runs in one view. Filter by source, environment,
+     browser, pod and time frame; drill into a run to see which pod ran what, read its
+     logs and open its HTML report — all without leaving the page.
+     Data: /api/dashboard/overview · /api/dashboard/run/<source>/<id> · /api/grid/chunks/<id>
+     ══════════════════════════════════════════════════════════════════════════ -->
 <div id="page-dashboard">
   <div class="dash-body">
 
-    <!-- ── Title bar ──────────────────────────────────────────────────────── -->
     <div class="dash-title">
-      <span>📊</span> Test Dashboard
-      <span class="dash-sub" id="dashSubtitle">— select a repo and run tests to see results</span>
-    </div>
-    <div class="dash-toolbar">
-      <input type="text" id="dashSearch" placeholder="Search tests…" oninput="filterTests()" style="flex:1;min-width:120px;max-width:200px;font-size:12px;" />
-      <select id="dashStatusFilter" onchange="filterTests()" style="width:110px;font-size:12px;">
-        <option value="">All Status</option>
-        <option value="passed">Passed</option>
-        <option value="failed">Failed</option>
-        <option value="broken">Broken</option>
-        <option value="skipped">Skipped</option>
-      </select>
-      <button class="btn btn-sm" onclick="loadDashboard()">⟳ Refresh</button>
-      <button class="btn btn-sm" style="color:var(--red);border-color:var(--red);" onclick="clearHistory()">Clear History</button>
+      <span>📊</span> Reporting Dashboard
+      <span class="dash-sub" id="dashSubtitle">— every test run in one view</span>
     </div>
 
-    <!-- ── Section 1: Current Run — 4 columns ──────────────────────────────── -->
-    <div class="dash-grid-4">
-
-      <!-- Col 1: Donut — number in centre, % on hover -->
-      <div class="dash-card">
-        <div class="dash-card-title">Distribution</div>
-        <div class="dash-chart-wrap" style="height:148px;">
-          <canvas id="chartStatusDonut"></canvas>
-        </div>
-      </div>
-
-      <!-- Col 2: Pass / Fail counts -->
-      <!-- Col 2: Soft UI stat cards — icon badge style -->
-      <div class="dash-card" style="justify-content:space-between;gap:8px;">
-        <div class="dash-card-title">Results</div>
-        <div style="display:flex;flex-direction:column;gap:8px;flex:1;justify-content:center;">
-          <div class="sui-stat-row">
-            <div>
-              <div class="sui-stat-label">Total</div>
-              <div class="sui-stat-val" id="dashTotal">—</div>
-            </div>
-            <div class="sui-icon sui-icon-blue">📋</div>
-          </div>
-          <div class="sui-stat-row">
-            <div>
-              <div class="sui-stat-label" style="color:var(--green);">Passed</div>
-              <div class="sui-stat-val" style="color:var(--green);" id="dashPassed">—</div>
-            </div>
-            <div class="sui-icon sui-icon-green">✓</div>
-          </div>
-          <div class="sui-stat-row">
-            <div>
-              <div class="sui-stat-label" style="color:var(--red);">Failed</div>
-              <div class="sui-stat-val" style="color:var(--red);" id="dashFailed">—</div>
-            </div>
-            <div class="sui-icon sui-icon-red">✗</div>
+    <!-- ── Filters ─────────────────────────────────────────────────────────── -->
+    <div class="dash-card dc-filters" style="--card-accent:var(--accent);">
+      <div class="dc-filter-row">
+        <div class="dc-field">
+          <label>Source</label>
+          <div class="dc-seg" id="dfSource" role="group" aria-label="Source">
+            <button type="button" data-v="all"   onclick="dashSetSource('all')">All</button>
+            <button type="button" data-v="grid"  onclick="dashSetSource('grid')">Grid</button>
+            <button type="button" data-v="local" onclick="dashSetSource('local')">Local</button>
           </div>
         </div>
-      </div>
-
-      <!-- Col 3: Broken / Skipped / Duration / Pass Rate -->
-      <div class="dash-card" style="justify-content:space-between;gap:8px;">
-        <div class="dash-card-title">Performance</div>
-        <div style="display:flex;flex-direction:column;gap:8px;flex:1;justify-content:center;">
-          <div class="sui-stat-row">
-            <div>
-              <div class="sui-stat-label" style="color:var(--peach);">Broken</div>
-              <div class="sui-stat-val" style="color:var(--peach);" id="dashBroken">—</div>
-            </div>
-            <div class="sui-icon sui-icon-orange">⚠</div>
-          </div>
-          <div class="sui-stat-row">
-            <div>
-              <div class="sui-stat-label" style="color:var(--accent);">Skipped</div>
-              <div class="sui-stat-val" style="color:var(--accent);" id="dashSkipped">—</div>
-            </div>
-            <div class="sui-icon sui-icon-blue">→</div>
-          </div>
-          <div class="sui-stat-row">
-            <div>
-              <div class="sui-stat-label">Avg Duration</div>
-              <div style="font-size:18px;font-weight:700;color:var(--purple);line-height:1.2;" id="dashAvgDur">—</div>
-            </div>
-            <div class="sui-icon sui-icon-purple">⏱</div>
-          </div>
-          <div class="sui-stat-row">
-            <div>
-              <div class="sui-stat-label">Pass Rate</div>
-              <div style="font-size:18px;font-weight:700;color:var(--teal);line-height:1.2;" id="dashPassRate">—</div>
-            </div>
-            <div class="sui-icon sui-icon-teal">%</div>
+        <div class="dc-field"><label for="dfEnv">Environment</label>
+          <select id="dfEnv" onchange="dashFilterChanged()"></select></div>
+        <div class="dc-field"><label for="dfBrowser">Browser</label>
+          <select id="dfBrowser" onchange="dashFilterChanged()"></select></div>
+        <div class="dc-field"><label for="dfPod">Pod</label>
+          <select id="dfPod" onchange="dashFilterChanged()"></select></div>
+        <div class="dc-field"><label for="dfTime">Time frame</label>
+          <select id="dfTime" onchange="dashFilterChanged()">
+            <option value="1">Last 24 hours</option>
+            <option value="7">Last 7 days</option>
+            <option value="30">Last 30 days</option>
+            <option value="90">Last 90 days</option>
+            <option value="all">All time</option>
+            <option value="custom">Custom range…</option>
+          </select></div>
+        <div class="dc-field" id="dfCustom" style="display:none;">
+          <label>From – To</label>
+          <div style="display:flex;gap:6px;">
+            <input type="date" id="dfFrom" onchange="dashFilterChanged()" aria-label="From date">
+            <input type="date" id="dfTo" onchange="dashFilterChanged()" aria-label="To date">
           </div>
         </div>
-      </div>
-
-      <!-- Col 4: Horizontal bar chart -->
-      <div class="dash-card">
-        <div class="dash-card-title">Count by Status</div>
-        <div class="dash-chart-wrap" style="height:148px;">
-          <canvas id="chartStatusBar"></canvas>
+        <div class="dc-actions">
+          <button class="btn btn-sm" onclick="dashResetFilters()">Reset</button>
+          <button class="btn btn-sm" onclick="loadDashboard()">⟳ Refresh</button>
+          <button class="btn btn-sm" style="color:var(--red);border-color:var(--red);" onclick="clearHistory()"
+                  title="Removes your local Executor run history. Grid runs are not affected.">Clear local history</button>
         </div>
       </div>
-
+      <div class="dc-chips" id="dashChips"></div>
     </div>
 
-    <!-- ── Section 2: Test Cases — Current Run ────────────────────────────── -->
+    <div id="dashBanner" class="dc-banners"></div>
+
+    <!-- ── Consolidated numbers ────────────────────────────────────────────── -->
+    <div class="dc-kpis" id="dashKpis"></div>
+
+    <div class="dc-charts">
+      <div class="dash-card"><div class="dash-card-title">Distribution</div>
+        <div class="dash-chart-wrap" style="height:170px;"><canvas id="chartStatusDonut"></canvas></div>
+        <div class="dc-empty" id="emptyDonut">No results in this view</div></div>
+      <div class="dash-card"><div class="dash-card-title">Results by browser</div>
+        <div class="dash-chart-wrap" style="height:170px;"><canvas id="chartByBrowser"></canvas></div>
+        <div class="dc-empty" id="emptyBrowser">No results in this view</div></div>
+      <div class="dash-card"><div class="dash-card-title">Results by environment</div>
+        <div class="dash-chart-wrap" style="height:170px;"><canvas id="chartByEnv"></canvas></div>
+        <div class="dc-empty" id="emptyEnv">No results in this view</div></div>
+      <div class="dash-card"><div class="dash-card-title">Trend by day</div>
+        <div class="dash-chart-wrap" style="height:170px;"><canvas id="chartTrend"></canvas></div>
+        <div class="dc-empty" id="emptyTrend">No results in this view</div></div>
+    </div>
+
+    <!-- ── Which pod executed what ─────────────────────────────────────────── -->
     <div class="dash-table-wrap">
-      <!-- History-run banner — visible only when a historical row is selected -->
-      <div id="dash-history-banner" style="display:none;align-items:center;gap:10px;padding:7px 16px;background:rgba(137,180,250,0.07);border-bottom:1px solid rgba(137,180,250,0.2);">
-        <span style="font-size:11px;color:var(--accent);">📅 Viewing historical run:</span>
-        <span id="dash-history-banner-label" style="font-size:11px;font-weight:600;color:var(--text);font-family:var(--mono);"></span>
-        <a id="dash-history-banner-report" href="#" onclick="dashOpenDetailReport(event)" style="display:none;font-size:11px;font-weight:600;color:var(--green);text-decoration:none;border:1px solid rgba(166,227,161,0.3);border-radius:5px;padding:2px 9px;background:rgba(166,227,161,0.07);">📊 View Report</a>
-        <button class="btn btn-sm" onclick="backToLiveRun()" style="margin-left:auto;color:var(--accent);border-color:rgba(137,180,250,0.4);">← Back to Live Run</button>
-      </div>
       <div class="dash-table-header">
-        <h3 id="dashTestTableTitle">Test Cases — Current Run</h3>
-        <span style="font-size:11px;color:var(--text-dim);margin-left:8px;" id="dashTestCount">0 tests</span>
-        <div style="margin-left:auto;display:flex;align-items:center;gap:8px;">
-          <a id="dashCurrentReportLink" href="#" onclick="dashOpenReport(event)" style="display:none;font-size:11px;font-weight:600;color:var(--accent);text-decoration:none;border:1px solid rgba(137,180,250,0.3);border-radius:5px;padding:3px 10px;background:var(--accent-glow);transition:all 0.15s;">
-            📊 View Report
-          </a>
-          <span id="dashCurrentReportNA" style="display:none;font-size:11px;color:var(--text-dim);">No report available</span>
-        </div>
+        <h3>Pods</h3>
+        <span class="dc-dim" id="dashPodCount"></span>
+        <span class="dc-dim" style="margin-left:auto;">Click a pod to see only what it executed</span>
       </div>
-      <div style="overflow-x:auto;max-height:380px;overflow-y:auto;">
-        <table class="history-tbl" id="dashTestTable">
-          <thead style="position:sticky;top:0;z-index:2;">
-            <tr>
-              <th style="cursor:pointer;" onclick="sortTests('file')">File ↕</th>
-              <th style="cursor:pointer;" onclick="sortTests('method')">Test Method ↕</th>
-              <th style="cursor:pointer;" onclick="sortTests('status')">Status ↕</th>
-              <th style="cursor:pointer;" onclick="sortTests('duration')">Duration ↕</th>
-              <th style="cursor:pointer;" onclick="sortTests('start')">Run At ↕</th>
-              <th>Report</th>
-            </tr>
-          </thead>
-          <tbody id="dashTestTbody">
-            <tr><td colspan="6" style="text-align:center;color:var(--text-dim);padding:32px;">
-              No Allure results found — run tests with <code>--alluredir</code> enabled
-            </td></tr>
-          </tbody>
+      <div style="overflow-x:auto;max-height:300px;overflow-y:auto;">
+        <table class="history-tbl" id="dashPodTable">
+          <thead><tr><th>Pod</th><th>Browser</th><th>Runs</th><th>Chunks</th><th>Tests</th><th>Passed</th><th>Failed</th><th>Pass rate</th><th>Last active</th></tr></thead>
+          <tbody id="dashPodBody"></tbody>
         </table>
       </div>
     </div>
 
-    <!-- ── Section 3: Tests Run by Day + Run History Trend ───────────────── -->
-    <div class="dash-grid-2">
-      <div class="dash-card">
-        <div class="dash-card-title" id="dailyChartTitle">Tests Run by Day — Last 7 Days</div>
-        <div class="dash-chart-wrap" style="height:200px;"><canvas id="chartDailyRuns"></canvas></div>
+    <!-- ── Runs (click one to drill down) ──────────────────────────────────── -->
+    <div class="dash-table-wrap">
+      <div class="dash-table-header">
+        <h3>Runs</h3>
+        <span class="dc-dim" id="dashRunCount"></span>
+        <span class="dc-dim" style="margin-left:auto;">Click a run for pods, logs and reports</span>
       </div>
-      <div class="dash-card">
-        <div class="dash-card-title">Run History Trend</div>
-        <div class="dash-chart-wrap" style="height:200px;"><canvas id="chartRunTrend"></canvas></div>
+      <div style="overflow-x:auto;max-height:420px;overflow-y:auto;">
+        <table class="history-tbl" id="dashRunTable">
+          <thead style="position:sticky;top:0;z-index:2;"><tr>
+            <th>Started</th><th>Source</th><th>Environment</th><th>Browsers</th><th>Status</th>
+            <th>Passed</th><th>Failed</th><th>Skipped</th><th>Duration</th><th>Pods</th><th>Report</th>
+          </tr></thead>
+          <tbody id="dashRunBody"></tbody>
+        </table>
       </div>
     </div>
 
-    <!-- ── Section 4: Run History table ─────────────────────────────────── -->
-    <div class="dash-table-wrap">
+    <!-- ── Drill-down ──────────────────────────────────────────────────────── -->
+    <div class="dash-table-wrap" id="dashDetail" style="display:none;">
       <div class="dash-table-header">
-        <h3>Run History</h3>
-        <span style="font-size:11px;color:var(--text-dim);margin-left:auto;" id="dashRecordCount">0 records</span>
+        <h3 id="dashDetailTitle">Run</h3>
+        <span id="dashDetailStatus"></span>
+        <span class="dc-dim" id="dashDetailMeta"></span>
+        <span style="margin-left:auto;display:flex;gap:8px;align-items:center;">
+          <button class="btn btn-sm" id="dashDetailReport" style="display:none;">📄 Run report</button>
+          <button class="btn btn-sm" onclick="dashCloseDetail()">Close ✕</button>
+        </span>
       </div>
+      <div id="dashDetailNote" class="dc-note" style="display:none;"></div>
       <div style="overflow-x:auto;">
-        <table class="history-tbl">
-          <thead>
-            <tr>
-              <th>Date</th><th>Repo</th><th>Status</th>
-              <th>Passed</th><th>Failed</th><th>Broken</th><th>Skipped</th><th>Total</th><th>Pass %</th>
-              <th>Report</th>
-            </tr>
-          </thead>
-          <tbody id="historyTbody">
-            <tr><td colspan="10" style="text-align:center;color:var(--text-dim);padding:24px;">No runs recorded yet</td></tr>
-          </tbody>
+        <table class="history-tbl" id="dashChunkTable">
+          <thead><tr><th>Browser</th><th>Pod</th><th>Status</th><th>Tests</th><th>Duration</th><th>Logs</th></tr></thead>
+          <tbody id="dashChunkBody"></tbody>
         </table>
       </div>
-      <!-- Pagination -->
-      <div id="historyPagination" style="display:flex;align-items:center;gap:4px;padding:10px 14px;border-top:1px solid var(--border);flex-wrap:wrap;"></div>
     </div>
 
   </div>
 </div>
 
+<!-- ── Logs viewer ──────────────────────────────────────────────────────────── -->
+<div class="dc-overlay" id="dashLogModal" style="display:none;">
+  <div class="dc-panel" role="dialog" aria-modal="true" aria-labelledby="dashLogTitle">
+    <div class="dc-panel-head">
+      <div style="min-width:0;"><div id="dashLogTitle" class="dc-panel-title">Logs</div><div id="dashLogMeta" class="dc-dim"></div></div>
+      <div style="display:flex;gap:8px;align-items:center;">
+        <div class="dc-seg" id="dashLogTabs">
+          <button type="button" data-t="stdout" onclick="dashLogTab('stdout')">Output</button>
+          <button type="button" data-t="stderr" onclick="dashLogTab('stderr')">Errors</button>
+          <button type="button" data-t="tests"  onclick="dashLogTab('tests')">Tests</button>
+        </div>
+        <button class="btn btn-sm" onclick="dashCopyLogs()" id="dashLogCopy">Copy</button>
+        <button class="btn btn-sm" id="dashLogClose" onclick="dashCloseLogs()">Close ✕</button>
+      </div>
+    </div>
+    <pre class="dc-log" id="dashLogBody"></pre>
+    <div class="dc-log-tests" id="dashLogTests" style="display:none;"></div>
+  </div>
+</div>
+
+<!-- ── HTML report viewer (reports open here, not in a new window) ──────────── -->
+<div class="dc-overlay" id="dashReportModal" style="display:none;">
+  <div class="dc-panel dc-panel-wide" role="dialog" aria-modal="true" aria-labelledby="dashReportTitle">
+    <div class="dc-panel-head">
+      <div style="min-width:0;"><div id="dashReportTitle" class="dc-panel-title">Report</div></div>
+      <div style="display:flex;gap:8px;align-items:center;">
+        <a class="btn btn-sm" id="dashReportNewTab" href="#" target="_blank" rel="noopener" style="text-decoration:none;">Open in new tab ↗</a>
+        <button class="btn btn-sm" id="dashReportClose" onclick="dashCloseReport()">Close ✕</button>
+      </div>
+    </div>
+    <iframe id="dashReportFrame" title="HTML report" class="dc-frame" src="about:blank"></iframe>
+  </div>
+</div>
+
 <style>
-/* ── Dashboard layout grids ── */
-.dash-grid-4 { display:grid; grid-template-columns:1fr 1fr 1fr 1fr; gap:14px; }
-.dash-grid-2 { display:grid; grid-template-columns:1fr 1fr; gap:16px; }
-.dash-toolbar { display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
-.dash-table-header { display:flex; align-items:center; gap:8px; padding:12px 16px; border-bottom:0.5px solid var(--border); flex-wrap:wrap; }
-.dash-table-header h3 { font-size:13px; font-weight:600; }
+/* ── Consolidated dashboard ── */
+.dc-dim { font-size:11px; color:var(--text-dim); }
+.dc-filters { gap:10px; }
+.dc-filter-row { display:flex; flex-wrap:wrap; gap:12px 14px; align-items:flex-end; }
+.dc-field { display:flex; flex-direction:column; gap:4px; min-width:130px; }
+.dc-field label { font-size:10px; font-weight:700; letter-spacing:0.06em; text-transform:uppercase; color:var(--text-dim); }
+.dc-field select, .dc-field input[type=date] { font-size:12px; min-width:130px; }
+.dc-actions { display:flex; gap:8px; margin-left:auto; flex-wrap:wrap; }
+.dc-seg { display:inline-flex; border:1px solid var(--border); border-radius:8px; overflow:hidden; background:var(--surface2); }
+.dc-seg button { border:0; background:transparent; color:var(--text-muted); font:inherit; font-size:12px; padding:6px 12px; cursor:pointer; }
+.dc-seg button + button { border-left:1px solid var(--border); }
+.dc-seg button.active { background:var(--accent); color:var(--on-accent); font-weight:600; }
+.dc-chips { display:flex; flex-wrap:wrap; gap:6px; }
+.dc-chips:empty { display:none; }
+.dash-table-header { flex-wrap:wrap; }
+.dc-chip { font:inherit; display:inline-flex; align-items:center; gap:6px; font-size:11px; padding:3px 10px; border-radius:999px;
+  background:var(--accent-glow); color:var(--accent); border:1px solid var(--accent-border); cursor:pointer; }
+.dc-chip:hover { filter:brightness(1.1); }
 
-@media (max-width: 768px) {
-  .dash-grid-4 { grid-template-columns: 1fr 1fr; }
-  .dash-grid-2 { grid-template-columns: 1fr; }
-  .dash-toolbar { gap: 6px; }
-  .dash-toolbar input { max-width: none !important; }
-  .dash-table-header { padding: 10px 12px; }
-  .sui-stat-val { font-size: 18px; }
-  .sui-icon { width: 32px; height: 32px; font-size: 14px; }
-  .sui-stat-row { padding: 7px 10px; }
-  .dash-chart-wrap { height: 140px !important; }
-  #dashTestTable { min-width: 550px; }
-  .history-tbl { min-width: 650px; }
-  #historyPagination { justify-content: center; }
-}
-@media (max-width: 480px) {
-  .dash-grid-4 { grid-template-columns: 1fr; }
-  .dash-title { font-size: 16px; }
-  .dash-toolbar { flex-direction: column; align-items: stretch; }
-  .dash-toolbar input, .dash-toolbar select { max-width: none !important; width: 100% !important; }
-  .sui-stat-val { font-size: 16px; }
-}
+.dc-banners { display:flex; flex-direction:column; gap:8px; }
+.dc-banner { font-size:12.5px; padding:9px 14px; border-radius:var(--radius); border:1px solid var(--border);
+  background:var(--surface2); color:var(--text-muted); }
+.dc-banner.warn { border-color:var(--yellow); background:var(--yellow-glow); color:var(--text); }
+.dc-banner.info { border-color:var(--accent-border); background:var(--accent-glow); color:var(--text); }
 
-/* Soft UI stat row — icon badge style inspired by Soft UI Dashboard */
-.sui-stat-row {
-  display:flex;justify-content:space-between;align-items:center;
-  padding:9px 12px;background:rgba(255,255,255,0.025);border-radius:10px;
-  border:1px solid var(--border);transition:border-color 0.18s;
-}
-.sui-stat-row:hover { border-color:var(--border-hover); }
-.sui-stat-label { font-size:11px;color:var(--text-dim);font-weight:500;margin-bottom:2px; }
-.sui-stat-val { font-size:24px;font-weight:700;line-height:1.15;color:var(--text); }
-.sui-icon {
-  width:38px;height:38px;border-radius:10px;display:flex;align-items:center;
-  justify-content:center;font-size:17px;font-weight:700;flex-shrink:0;
-  
-}
-.sui-icon-blue   { background:#0071e3; color:#fff; }
-.sui-icon-green  { background:#34c759; color:#fff; }
-.sui-icon-red    { background:#ff3b30; color:#fff; }
-.sui-icon-orange { background:#ff9500; color:#fff; }
-.sui-icon-purple { background:#af52de; color:#fff; }
-.sui-icon-teal   { background:#30b0c7; color:#fff; }
+.dc-kpis { display:grid; grid-template-columns:repeat(auto-fit, minmax(140px, 1fr)); gap:12px; }
+.dc-kpi { background:var(--surface); border:1px solid var(--border); border-left:4px solid var(--k, var(--accent));
+  border-radius:var(--radius); padding:12px 14px; display:flex; flex-direction:column; gap:3px; box-shadow:var(--shadow-sm); }
+.dc-kpi-label { font-size:11px; font-weight:600; color:var(--text-dim); text-transform:uppercase; letter-spacing:0.05em; }
+.dc-kpi-val { font-size:26px; font-weight:700; line-height:1.1; color:var(--k, var(--text)); font-variant-numeric:tabular-nums; }
+.dc-kpi-sub { font-size:11px; color:var(--text-dim); min-height:14px; }
 
-.hist-row-selected td { background:var(--accent-glow) !important; }
-.hist-row-selected:hover td { background:var(--accent-glow) !important; }
-.pg-btn {
-  padding:4px 10px;font-size:11px;font-weight:600;color:var(--text-dim);
-  background:var(--surface2);border:1px solid var(--border);border-radius:20px;
-  cursor:pointer;font-family:var(--font);transition:all 0.15s;
+.dc-charts { display:grid; grid-template-columns:repeat(4, minmax(0, 1fr)); gap:14px; }
+.dc-charts > .dash-card { min-width:0; }
+.dc-empty { display:none; text-align:center; color:var(--text-dim); font-size:12px; padding:48px 0; }
+
+.dbadge { display:inline-block; padding:2px 9px; border-radius:999px; font-size:11px; font-weight:600; background:var(--surface3); color:var(--text-muted); white-space:nowrap; }
+.d-passed, .d-completed { background:var(--green-glow); color:var(--green); }
+.d-failed, .d-error, .d-broken { background:var(--red-glow); color:var(--red); }
+.d-running { background:var(--accent-glow); color:var(--accent); }
+.d-queued, .d-pending, .d-skipped, .d-cancelled { background:var(--yellow-glow); color:var(--yellow); }
+.dsrc { font-size:11px; font-weight:600; padding:2px 8px; border-radius:6px; background:var(--surface3); color:var(--text-muted); }
+.dsrc-grid { background:rgba(175,82,222,0.14); color:var(--purple); }
+.dsrc-local { background:rgba(90,200,250,0.18); color:var(--teal); }
+.dpills { display:flex; flex-wrap:wrap; gap:4px; }
+.dpill { font-size:10.5px; padding:1px 8px; border-radius:999px; border:1px solid var(--border); color:var(--text-muted); }
+.dmono { font-family:var(--mono); font-size:11.5px; }
+.dlink { background:none; border:0; padding:0; font:inherit; color:var(--accent); cursor:pointer; text-align:left; }
+.dlink:hover { text-decoration:underline; }
+.dbar { display:inline-block; width:70px; height:6px; border-radius:3px; background:var(--red-glow); vertical-align:middle; overflow:hidden; }
+.dbar > i { display:block; height:100%; background:var(--green); }
+#dashRunBody tr.dc-clickable { cursor:pointer; }
+#dashRunBody tr.dc-clickable:focus-visible, .dc-chip:focus-visible, .dlink:focus-visible { outline:2px solid var(--accent); outline-offset:-2px; }
+#dashRunBody tr.dc-selected td, #dashPodBody tr.dc-selected td { background:var(--accent-glow) !important; }
+.dc-note { font-size:12px; color:var(--text-muted); padding:8px 16px; background:var(--surface2); border-bottom:1px solid var(--border); }
+.dc-tests summary { cursor:pointer; color:var(--text-muted); }
+.dc-tests ul { list-style:none; margin:8px 0 2px; padding:0; display:flex; flex-direction:column; gap:5px; }
+.dc-tests li { display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
+.dc-tests .dmono { word-break:break-all; }
+
+.dc-overlay { position:fixed; inset:0; z-index:1000; background:rgba(0,0,0,0.5); display:flex; align-items:center; justify-content:center; padding:24px; }
+.dc-panel { background:var(--surface); border:1px solid var(--border); border-radius:var(--radius-xl, 14px); box-shadow:var(--shadow-lg);
+  width:min(960px, 100%); max-height:100%; display:flex; flex-direction:column; overflow:hidden; }
+.dc-panel-wide { width:min(1400px, 100%); height:100%; }
+.dc-panel-head { display:flex; align-items:center; justify-content:space-between; gap:12px; padding:12px 16px; border-bottom:1px solid var(--border); flex-wrap:wrap; }
+.dc-panel-title { font-size:14px; font-weight:700; color:var(--text); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.dc-log { margin:0; padding:14px 16px; overflow:auto; flex:1; min-height:200px; max-height:70vh; font-family:var(--mono); font-size:12px; line-height:1.5;
+  color:var(--text); background:var(--surface2); white-space:pre-wrap; word-break:break-word; }
+.dc-log-tests { padding:12px 16px; overflow:auto; max-height:70vh; }
+.dc-frame { flex:1; width:100%; border:0; background:#fff; }
+
+@media (max-width: 1100px) { .dc-charts { grid-template-columns:repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 640px) {
+  .dc-charts { grid-template-columns:minmax(0, 1fr); }
+  .dc-actions { margin-left:0; }
+  .dc-field, .dc-field select { width:100%; }
+  .dc-overlay { padding:8px; }
+  #dashRunTable { min-width:760px; } #dashPodTable { min-width:640px; }
 }
-.pg-btn:hover:not(:disabled):not(.pg-active) { color:var(--text);border-color:var(--accent-border);background:var(--accent-glow); }
-.pg-btn:disabled { opacity:0.35;cursor:not-allowed; }
-.pg-btn.pg-active { background:var(--accent);color:var(--on-accent);border-color:var(--accent);font-weight:700;box-shadow:0 2px 8px rgba(126,168,255,0.3); }
-.pg-ellipsis { color:var(--text-dim);font-size:12px;padding:0 4px;line-height:28px; }
 </style>

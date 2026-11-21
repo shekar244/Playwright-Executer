@@ -1,0 +1,82 @@
+# Amplify Insights — the Streamlit app (Jira dashboards, sprint reports, ...) on port 8501.
+# Shares users, workspaces and server settings with QEA through the same volume.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: amplify-insights
+  labels:
+    app: amplify-insights
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: amplify-insights
+  template:
+    metadata:
+      labels:
+        app: amplify-insights
+    spec:
+      # Needed only while the shared volume is ReadWriteOnce: a RWO volume can be mounted by
+      # pods on ONE node, so run next to the QEA pod. Delete this block when using ReadWriteMany.
+      affinity:
+        podAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            - topologyKey: kubernetes.io/hostname
+              labelSelector:
+                matchLabels:
+                  app: amplify-qea
+      # imagePullSecrets:
+      #   - name: registry-pull-secret
+      containers:
+        - name: amplify-insights
+          image: amplify-insights:latest      # real registry path comes from kustomization.yaml
+          ports:
+            - containerPort: 8501
+              name: streamlit
+          env:
+            - name: CONTAINER
+              value: "1"
+            - name: HOME
+              value: /tmp
+            # Same value as QEA — Insights verifies the sign-in token QEA issues with it.
+            - name: JWT_SECRET_KEY
+              valueFrom:
+                secretKeyRef: { name: amplify-secrets, key: jwt-secret-key }
+            - name: JIRA_URL
+              valueFrom:
+                secretKeyRef: { name: amplify-secrets, key: jira-url, optional: true }
+            - name: JIRA_USERNAME
+              valueFrom:
+                secretKeyRef: { name: amplify-secrets, key: jira-username, optional: true }
+            - name: JIRA_API_TOKEN
+              valueFrom:
+                secretKeyRef: { name: amplify-secrets, key: jira-api-token, optional: true }
+            - name: ZEPHYR_ACCESS_KEY
+              valueFrom:
+                secretKeyRef: { name: amplify-secrets, key: zephyr-access-key, optional: true }
+            - name: ZEPHYR_SECRET_KEY
+              valueFrom:
+                secretKeyRef: { name: amplify-secrets, key: zephyr-secret-key, optional: true }
+            - name: ZEPHYR_ACCOUNT_ID
+              valueFrom:
+                secretKeyRef: { name: amplify-secrets, key: zephyr-account-id, optional: true }
+          volumeMounts:
+            - name: amplify-data
+              mountPath: /app/data
+          resources:
+            requests: { cpu: 250m, memory: 512Mi }
+            limits:   { cpu: "2",  memory: 2Gi }
+          readinessProbe:
+            httpGet: { path: /_stcore/health, port: 8501 }
+            initialDelaySeconds: 15
+            periodSeconds: 10
+          livenessProbe:
+            httpGet: { path: /_stcore/health, port: 8501 }
+            initialDelaySeconds: 20
+            periodSeconds: 30
+      volumes:
+        - name: amplify-data
+          persistentVolumeClaim:
+            claimName: amplify-data-pvc

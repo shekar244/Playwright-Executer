@@ -1,0 +1,93 @@
+FROM ubuntu:22.04
+
+# Build context: repository root. One image per browser, selected with BROWSER:
+#   edge | chrome | chromium | firefox | webkit   (default: edge)
+#   docker build --platform linux/amd64 --build-arg BROWSER=firefox \
+#     -f Dockerfile.grid-runner -t artifactory.lipstack.sephoraus.com:443/playwright-runner-firefox:latest .
+#   docker push artifactory.lipstack.sephoraus.com:443/playwright-runner-firefox:latest
+# (Microsoft Edge and Google Chrome for Linux are only published for amd64.)
+ARG BROWSER=edge
+ENV DEBIAN_FRONTEND=noninteractive
+
+# Python 3.12 (deadsnakes), curl, gnupg, dumb-init
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    software-properties-common \
+    curl \
+    gnupg \
+    ca-certificates \
+    dumb-init \
+    && add-apt-repository -y ppa:deadsnakes/ppa \
+    && apt-get update && apt-get install -y --no-install-recommends \
+    python3.12 \
+    python3.12-venv \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install official Microsoft Edge stable binary (only for BROWSER=edge)
+RUN if [ "$BROWSER" = "edge" ]; then \
+    curl -sSL https://packages.microsoft.com/keys/microsoft.asc | gpg --dearmor > /usr/share/keyrings/microsoft-archive-keyring.gpg \
+    && echo "deb [arch=amd64 signed-by=/usr/share/keyrings/microsoft-archive-keyring.gpg] https://packages.microsoft.com/repos/edge stable main" > /etc/apt/sources.list.d/microsoft-edge.list \
+    && apt-get update && apt-get install -y --no-install-recommends \
+    microsoft-edge-stable \
+    && rm -rf /var/lib/apt/lists/*; fi
+
+# Dedicated 3.12 virtualenv. The system python3 is left untouched because
+# apt tooling on Ubuntu 22.04 depends on the stock 3.10 interpreter.
+RUN python3.12 -m venv /opt/venv
+ENV PATH="/opt/venv/bin:${PATH}"
+
+WORKDIR /app
+
+COPY runner/requirements.txt .
+RUN pip install --no-cache-dir --upgrade pip && \
+    pip install --no-cache-dir -r requirements.txt
+
+# Browser binaries for Playwright-managed browsers live in a shared, world-readable path.
+ENV PLAYWRIGHT_BROWSERS_PATH=/ms-playwright
+RUN mkdir -p /ms-playwright && \
+    case "$BROWSER" in \
+      edge) playwright install-deps chromium ;; \
+      chrome|chromium|firefox|webkit) playwright install --with-deps "$BROWSER" ;; \
+      *) echo "Unsupported BROWSER '$BROWSER' (edge|chrome|chromium|firefox|webkit)" >&2; exit 1 ;; \
+    esac && \
+    chmod -R a+rX /ms-playwright && rm -rf /var/lib/apt/lists/*
+
+# Tell runner_client.py and conftest.py which browser this image drives
+ENV BROWSER=${BROWSER}
+
+# Copy runner scripts and the pytest framework (src/ + tests/ layout). Every module runner_client.py
+# imports must be listed here (runner/tests/test_image_layout.py checks it).
+COPY runner/runner_client.py runner/chunk_runner.py runner/code_download.py runner/tar_guard.py runner/lease_token.py ./
+COPY pytest.ini .
+COPY src/ ./src/
+COPY tests/ ./tests/
+
+# Test code of the run being executed. /code is where the optional shared read-only volume (PVC
+# tests-store) is mounted: <repo>/<sha>/ snapshots. Without it the runner downloads the snapshot
+# from the coordinator into GRID_WORK_DIR, which any (arbitrary) UID in group 0 can write.
+ENV GRID_CODE_ROOT=/code \
+    GRID_WORK_DIR=/tmp/grid-work
+RUN mkdir -p /code /tmp/grid-work && \
+    chgrp 0 /code && chmod 0755 /code && \
+    chown 1001:0 /tmp/grid-work && chmod 0775 /tmp/grid-work
+
+# Non-root user, group 0 (works with Kubernetes runAsUser and OpenShift's restricted SCC arbitrary UID).
+# /app (the runner, the gridtest plugins, the baked tests) is root-owned and NOT writable by that uid:
+# pytest runs as the same uid with /app/src on PYTHONPATH and the runner itself runs with /app first
+# on sys.path, so a writable /app would let test code replace code the runner and later chunks import.
+# The runner never writes there; it writes only to HOME and GRID_WORK_DIR (/tmp/grid-work) above.
+# Known limit: GRID_API_TOKEN stays readable by test code in this container (/proc/<runner pid>/environ);
+# the runner only removes it from the pytest process's environment. Hiding it takes a second container.
+# So limit what it is worth: give pods the POD-ONLY token (the coordinator's POD_API_TOKEN, key pod-api-token
+# in the Secret), never the full API_TOKEN, and the per-chunk lease secret the runner keeps in memory only
+# (it lets a pod write the one chunk it holds and nothing else).
+# GRID_CHUNK_TIMEOUT_SECONDS (default 1800) is the wall-clock limit of one chunk's pytest run.
+RUN useradd -u 1001 -g 0 -ms /bin/bash testrunner && \
+    chown -R 1001:0 /home/testrunner && \
+    chmod -R g=u /home/testrunner && \
+    chown -R root:root /app && \
+    chmod -R a+rX,go-w /app
+USER 1001
+
+ENV HOME=/home/testrunner
+ENTRYPOINT ["dumb-init", "--"]
+CMD ["python", "runner_client.py"]

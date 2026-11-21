@@ -1,0 +1,65 @@
+# Assumes the ingress-nginx controller. Replace example.com with your domain (and keep
+# INSIGHTS_PUBLIC_URL in amplify-deployment.yaml pointing at the insights host).
+#
+# TLS: either create the secret yourself
+#   kubectl -n amplify create secret tls amplify-tls --cert=tls.crt --key=tls.key
+# or let cert-manager issue it by uncommenting the cluster-issuer annotation on both Ingresses.
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: amplify-qea
+  labels:
+    app: amplify-qea
+  annotations:
+    # Live test logs stream over Server-Sent Events — nginx must not buffer them.
+    nginx.ingress.kubernetes.io/proxy-buffering: "off"
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "3600"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "3600"
+    nginx.ingress.kubernetes.io/proxy-body-size: "100m"      # file uploads (CSV / Excel / results)
+    # cert-manager.io/cluster-issuer: letsencrypt
+spec:
+  ingressClassName: nginx
+  tls:
+    - hosts: [amplify.example.com]
+      secretName: amplify-tls
+  rules:
+    - host: amplify.example.com
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: amplify-qea
+                port:
+                  name: http
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: amplify-insights
+  labels:
+    app: amplify-insights
+  annotations:
+    # Streamlit runs on WebSockets; ingress-nginx upgrades them automatically, but the
+    # default 60s idle timeout would drop a quiet session.
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "3600"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "3600"
+    nginx.ingress.kubernetes.io/proxy-body-size: "200m"      # Jira export uploads
+    # cert-manager.io/cluster-issuer: letsencrypt
+spec:
+  ingressClassName: nginx
+  tls:
+    - hosts: [insights.example.com]
+      secretName: insights-tls
+  rules:
+    - host: insights.example.com
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: amplify-insights
+                port:
+                  name: streamlit

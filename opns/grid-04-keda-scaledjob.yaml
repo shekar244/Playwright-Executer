@@ -1,0 +1,115 @@
+# Optional: event-driven auto-scaling via the OpenShift Custom Metrics Autoscaler (KEDA).
+# One ScaledJob per browser: it counts pending chunks queued for that browser in the
+# PostgreSQL test_queue table and starts one runner pod per pending chunk (up to
+# maxReplicaCount), scaling to 0 when idle. Render once per browser:
+#   oc process -f opns/grid-04-keda-scaledjob.yaml \
+#     -p BROWSER=firefox | oc apply -f -
+apiVersion: template.openshift.io/v1
+kind: Template
+metadata:
+  name: playwright-runner-autoscaler
+parameters:
+- name: REGISTRY
+  description: Image registry (and optional repo path) the runner images are pulled from
+  value: artifactory.lipstack.sephoraus.com:443
+- name: BROWSER
+  description: Browser this autoscaler serves (edge, chrome, chromium, firefox, webkit)
+  value: edge
+- name: IMAGE_TAG
+  value: latest
+- name: MAX_REPLICAS
+  value: "20"
+- name: COORDINATOR_URL
+  value: "http://central-coordinator-svc:8000"
+objects:
+- apiVersion: keda.sh/v1alpha1
+  kind: TriggerAuthentication
+  metadata:
+    name: playwright-postgres-auth
+  spec:
+    secretTargetRef:
+    - parameter: connection
+      name: playwright-db-credentials
+      key: keda-connection
+- apiVersion: keda.sh/v1alpha1
+  kind: ScaledJob
+  metadata:
+    name: playwright-${BROWSER}-autoscaler
+    labels:
+      app: playwright-runner
+      browser: ${BROWSER}
+  spec:
+    jobTargetRef:
+      parallelism: 1
+      completions: 1
+      template:
+        metadata:
+          labels:
+            app: playwright-runner
+            browser: ${BROWSER}
+        spec:
+          restartPolicy: Never
+          automountServiceAccountToken: false
+          containers:
+          - name: ${BROWSER}-runner
+            image: ${REGISTRY}/playwright-runner-${BROWSER}:${IMAGE_TAG}
+            env:
+            - name: BROWSER
+              value: ${BROWSER}
+            - name: COORDINATOR_URL
+              value: ${COORDINATOR_URL}
+            # Pods get the POD-ONLY token: create key pod-api-token in this Secret with the coordinator's POD_API_TOKEN
+            # value. Runners must NOT receive the full token: test code in the pod can read this environment, and the
+            # pod token only allows what a pod does (lease, submit, Allure upload, release, heartbeat, code download).
+            # Key api-token is the coordinator's FULL API_TOKEN (the Amplify token); it is deliberately not used here.
+            # optional: without the key GRID_API_TOKEN stays unset (a coordinator with auth on answers 401).
+            - name: GRID_API_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: playwright-db-credentials
+                  key: pod-api-token
+                  optional: true
+            # Optional: wall-clock limit of ONE chunk's pytest run, in seconds (default 1800). On expiry the
+            # whole pytest process group is killed and the chunk is reported as failed ("Chunk timed out").
+            # - name: GRID_CHUNK_TIMEOUT_SECONDS
+            #   value: "1800"
+            resources:
+              requests:
+                cpu: "1500m"
+                memory: "3Gi"
+              limits:
+                cpu: "3000m"
+                memory: "6Gi"
+            volumeMounts:
+            - mountPath: /dev/shm
+              name: dshm
+            # Optional: shared read-only tests-store with <repo>/<sha>/ snapshots written by Amplify.
+            # Without it pods download the snapshot from the coordinator. The claim must be ReadWriteMany.
+            # - name: tests-store
+            #   mountPath: /code
+            #   readOnly: true
+          volumes:
+          - name: dshm
+            emptyDir:
+              medium: Memory
+              sizeLimit: 2Gi
+          # Optional: see the tests-store mount above (PVC tests-store, ReadWriteMany).
+          # - name: tests-store
+          #   persistentVolumeClaim:
+          #     claimName: tests-store
+          #     readOnly: true
+    pollingInterval: 10
+    successfulJobsHistoryLimit: 5
+    failedJobsHistoryLimit: 5
+    maxReplicaCount: ${{MAX_REPLICAS}}
+    # The trigger counts only PENDING chunks, so use 'accurate' (the default would subtract
+    # busy runners from the pending count and under-scale).
+    scalingStrategy:
+      strategy: accurate
+    triggers:
+    - type: postgresql
+      authenticationRef:
+        name: playwright-postgres-auth
+      metadata:
+        query: "SELECT COUNT(*) FROM test_queue WHERE status = 'pending' AND browser = '${BROWSER}';"
+        targetQueryValue: "1"

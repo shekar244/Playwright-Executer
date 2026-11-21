@@ -21,7 +21,7 @@ from typing import Callable, Optional
 
 from amplify.routes.zephyr import _ssl_ctx   # same TLS handling as Test Management (certifi, legacy proxies)
 
-from .settings import JiraSettings
+from .settings import SETUP_BY_ADMIN, JiraSettings
 
 ProgressFn = Callable[[int, Optional[int]], None]   # (fetched, total-or-None)
 
@@ -57,8 +57,7 @@ class JiraClient:
 
     def __init__(self, settings: JiraSettings, opener=None, sleep=time.sleep):
         if not settings.configured:
-            raise JiraError(0, "Jira is not configured — set the Jira URL and API token in "
-                               "Config → Zephyr (or JIRA_URL / JIRA_API_TOKEN).")
+            raise JiraError(0, "Jira is not configured. " + SETUP_BY_ADMIN)
         self._settings = settings
         self._open     = opener or urllib.request.urlopen
         self._sleep    = sleep

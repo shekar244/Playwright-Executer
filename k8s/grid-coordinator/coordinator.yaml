@@ -1,0 +1,185 @@
+# Coordinator API + queue. Needs the "playwright-db-credentials" Secret (see ../grid-secrets.example.yaml).
+# Its own volume (/data) holds test-code snapshots, raw Allure results and cached Allure 3 reports;
+# only the coordinator uses it, so ReadWriteOnce is enough.
+# The ServiceAccount/Role let it list runner pods so the Amplify Grid tab can show real pod status;
+# without them the pod view falls back to runner heartbeats.
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: playwright-coordinator
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: playwright-coordinator-pod-reader
+rules:
+- apiGroups: [""]
+  resources: ["pods"]
+  verbs: ["get", "list"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: playwright-coordinator-pod-reader
+subjects:
+- kind: ServiceAccount
+  name: playwright-coordinator
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: playwright-coordinator-pod-reader
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: coordinator-data
+  labels:
+    app: central-coordinator
+spec:
+  accessModes: ["ReadWriteOnce"]
+  # Code snapshots (<=100MiB, kept 30 days) + Allure archives (<=50MiB per chunk, kept 14 days) + reports.
+  resources:
+    requests:
+      storage: 10Gi
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: central-coordinator
+  labels:
+    app: central-coordinator
+spec:
+  replicas: 1
+  # ReadWriteOnce volume: stop the old pod before the new one mounts it (no rolling overlap).
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: central-coordinator
+  template:
+    metadata:
+      labels:
+        app: central-coordinator
+    spec:
+      serviceAccountName: playwright-coordinator
+      terminationGracePeriodSeconds: 30
+      # imagePullSecrets:
+      # - name: artifactory-regcred      # docker-registry secret for artifactory.lipstack.sephoraus.com:443
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1001
+        fsGroup: 1001          # makes the /data volume writable by the coordinator user
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+      - name: coordinator
+        image: artifactory.lipstack.sephoraus.com:443/playwright-coordinator:latest
+        ports:
+        - name: http
+          containerPort: 8000
+        env:
+        - name: DATABASE_URL
+          valueFrom:
+            secretKeyRef:
+              name: playwright-db-credentials
+              key: database-url
+        - name: API_TOKEN
+          valueFrom:
+            secretKeyRef:
+              name: playwright-db-credentials
+              key: api-token
+        # Optional POD token for the runner pods: test code runs in them and can read what they hold, so
+        # this token only opens the endpoints a pod needs (lease, submit, Allure upload, release,
+        # heartbeat, exit, GET code). The runners' GRID_API_TOKEN should be this one; Amplify keeps
+        # api-token. Key absent: pods use api-token as before (see ../grid-secrets.example.yaml).
+        - name: POD_API_TOKEN
+          valueFrom:
+            secretKeyRef:
+              name: playwright-db-credentials
+              key: pod-api-token
+              optional: true
+        # Environments a run may target; the Amplify UI offers exactly these.
+        - name: SUPPORTED_ENVIRONMENTS
+          value: "dev,qa,perf,prod"
+        - name: DEFAULT_ENVIRONMENT
+          value: "qa"
+        # Code snapshots, raw Allure results and generated reports (all on the /data volume).
+        # Values shown are the defaults; every one is optional.
+        - name: CODE_DIR
+          value: "/data/code"
+        - name: ALLURE_DIR
+          value: "/data/allure"
+        - name: REPORT_DIR
+          value: "/data/reports"
+        - name: MAX_CODE_BYTES
+          value: "104857600"           # 100 MiB per code snapshot
+        - name: MAX_ALLURE_BYTES
+          value: "52428800"            # 50 MiB per chunk archive
+        - name: MAX_ALLURE_UNPACKED_BYTES
+          value: "524288000"           # 500 MiB unpacked per run when building a report
+        - name: MAX_ALLURE_FILES
+          value: "20000"
+        - name: ALLURE3_BIN            # Allure 3 CLI baked into the image (npm, installed at build time)
+          value: "allure"
+        - name: REPORT_TIMEOUT_SECONDS
+          value: "120"
+        - name: REPORT_CONCURRENCY
+          value: "1"
+        - name: CODE_RETENTION_DAYS
+          value: "30"
+        - name: ALLURE_RETENTION_DAYS
+          value: "14"
+        - name: NODE_OPTIONS           # Node heap for report generation; keep the memory limit above it
+          value: "--max-old-space-size=1024"
+        # init_db() waits up to ~60s for PostgreSQL on a cold start; do not let liveness kill the
+        # pod meanwhile. Liveness/readiness only begin once this succeeds.
+        startupProbe:
+          httpGet:
+            path: /health
+            port: http
+          periodSeconds: 5
+          failureThreshold: 30
+        readinessProbe:
+          httpGet:
+            path: /ready      # database reachable
+            port: http
+          periodSeconds: 5
+        livenessProbe:
+          httpGet:
+            path: /health     # process alive
+            port: http
+          periodSeconds: 10
+        volumeMounts:
+        - name: data
+          mountPath: /data
+        # Memory headroom matters: the Allure 3 CLI (Node) runs inside this container while it
+        # generates a report.
+        resources:
+          requests:
+            cpu: 100m
+            memory: 512Mi
+          limits:
+            cpu: "1"
+            memory: 2Gi
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop: ["ALL"]
+      volumes:
+      - name: data
+        persistentVolumeClaim:
+          claimName: coordinator-data
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: central-coordinator-svc
+  labels:
+    app: central-coordinator
+spec:
+  selector:
+    app: central-coordinator
+  ports:
+  - name: http
+    port: 8000
+    targetPort: http

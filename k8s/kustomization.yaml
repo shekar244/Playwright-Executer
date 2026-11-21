@@ -1,0 +1,27 @@
+# Deploy everything:   kubectl apply -k k8s/
+# Preview first:       kubectl kustomize k8s/
+#
+# Secrets are deliberately NOT listed here — create them separately (see amplify-secrets.example.yaml).
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: amplify
+
+resources:
+  - amplify-namespace.yaml
+  - amplify-pvc.yaml
+  - amplify-deployment.yaml
+  - amplify-deployment-insights.yaml
+  - amplify-service.yaml
+  - amplify-ingress.yaml
+
+# Where the images come from. Defaults to the public Docker Hub images; for JFrog use e.g.
+#   newName: yourcompany.jfrog.io/docker-local/amplify-qea
+# and uncomment imagePullSecrets in both deployments. Pin a real tag instead of "latest" in production.
+images:
+  - name: amplify-qea
+    newName: docker.io/shekar244/amplify-qea
+    newTag: latest
+  - name: amplify-insights
+    newName: docker.io/shekar244/amplify-insights
+    newTag: latest

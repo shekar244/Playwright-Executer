@@ -28,7 +28,8 @@ _FOCUS_HEIGHT = 620
 def _kpi_strip(store: Store, ds: Dataset, df) -> None:
     tiles = [t for t in store.list_kpis() if kpi.is_available(t, ds.df)]
     unit = "test runs" if ds.meta.get("source") == "zephyr" else "issues"
-    cells = [(t.icon, t.label, *kpi.evaluate(t, df, len(ds.df), ds.multi_cols, unit=unit), t.accent) for t in tiles]
+    cells = [(t.icon, t.label, *kpi.evaluate(t, df, len(ds.df), ds.multi_cols, unit=unit), t.accent, t.style)
+             for t in tiles]
     if cells:
         st.markdown(stat_tiles_html(cells), unsafe_allow_html=True)
 

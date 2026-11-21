@@ -245,7 +245,6 @@
     <button type="button" class="cfg-tab-btn" onclick="switchCfgTab('jfrog')" id="ctab-jfrog">🏺 JFrog</button>
     <button type="button" class="cfg-tab-btn" onclick="switchCfgTab('mapping')" id="ctab-mapping">🗂️ Mapping</button>
     <button type="button" class="cfg-tab-btn" onclick="switchCfgTab('zephyr')" id="ctab-zephyr">🔷 Zephyr</button>
-    <button type="button" class="cfg-tab-btn" onclick="switchCfgTab('uitabs')" id="ctab-uitabs" style="margin-left:auto;">🎛️ Tabs</button>
   </div>
 
   <div style="display:flex;flex:1;min-height:0;">
@@ -402,8 +401,8 @@
             <input type="text" id="al_bin2" placeholder="e.g. /opt/homebrew/bin/allure  or  C:\scoop\apps\allure\current\bin\allure.bat" style="font-family:var(--mono);font-size:11px;" />
           </div>
           <div class="field">
-            <label>Allure 3 binary path</label>
-            <input type="text" id="al_bin3" placeholder="e.g. /usr/local/bin/allure3  or  allure  (if on PATH)" style="font-family:var(--mono);font-size:11px;" />
+            <label>Allure 3 binary path <span style="font-weight:400;color:var(--text-dim);">(npm install -g allure — the folder <code>echo $(npm config get prefix)/bin</code> prints, or the executable)</span></label>
+            <input type="text" id="al_bin3" placeholder="e.g. /usr/local/bin  or  /usr/local/bin/allure  or  allure  (if on PATH)" style="font-family:var(--mono);font-size:11px;" />
           </div>
         </div>
       </div>
@@ -623,56 +622,6 @@
       <input type="hidden" id="z_secret_key" /><input type="hidden" id="z_account_id" />
       <input type="hidden" id="z_project_key" /><input type="hidden" id="z_project_name" />
       <input type="hidden" id="z_verify_ssl" />
-    </div>
-
-    <!-- Panel: UI Tab Visibility -->
-    <div id="cfgUiTabs" style="display:none;flex-direction:column;gap:14px;">
-      <div class="hint">Show or hide tabs and config sections. Changes apply instantly and are saved to config.</div>
-
-      <div style="font-size:11px;font-weight:600;color:var(--text-dim);text-transform:uppercase;letter-spacing:.05em;">Main Navigation Tabs</div>
-      <div style="display:flex;flex-direction:column;gap:8px;">
-        <label class="checkbox-label" style="gap:10px;cursor:pointer;">
-          <input type="checkbox" id="uitab_executor" onchange="saveUiTabs()" />
-          <span>⚡ Executor</span>
-        </label>
-        <label class="checkbox-label" style="gap:10px;cursor:pointer;">
-          <input type="checkbox" id="uitab_dashboard" onchange="saveUiTabs()" />
-          <span>📊 Dashboard</span>
-        </label>
-        <label class="checkbox-label" style="gap:10px;cursor:pointer;">
-          <input type="checkbox" id="uitab_zephyr" onchange="saveUiTabs()" />
-          <span>🔷 Test Management</span>
-        </label>
-        <label class="checkbox-label" style="gap:10px;cursor:pointer;">
-          <input type="checkbox" id="uitab_filemanager" onchange="saveUiTabs()" />
-          <span>🗂️ File Manager</span>
-        </label>
-        <label class="checkbox-label" style="gap:10px;cursor:pointer;opacity:0.6;">
-          <input type="checkbox" id="uitab_insights" onchange="saveUiTabs()" />
-          <span>📈 Jira Insights <code style="font-size:9px;color:var(--text-dim);">(requires separate Streamlit server)</code></span>
-        </label>
-      </div>
-
-      <div style="font-size:11px;font-weight:600;color:var(--text-dim);text-transform:uppercase;letter-spacing:.05em;margin-top:4px;">Config Sub-Tabs</div>
-      <div style="display:flex;flex-direction:column;gap:8px;">
-        <label class="checkbox-label" style="gap:10px;cursor:pointer;">
-          <input type="checkbox" id="uitab_cfg_git" onchange="saveUiTabs()" />
-          <span>🔀 Git</span>
-        </label>
-        <label class="checkbox-label" style="gap:10px;cursor:pointer;">
-          <input type="checkbox" id="uitab_cfg_tools" onchange="saveUiTabs()" />
-          <span>🔧 CLI Tools</span>
-        </label>
-        <label class="checkbox-label" style="gap:10px;cursor:pointer;">
-          <input type="checkbox" id="uitab_cfg_mapping" onchange="saveUiTabs()" />
-          <span>🗂️ Field Mapping</span>
-        </label>
-        <label class="checkbox-label" style="gap:10px;cursor:pointer;">
-          <input type="checkbox" id="uitab_cfg_zephyr" onchange="saveUiTabs()" />
-          <span>🔷 Zephyr Config</span>
-        </label>
-      </div>
-      <div style="font-size:11px;color:var(--text-dim);">Executor and Config tabs are always visible and cannot be hidden.</div>
     </div>
 
   </div><!-- end features-left -->

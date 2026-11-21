@@ -127,7 +127,9 @@ docker run --rm --init --shm-size=1g amplify-qea:runner \
 
 Then select one known, harmless test in the Executor UI, choose Chromium, and leave headed mode disabled. Check its streamed logs, result status, and saved artifacts before running a full suite. Native desktop folder pickers are unavailable in containers; use the mounted `/repos/qa` path instead.
 
-`allure-pytest` writes result files but does **not** install the Allure HTML-generation CLI. If your framework uses Allure 2, add the compatible CLI and Java to the image. For Allure 3, add its required Node.js runtime and CLI. Maven and other external commands also need to be installed if your framework invokes them.
+`allure-pytest` writes result files but does **not** install the Allure HTML-generation CLI. The application image (`Dockerfile`) includes Node.js, npm and the **Allure 3** CLI (`npm install -g allure`, release pinned by `--build-arg ALLURE_VERSION`, default 3.16.0), so Amplify can generate HTML reports in the container. `ALLURE3_BIN` is set to the npm bin folder (`echo $(npm config get prefix)/bin`, `/usr/local/bin` here); Amplify uses it as the default *Allure 3 binary path* (`allure3_bin`) and makes Allure 3 the default report format. Check it with `docker run --rm amplify-qea allure --version`. Allure 2 is not included: it needs Java, so if your framework uses it, add the compatible CLI and Java to a derived image. Maven and other external commands also need to be installed if your framework invokes them.
+
+The `Dockerfile.runner` image extends the application image, so it has the Allure 3 CLI as well.
 
 Tests accessing an application on your Mac should use `host.docker.internal`, not `localhost`. Inside Docker, `localhost` means the container itself. Headed runs require a display/Xvfb setup not included here.
 

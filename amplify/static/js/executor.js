@@ -1057,7 +1057,8 @@ async function persistTools() {
 
 // ── Config sub-tabs ────────────────────────────────────────────────────────────
 function switchCfgTab(tab) {
-  const panels = { features: 'cfgFeatures', repo: 'cfgRepo', git: 'cfgGit', tools: 'cfgTools', allure: 'cfgAllure', jfrog: 'cfgJfrog', mapping: 'cfgMapping', zephyr: 'cfgZephyr', uitabs: 'cfgUiTabs' };
+  if (document.getElementById('ctab-' + tab)?.style.display === 'none') return;   // hidden by an admin
+  const panels = { features: 'cfgFeatures', repo: 'cfgRepo', git: 'cfgGit', tools: 'cfgTools', allure: 'cfgAllure', jfrog: 'cfgJfrog', mapping: 'cfgMapping', zephyr: 'cfgZephyr' };
   Object.entries(panels).forEach(([key, id]) => {
     const panel = document.getElementById(id);
     if (panel) panel.style.display = key === tab ? 'flex' : 'none';
@@ -1071,38 +1072,9 @@ function switchCfgTab(tab) {
 
   if (tab === 'mapping')   onMappingStepsFormatChange();
   if (tab === 'git')       loadGitCommands();
-  if (tab === 'uitabs')    loadUiTabs();
   if (tab === 'allure')    loadAllureConfig();
   if (tab === 'jfrog')     loadJfrogConfig();
   if (tab === 'repo')      loadCfgRepoList();
-}
-
-// ── UI Tab kill-switch ────────────────────────────────────────────────────────
-const _UI_TAB_KEYS = ['executor', 'dashboard', 'zephyr', 'filemanager', 'insights', 'cfg_git', 'cfg_tools', 'cfg_mapping', 'cfg_zephyr'];
-
-async function loadUiTabs() {
-  const cfg  = await fetch('/api/config').then(r => r.json()).catch(() => ({}));
-  const tabs = cfg.ui_tabs || {};
-  const defaults = { executor: true, dashboard: true, zephyr: true, filemanager: true, insights: false, cfg_git: true, cfg_tools: true, cfg_mapping: true, cfg_zephyr: true };
-  _UI_TAB_KEYS.forEach(key => {
-    const el = document.getElementById('uitab_' + key);
-    if (el) el.checked = key in tabs ? !!tabs[key] : !!defaults[key];
-  });
-}
-
-async function saveUiTabs() {
-  const tabs = {};
-  _UI_TAB_KEYS.forEach(key => {
-    const el = document.getElementById('uitab_' + key);
-    if (el) tabs[key] = el.checked;
-  });
-  await fetch('/api/config/ui-tabs', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ ui_tabs: tabs }),
-  });
-  // Apply immediately without page reload
-  if (typeof applyUiTabs === 'function') applyUiTabs(tabs);
 }
 
 // ── Allure config ─────────────────────────────────────────────────────────────

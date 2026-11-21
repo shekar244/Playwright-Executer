@@ -19,23 +19,28 @@ function _insightsShowFrame(show) {
   document.getElementById('insightsEmpty').style.display = show ? 'none' : 'flex';
 }
 
-function _insightsFrameUrl(url) {
-  const t = document.body.classList.contains('dark-theme') ? 'dark' : 'light';
-  const uid = window._amplifyUserId || '';
-  return `${url}/?embed=true&embed_options=${t}_theme&theme=${t}&user_id=${uid}`;
+// Insights is always entered through QEA: /api/insights/open checks the QEA session, signs the
+// user in with a short-lived single-use token and redirects. Every load (first, reload, theme
+// change, new tab) therefore gets a fresh token, and the user's identity never sits in a URL
+// the user could edit.
+function _insightsOpenUrl(embed) {
+  // Several themes (Dark, Midnight, Nord, Rosé, Forest) are dark; each has its own body class.
+  const active = (typeof _THEMES !== 'undefined' ? _THEMES : []).find(x => x.cls && document.body.classList.contains(x.cls));
+  const t = active && active.dark ? 'dark' : 'light';
+  return `/api/insights/open?theme=${t}${embed ? '&embed=1' : ''}`;
 }
 
 // Streamlit reads its theme at session start, so a theme change reloads the embed.
 function _insightsApplyTheme() {
   const frame = document.getElementById('insightsFrame');
-  if (_insightsUrl && frame && frame.getAttribute('src')) frame.src = _insightsFrameUrl(_insightsUrl);
+  if (_insightsUrl && frame && frame.getAttribute('src')) frame.src = _insightsOpenUrl(true);
 }
 
 function _insightsEmbed(s) {
   const url   = _insightsBaseUrl(s);
   const frame = document.getElementById('insightsFrame');
   if (_insightsUrl !== url || !frame.src) {
-    frame.src    = _insightsFrameUrl(url);
+    frame.src    = _insightsOpenUrl(true);
     _insightsUrl = url;
   }
   _insightsShowFrame(true);
@@ -101,7 +106,8 @@ function insightsReload() {
   else loadInsights();
 }
 
-async function insightsOpenNewTab() {
-  const s = await _insightsStatus();
-  if (s?.healthy) window.open(_insightsBaseUrl(s), '_blank', 'noopener');
+// Opens synchronously (no await first) so popup blockers allow it. _insightsUrl is set only while
+// Insights is up and embedded, which is exactly when the button should do something.
+function insightsOpenNewTab() {
+  if (_insightsUrl) window.open(_insightsOpenUrl(false), '_blank', 'noopener');
 }

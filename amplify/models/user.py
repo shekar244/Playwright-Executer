@@ -5,10 +5,17 @@ from datetime import datetime
 from amplify.models.db import get_db_connection
 
 
+MIN_PASSWORD_LENGTH = 6
+MAX_PASSWORD_BYTES = 72     # bcrypt only uses the first 72 bytes (and bcrypt 5 refuses anything longer)
+
+_COLUMNS = "id, username, email, is_admin, is_active, must_change_password, last_login_at, created_at"
+
+
 class User:
     def __init__(self, id: int, username: str, email: str = None,
                  is_admin: bool = False, is_active: bool = True,
-                 last_login_at: str = None, created_at: str = None):
+                 last_login_at: str = None, created_at: str = None,
+                 must_change_password: bool = False):
         self.id = id
         self.username = username
         self.email = email
@@ -16,12 +23,14 @@ class User:
         self.is_active = is_active
         self.last_login_at = last_login_at
         self.created_at = created_at
+        self.must_change_password = must_change_password     # set by an admin reset, cleared when they choose a new one
 
     def to_dict(self) -> dict:
         return {
             "id": self.id, "username": self.username, "email": self.email,
             "is_admin": self.is_admin, "is_active": self.is_active,
             "last_login_at": self.last_login_at, "created_at": self.created_at,
+            "must_change_password": self.must_change_password,
         }
 
     @staticmethod
@@ -32,7 +41,17 @@ class User:
             id=row["id"], username=row["username"], email=row["email"],
             is_admin=bool(row["is_admin"]), is_active=bool(row["is_active"]),
             last_login_at=row["last_login_at"], created_at=row["created_at"],
+            must_change_password=bool(row["must_change_password"]),
         )
+
+    @staticmethod
+    def password_problem(password) -> "str | None":
+        """Why this can't be a password (a message fit for a 400), or None if it's fine."""
+        if not isinstance(password, str) or len(password) < MIN_PASSWORD_LENGTH:
+            return f"Password must be at least {MIN_PASSWORD_LENGTH} characters"
+        if len(password.encode("utf-8")) > MAX_PASSWORD_BYTES:
+            return f"Password is too long (at most {MAX_PASSWORD_BYTES} bytes)"
+        return None
 
     @staticmethod
     def hash_password(password: str) -> str:
@@ -65,8 +84,7 @@ class User:
     def get_by_username(username: str) -> "User":
         conn = get_db_connection()
         row = conn.execute(
-            "SELECT id, username, email, is_admin, is_active, last_login_at, created_at "
-            "FROM users WHERE username = ?", (username,)
+            f"SELECT {_COLUMNS} FROM users WHERE username = ?", (username,)
         ).fetchone()
         conn.close()
         return User._from_row(row)
@@ -75,8 +93,7 @@ class User:
     def get_by_id(user_id: int) -> "User":
         conn = get_db_connection()
         row = conn.execute(
-            "SELECT id, username, email, is_admin, is_active, last_login_at, created_at "
-            "FROM users WHERE id = ?", (user_id,)
+            f"SELECT {_COLUMNS} FROM users WHERE id = ?", (user_id,)
         ).fetchone()
         conn.close()
         return User._from_row(row)
@@ -85,8 +102,7 @@ class User:
     def get_all() -> list["User"]:
         conn = get_db_connection()
         rows = conn.execute(
-            "SELECT id, username, email, is_admin, is_active, last_login_at, created_at "
-            "FROM users ORDER BY id"
+            f"SELECT {_COLUMNS} FROM users ORDER BY id"
         ).fetchall()
         conn.close()
         return [User._from_row(r) for r in rows]
@@ -95,8 +111,7 @@ class User:
     def verify_credentials(username: str, password: str) -> "User":
         conn = get_db_connection()
         row = conn.execute(
-            "SELECT id, username, email, password_hash, is_admin, is_active, last_login_at, created_at "
-            "FROM users WHERE username = ?", (username,)
+            f"SELECT {_COLUMNS}, password_hash FROM users WHERE username = ?", (username,)
         ).fetchone()
         conn.close()
         if not row:
@@ -105,11 +120,7 @@ class User:
             return None
         if not User.verify_password(password, row["password_hash"]):
             return None
-        return User(
-            id=row["id"], username=row["username"], email=row["email"],
-            is_admin=bool(row["is_admin"]), is_active=bool(row["is_active"]),
-            last_login_at=row["last_login_at"], created_at=row["created_at"],
-        )
+        return User._from_row(row)
 
     @staticmethod
     def update_last_login(user_id: int) -> None:
@@ -133,11 +144,23 @@ class User:
         conn.close()
 
     @staticmethod
-    def reset_password(user_id: int, new_password: str) -> None:
+    def reset_password(user_id: int, new_password: str, must_change: bool = False) -> None:
+        """Set a password for someone else (an admin reset). With `must_change` the user has to choose their
+        own before they can use anything else."""
         conn = get_db_connection()
         hashed = User.hash_password(new_password)
-        conn.execute("UPDATE users SET password_hash = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
-                      (hashed, user_id))
+        conn.execute("UPDATE users SET password_hash = ?, must_change_password = ?, updated_at = CURRENT_TIMESTAMP "
+                     "WHERE id = ?", (hashed, int(must_change), user_id))
+        conn.commit()
+        conn.close()
+
+    @staticmethod
+    def change_password(user_id: int, new_password: str) -> None:
+        """The user chose a new password themselves: store it and lift any "must change" requirement."""
+        conn = get_db_connection()
+        hashed = User.hash_password(new_password)
+        conn.execute("UPDATE users SET password_hash = ?, must_change_password = 0, updated_at = CURRENT_TIMESTAMP "
+                     "WHERE id = ?", (hashed, user_id))
         conn.commit()
         conn.close()
 

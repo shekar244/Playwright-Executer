@@ -25,6 +25,7 @@ def init_db():
             password_hash TEXT NOT NULL,
             is_admin INTEGER DEFAULT 0,
             is_active INTEGER DEFAULT 1,
+            must_change_password INTEGER NOT NULL DEFAULT 0,
             last_login_at TIMESTAMP,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
@@ -76,6 +77,7 @@ def _migrate(cursor):
         "is_admin":      "ALTER TABLE users ADD COLUMN is_admin INTEGER DEFAULT 0",
         "is_active":     "ALTER TABLE users ADD COLUMN is_active INTEGER DEFAULT 1",
         "last_login_at": "ALTER TABLE users ADD COLUMN last_login_at TIMESTAMP",
+        "must_change_password": "ALTER TABLE users ADD COLUMN must_change_password INTEGER NOT NULL DEFAULT 0",
     }
     for col, ddl in migrations.items():
         if col not in existing:

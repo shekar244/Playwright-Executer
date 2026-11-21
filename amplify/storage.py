@@ -29,9 +29,9 @@ def initialize_user_workspace(user_id: int) -> None:
     history_path = get_user_history_path(user_id)
 
     if not config_path.exists():
-        from amplify.config_reader import _DEFAULTS
+        from amplify.config_reader import fresh_defaults
         import json
-        config_path.write_text(json.dumps(_DEFAULTS, indent=2), encoding="utf-8")
+        config_path.write_text(json.dumps(fresh_defaults(), indent=2), encoding="utf-8")
 
     if not history_path.exists():
         history_path.write_text("[]", encoding="utf-8")

@@ -1,5 +1,7 @@
 # Amplify QEA — OpenShift Deployment Guide
 
+> Running plain Kubernetes rather than OpenShift? Use [`../k8s`](../k8s/README.md) (Ingress + Kustomize) instead.
+
 ## Prerequisites
 
 | Requirement | Details |
@@ -134,7 +136,7 @@ oc create secret generic amplify-secrets \
 
 ### Step 7: Update Deployment Image Reference
 
-Edit `openshift/deployment.yaml` — change the image line to your JFrog path:
+Edit `opns/amplify-deployment.yaml` — change the image line to your JFrog path:
 
 ```yaml
 # Find this line:
@@ -160,10 +162,10 @@ spec:
 
 ```bash
 # Apply in order: storage → service → route → deployment
-oc apply -f openshift/pvc.yaml
-oc apply -f openshift/service.yaml
-oc apply -f openshift/route.yaml
-oc apply -f openshift/deployment.yaml
+oc apply -f opns/amplify-pvc.yaml
+oc apply -f opns/amplify-service.yaml
+oc apply -f opns/amplify-route.yaml
+oc apply -f opns/amplify-deployment.yaml
 
 # Wait for rollout
 oc rollout status deployment/amplify-qea --timeout=120s
@@ -189,6 +191,18 @@ oc logs -f deployment/amplify-qea
 open "https://$(oc get route amplify-qea -o jsonpath='{.spec.host}')"
 ```
 
+### Jira Insights tab
+
+Insights needs its own route (Streamlit uses WebSockets on port 8501). Create it, then tell QEA its address — the Insights tab and **↗ New tab** send the browser there, signed in:
+
+```bash
+oc apply -f opns/amplify-route-insights.yaml
+oc set env deployment/amplify-qea \
+  INSIGHTS_PUBLIC_URL="https://$(oc get route amplify-qea-insights -o jsonpath='{.spec.host}')"
+```
+
+If Insights runs as its own deployment (`amplify-deployment-insights.yaml`), it must get the same `JWT_SECRET_KEY` as QEA — both manifests read it from the `amplify-secrets` secret.
+
 ### Step 10: Create Admin User
 
 ```bash
@@ -210,7 +224,7 @@ JFROG_REGISTRY=yourcompany.jfrog.io \
 JFROG_REPO=docker-local \
 JFROG_USERNAME=your-email@company.com \
 JFROG_PASSWORD=your-api-key \
-./openshift/jfrog-deploy.sh
+./opns/amplify-jfrog-deploy.sh
 ```
 
 The script handles all steps: build, tag, push, create secrets, deploy, and verify.
@@ -288,14 +302,22 @@ oc set image deployment/amplify-qea \
 
 ## Manifest Files Reference
 
+Files are named `<system>-<resource>`: `amplify-*` for Amplify QEA and Jira Insights, `grid-NN-*` for the Grid backend (`NN` is the apply order). The object names inside the manifests (`amplify-qea`, `central-coordinator`, `coordinator-data`, ...) are deployed identifiers and are not tied to the file names.
+
 | File | Resource | Purpose |
 |------|----------|---------|
-| `deployment.yaml` | Deployment | Pod spec, env vars from Secret, PVC mount, health probes, resource limits |
-| `service.yaml` | Service | ClusterIP service exposing ports 8080 (Flask) and 8501 (Streamlit) |
-| `route.yaml` | Route | HTTPS route with edge TLS termination |
-| `pvc.yaml` | PersistentVolumeClaim | 10Gi storage for database and user workspaces |
-| `secrets.yaml` | Secret (template) | Template for JWT key and Jira/Zephyr credentials |
-| `jfrog-deploy.sh` | Script | Automated build, push, and deploy |
+| `amplify-deployment.yaml` | Deployment | Pod spec, env vars from Secret, PVC mount, health probes, resource limits |
+| `amplify-service.yaml` | Service | ClusterIP service exposing ports 8080 (Flask) and 8501 (Streamlit) |
+| `amplify-route.yaml` | Route | HTTPS route with edge TLS termination |
+| `amplify-pvc.yaml` | PersistentVolumeClaim | 10Gi storage for database and user workspaces |
+| `amplify-secrets.yaml` | Secret (template) | Template for JWT key and Jira/Zephyr credentials |
+| `amplify-deployment-insights.yaml` | Deployment + Service + Route | Jira Insights as its own deployment (instead of the side-car inside QEA) |
+| `amplify-route-insights.yaml` | Route | HTTPS route to the Insights port (8501) of the `amplify-qea` Service |
+| `amplify-jfrog-deploy.sh` | Script | Automated build, push, and deploy of Amplify |
+| `grid-01-postgres.yaml` | Secret + Deployment + Service | Grid database credentials and an in-cluster PostgreSQL (skip the Deployment/Service for an external database) |
+| `grid-02-coordinator.yaml` | ServiceAccount, Role, RoleBinding, PVC, Deployment, Service | Grid coordinator API and queue, its data volume, and read access to runner pods |
+| `grid-03-runner-job.yaml` | Template | Manual batch trigger: one runner Job per browser (`oc process … \| oc create`) |
+| `grid-04-keda-scaledjob.yaml` | Template | Optional KEDA ScaledJob per browser: one runner pod per pending chunk, scaling to 0 when idle |
 
 ---
 
@@ -305,6 +327,7 @@ oc set image deployment/amplify-qea \
 |----------|----------|---------|-------------|
 | `CONTAINER` | Auto | `1` | Set by Dockerfile — skips browser launch |
 | `PORT` | Auto | `8080` | Flask/gunicorn listen port |
+| `ALLURE3_BIN` | Auto | `/usr/local/bin` | Set by the image, which includes Node, npm and the Allure 3 CLI (`npm install -g allure`): the folder `echo $(npm config get prefix)/bin` prints. Default for the *Allure 3 binary path* in Config → Allure; makes Allure 3 the default report format |
 | `JWT_SECRET_KEY` | **Yes** | — | Token signing key. Generate: `openssl rand -base64 32` |
 | `JIRA_URL` | No | — | e.g. `https://yourcompany.atlassian.net` |
 | `JIRA_USERNAME` | No | — | Atlassian email |
@@ -402,7 +425,7 @@ oc logs deployment/amplify-qea --previous
 oc get pvc amplify-data-pvc
 oc get sc   # list available storage classes
 ```
-- If no default storage class, add `storageClassName` to pvc.yaml
+- If no default storage class, add `storageClassName` to amplify-pvc.yaml
 
 ### Permission Errors
 

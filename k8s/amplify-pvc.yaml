@@ -1,0 +1,19 @@
+# One volume shared by both apps: users database, server_config.json and every user's workspace.
+#
+# ReadWriteOnce works because insights is scheduled onto the same node as the QEA pod
+# (see podAffinity in amplify-deployment-insights.yaml). If your cluster has a ReadWriteMany class
+# (NFS, CephFS, EFS, Azure Files...), prefer it: set accessModes to ReadWriteMany below and
+# delete the podAffinity block.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: amplify-data-pvc
+  labels:
+    app: amplify
+spec:
+  accessModes:
+    - ReadWriteOnce
+  # storageClassName: standard      # uncomment to pick a class; omitted = cluster default
+  resources:
+    requests:
+      storage: 10Gi

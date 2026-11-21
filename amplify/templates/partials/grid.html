@@ -1,0 +1,132 @@
+<!-- ══════════════════════════════════════════════════════════════
+     Grid Tab  (#page-grid)
+     Choose tests / environment / browsers, start a distributed run on the
+     OpenShift runner pods, and watch pods + runs live. Talks to the central
+     coordinator through /api/grid/* (see routes/grid.py).
+     ══════════════════════════════════════════════════════════════ -->
+<style>
+  #page-grid { display:none; flex:1; flex-direction:column; overflow-y:auto; background:var(--bg); }
+  #page-grid.active { display:flex; }
+  .grid-top { display:grid; grid-template-columns:minmax(300px,1fr) minmax(380px,1.6fr); gap:18px; align-items:start; }
+  @media (max-width: 900px) { .grid-top { grid-template-columns:1fr; } }
+  .grid-form { display:flex; flex-direction:column; gap:12px; }
+  .grid-form .field { display:flex; flex-direction:column; gap:5px; }
+  .grid-form select, .grid-form textarea { width:100%; }
+  #gridTests { min-height:120px; resize:vertical; font-family:var(--mono); font-size:12px; padding:8px 10px;
+    background:var(--surface2); color:var(--text); border:1px solid var(--border); border-radius:var(--radius); }
+  .grid-browsers { display:flex; flex-wrap:wrap; gap:6px; }
+  .grid-browsers label { display:flex; align-items:center; gap:6px; padding:5px 11px; border:1px solid var(--border);
+    border-radius:999px; font-size:12px; color:var(--text-muted); cursor:pointer; user-select:none; }
+  .grid-browsers label:has(input:checked) { border-color:var(--accent); background:var(--accent-glow); color:var(--accent); }
+  .grid-actions { display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
+  .grid-msg { font-size:12px; color:var(--text-dim); }
+  .grid-msg.err { color:var(--red); }
+  .grid-msg.warn { color:var(--yellow); }
+  .grid-hint { font-size:11.5px; color:var(--text-dim); margin:0; }
+  .grid-pills { display:flex; flex-wrap:wrap; gap:6px; }
+  .g-badge { display:inline-block; padding:2px 9px; border-radius:999px; font-size:11px; font-weight:600;
+    background:var(--surface3); color:var(--text-muted); white-space:nowrap; }
+  .g-busy, .g-running { background:var(--accent-glow); color:var(--accent); }
+  .g-idle, .g-passed, .g-completed, .g-ok { background:var(--green-glow); color:var(--green); }
+  .g-starting, .g-queued, .g-pending, .g-skipped { background:var(--yellow-glow); color:var(--yellow); }
+  .g-failed, .g-lost, .g-error { background:var(--red-glow); color:var(--red); }
+  .g-exited { background:var(--surface3); color:var(--text-dim); }
+  .g-progress { height:6px; width:110px; border-radius:3px; background:var(--surface3); overflow:hidden; display:flex; }
+  .g-progress > span { display:block; height:100%; }
+  .g-clickable { cursor:pointer; }
+  tr.g-selected td { background:var(--accent-glow) !important; }
+  .grid-scroll { overflow:auto; max-height:340px; }
+  .g-mono { font-family:var(--mono); font-size:11.5px; }
+  .g-tests { margin:0; padding:0; list-style:none; font-family:var(--mono); font-size:11.5px; }
+  .g-tests li { display:flex; gap:8px; align-items:baseline; padding:1px 0; }
+  .g-log { margin-top:8px; max-height:300px; overflow:auto; white-space:pre-wrap; background:var(--log-bg);
+    border:1px solid var(--border); border-radius:var(--radius); padding:10px 12px; font-family:var(--mono);
+    font-size:11px; color:var(--text-muted); }
+</style>
+
+<div id="page-grid">
+  <div class="dash-body">
+
+    <div class="dash-title">
+      <span>🛰️</span> Distributed Grid
+      <span class="dash-sub" id="gridSubtitle">— connecting to coordinator…</span>
+      <span style="margin-left:auto;display:flex;gap:10px;align-items:center;font-size:12px;font-weight:400;">
+        <label class="checkbox-label"><input type="checkbox" id="gridAuto" checked /> Auto-refresh</label>
+        <button class="btn btn-sm" onclick="loadGrid()">⟳ Refresh</button>
+      </span>
+    </div>
+
+    <div class="grid-top">
+      <!-- ── New run: tests + environment + browsers ─────────────────────── -->
+      <div class="dash-card">
+        <div class="dash-card-title">New run</div>
+        <div class="grid-form">
+          <div class="field">
+            <label for="gridEnv">Environment</label>
+            <select id="gridEnv"></select>
+          </div>
+          <div class="field">
+            <label>Browsers <span class="hint">(each test runs once per browser)</span></label>
+            <div class="grid-browsers" id="gridBrowsers"></div>
+          </div>
+          <div class="field">
+            <label for="gridChunk">Tests per pod</label>
+            <input type="number" id="gridChunk" value="3" min="1" max="10" />
+          </div>
+          <div class="field">
+            <label for="gridTests">Tests <span class="hint">(pytest paths or node ids, one per line)</span></label>
+            <textarea id="gridTests" spellcheck="false" placeholder="tests/test_sample.py&#10;tests/test_login.py::test_valid_login"></textarea>
+            <div class="grid-actions">
+              <button class="btn btn-sm" onclick="gridLoadFromRepo()" title="List test files from the repo selected on the Executor tab">Load from repo</button>
+              <span class="grid-msg" id="gridTestCount">0 selected</span>
+            </div>
+            <p class="grid-hint" id="gridTestsHint">Tests run from a snapshot of the selected repo’s committed state
+              (the repo chosen on the Executor tab, its top-level folder) — uncommitted changes are not included.</p>
+          </div>
+          <div class="grid-actions">
+            <button class="btn btn-accent" id="gridStartBtn" onclick="gridStartRun()">▶ Start run</button>
+            <span class="grid-msg" id="gridStartMsg"></span>
+          </div>
+          <div class="grid-msg warn" id="gridStartWarn" style="display:none;"></div>
+        </div>
+      </div>
+
+      <!-- ── Pods ─────────────────────────────────────────────────────────── -->
+      <div class="dash-card">
+        <div class="dash-card-title">Runner pods <span class="hint" id="gridPodSource" style="text-transform:none;letter-spacing:0;"></span></div>
+        <div class="grid-pills" id="gridPodCounts"></div>
+        <div class="grid-scroll">
+          <table class="history-tbl">
+            <thead><tr><th>Pod</th><th>Browser</th><th>Status</th><th>Run / chunk</th><th>Env</th><th>Last seen</th></tr></thead>
+            <tbody id="gridPodBody"><tr><td colspan="6" style="text-align:center;color:var(--text-dim);padding:24px;">No pods yet — start a run</td></tr></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── Runs ───────────────────────────────────────────────────────────── -->
+    <div class="dash-card">
+      <div class="dash-card-title">Runs</div>
+      <div class="grid-scroll">
+        <table class="history-tbl">
+          <thead><tr><th>Run</th><th>Started</th><th>Environment</th><th>Browsers</th><th>Status</th><th>Progress</th>
+            <th>Passed</th><th>Failed</th><th>Skipped</th><th>By</th></tr></thead>
+          <tbody id="gridRunBody"><tr><td colspan="10" style="text-align:center;color:var(--text-dim);padding:24px;">No runs yet</td></tr></tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- ── Run detail ─────────────────────────────────────────────────────── -->
+    <div class="dash-card" id="gridDetailCard" style="display:none;">
+      <div class="dash-card-title"><span id="gridDetailTitle">Run</span></div>
+      <div class="grid-scroll" style="max-height:480px;">
+        <table class="history-tbl">
+          <thead><tr><th>Chunk</th><th>Browser</th><th>Status</th><th>Pod</th><th>Tests</th><th>Log</th></tr></thead>
+          <tbody id="gridDetailBody"></tbody>
+        </table>
+      </div>
+      <pre class="g-log" id="gridLog" style="display:none;"></pre>
+    </div>
+
+  </div>
+</div>

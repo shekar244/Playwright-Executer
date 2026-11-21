@@ -1,0 +1,37 @@
+# Build context: repository root (Dockerfile.coordinator.dockerignore limits it to coordinator/*.py and requirements.txt)
+#   docker build -f Dockerfile.coordinator -t artifactory.lipstack.sephoraus.com:443/playwright-coordinator:latest .
+#   docker push artifactory.lipstack.sephoraus.com:443/playwright-coordinator:latest
+# Pin another Allure 3 release with --build-arg ALLURE_VERSION=<x.y.z> (3.16.0 is the tested one).
+ARG NODE_VERSION=24.14.0
+ARG ALLURE_VERSION=3.16.0
+
+# Stage 1: install the Allure 3 CLI from npm at BUILD time. The final image gets the Node
+# binary and the installed CLI only: no npm, no network access needed at runtime.
+FROM node:${NODE_VERSION}-bookworm-slim AS allure
+ARG ALLURE_VERSION
+RUN npm install --prefix /opt/allure --omit=dev --no-audit --no-fund --no-update-notifier "allure@${ALLURE_VERSION}" && \
+    /opt/allure/node_modules/.bin/allure --version
+
+FROM python:3.12-slim
+WORKDIR /app
+COPY coordinator/requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+COPY --from=allure /usr/local/bin/node /usr/local/bin/node
+COPY --from=allure /opt/allure /opt/allure
+RUN ln -s /opt/allure/node_modules/.bin/allure /usr/local/bin/allure
+
+COPY coordinator/*.py ./
+
+# Non-root user, group 0 (works with Kubernetes runAsUser and OpenShift's restricted SCC arbitrary UID).
+# /data holds code snapshots, raw Allure results and cached reports (mount a volume here);
+# group 0 owns it with g=u so an arbitrary UID in group 0 can write.
+RUN useradd -u 1001 -g 0 -ms /bin/bash appuser && \
+    mkdir -p /data/code /data/allure /data/reports && \
+    chown -R 1001:0 /app /data && chmod -R g=u /app /data
+# Cap the Node heap used by report generation; keep the container memory limit above this.
+ENV NODE_OPTIONS=--max-old-space-size=1024
+USER 1001
+
+EXPOSE 8000
+CMD ["uvicorn", "coordinator:app", "--host", "0.0.0.0", "--port", "8000"]

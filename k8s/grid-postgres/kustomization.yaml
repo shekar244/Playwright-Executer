@@ -1,0 +1,4 @@
+# Optional in-cluster PostgreSQL for dev/test. Skip this directory when using a managed
+# database (e.g. Azure Database for PostgreSQL) and point "database-url" at it instead.
+resources:
+- postgres.yaml

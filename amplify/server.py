@@ -29,6 +29,7 @@ from amplify.routes.auth        import bp as auth_bp
 from amplify.routes.admin       import bp as admin_bp
 from amplify.routes.admin_bootstrap import bp as bootstrap_bp
 from amplify.routes.repo        import bp as repo_bp
+from amplify.routes.grid        import bp as grid_bp
 from amplify.auth_utils import verify_jwt
 from amplify.models.db import init_db
 from amplify.models.user import User
@@ -48,6 +49,7 @@ app.register_blueprint(auth_bp)
 app.register_blueprint(admin_bp)
 app.register_blueprint(bootstrap_bp)
 app.register_blueprint(repo_bp)
+app.register_blueprint(grid_bp)
 
 @app.before_request
 def before_request():
@@ -70,7 +72,15 @@ def before_request():
 def index():
     if not hasattr(g, "user"):
         return redirect("/login")
+    if g.user.must_change_password:                  # an admin reset their password: choose a new one first
+        return redirect("/change-password")
     return render_template("base.html", user=g.user)
+
+@app.route("/change-password")
+def change_password_page():
+    if not hasattr(g, "user"):
+        return redirect("/login")
+    return render_template("change_password.html", user=g.user, forced=bool(g.user.must_change_password))
 
 @app.route("/login")
 def login():
@@ -84,6 +94,8 @@ def register():
 def admin_page():
     if not hasattr(g, "user"):
         return redirect("/login")
+    if g.user.must_change_password:
+        return redirect("/change-password")
     if not g.user.is_admin:
         return redirect("/")
     return render_template("admin.html", user=g.user)

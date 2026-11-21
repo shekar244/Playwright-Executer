@@ -1,0 +1,99 @@
+# Manual batch of runners for ONE browser, for clusters without KEDA or for ad-hoc capacity.
+# Change BROWSER and the image together, then create it (generateName => use create, not apply):
+#   kubectl create -n <namespace> -f k8s/grid-runners/job-example.yaml
+apiVersion: batch/v1
+kind: Job
+metadata:
+  generateName: playwright-edge-runners-
+  labels:
+    app: playwright-runner
+    browser: edge
+spec:
+  parallelism: 4
+  completions: 4
+  # A failed runner is replaced instead of failing the whole batch; evictions/drains do not
+  # count against the limit.
+  backoffLimit: 6
+  podFailurePolicy:
+    rules:
+    - action: Ignore
+      onPodConditions:
+      - type: DisruptionTarget
+        status: "True"
+  ttlSecondsAfterFinished: 300
+  template:
+    metadata:
+      labels:
+        app: playwright-runner
+        browser: edge
+    spec:
+      restartPolicy: Never
+      automountServiceAccountToken: false   # runners never call the Kubernetes API
+      terminationGracePeriodSeconds: 60   # on SIGTERM the runner requeues its chunk and reports exit
+      # imagePullSecrets:
+      # - name: artifactory-regcred       # docker-registry secret for artifactory.lipstack.sephoraus.com:443
+      # Dedicated browser node pool (optional):
+      # nodeSelector:
+      #   workload: playwright
+      # tolerations:
+      # - key: workload
+      #   operator: Equal
+      #   value: playwright
+      #   effect: NoSchedule
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1001
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+      - name: runner
+        image: artifactory.lipstack.sephoraus.com:443/playwright-runner-edge:latest
+        env:
+        - name: BROWSER
+          value: edge
+        - name: COORDINATOR_URL
+          value: http://central-coordinator-svc:8000
+        # Pods get the POD-ONLY token: create key pod-api-token in this Secret with the coordinator's POD_API_TOKEN
+        # value. Runners must NOT receive the full token: test code in the pod can read this environment, and the
+        # pod token only allows what a pod does (lease, submit, Allure upload, release, heartbeat, code download).
+        # Key api-token is the coordinator's FULL API_TOKEN (the Amplify token); it is deliberately not used here.
+        # optional: without the key GRID_API_TOKEN stays unset (a coordinator with auth on answers 401).
+        - name: GRID_API_TOKEN
+          valueFrom:
+            secretKeyRef:
+              name: playwright-db-credentials
+              key: pod-api-token
+              optional: true
+        # Optional: wall-clock limit of ONE chunk's pytest run, in seconds (default 1800). On expiry the
+        # whole pytest process group is killed and the chunk is reported as failed ("Chunk timed out").
+        # - name: GRID_CHUNK_TIMEOUT_SECONDS
+        #   value: "1800"
+        resources:
+          requests:
+            cpu: 1500m
+            memory: 3Gi
+          limits:
+            cpu: 3000m
+            memory: 6Gi
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop: ["ALL"]
+        volumeMounts:
+        - name: dshm
+          mountPath: /dev/shm        # 3 parallel browsers need more than the 64Mi default
+        # Optional: shared read-only tests-store with <repo>/<sha>/ snapshots written by Amplify.
+        # Without it pods download the snapshot from the coordinator. The claim must be ReadWriteMany.
+        # - name: tests-store
+        #   mountPath: /code
+        #   readOnly: true
+      volumes:
+      - name: dshm
+        emptyDir:
+          medium: Memory
+          sizeLimit: 2Gi
+      # Optional: see the tests-store mount above (PVC tests-store, ReadWriteMany).
+      # - name: tests-store
+      #   persistentVolumeClaim:
+      #     claimName: tests-store
+      #     readOnly: true

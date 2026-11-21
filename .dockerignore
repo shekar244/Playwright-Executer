@@ -51,3 +51,15 @@ amplify/tests/
 amplify/jira_insights/workspace/
 Jira_ReportBuilder/workspace/
 report_history.json
+
+# ── Not part of the app image: local deployment files and the Grid backend (own images) ──
+# (the coordinator and runner images are built from this same context but have their own lists:
+#  Dockerfile.coordinator.dockerignore and Dockerfile.grid-runner.dockerignore)
+config/
+scripts/
+docs/
+coordinator/
+runner/
+src/
+tests/
+pytest.ini

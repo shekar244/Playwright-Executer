@@ -1,0 +1,9 @@
+# Requires KEDA (e.g. the AKS KEDA add-on) for the ScaledJobs. Without KEDA, create runner Jobs
+# by hand from job-example.yaml.
+resources:
+- scaledjobs.yaml
+
+# Retarget images (registry / tag) without editing the manifest, e.g.:
+# images:
+# - name: artifactory.lipstack.sephoraus.com:443/playwright-runner-edge
+#   newTag: "1.0.0"

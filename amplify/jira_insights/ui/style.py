@@ -62,6 +62,17 @@ _COMPONENTS = """
   .ji-stat-value, .ji-number-value { font-weight: 700; letter-spacing: -.035em; line-height: 1.05; color: var(--ji-text) !important; }
   .ji-stat-value { font-size: 32px; margin-top: 9px; }
   .ji-stat-sub, .ji-number-sub { font-size: 12px; color: var(--ji-muted) !important; margin-top: 4px; }
+  /* Filled cards (Full colour / Gradient): the figure, label and icon use --ink, computed from the fill (tile_colors),
+     so they are never the card's own colour. */
+  .ji-stat-solid, .ji-stat-gradient { border-color: transparent !important;
+    box-shadow: 0 1px 2px rgba(0,0,0,.12), 0 8px 22px color-mix(in srgb, var(--a) 30%, transparent) !important; }
+  .ji-stat-solid { background: var(--a) !important; }
+  .ji-stat-gradient { background: linear-gradient(135deg, var(--a), var(--a2)) !important; }
+  .ji-stat-solid .ji-stat-head, .ji-stat-solid .ji-stat-value, .ji-stat-solid .ji-stat-sub,
+  .ji-stat-gradient .ji-stat-head, .ji-stat-gradient .ji-stat-value, .ji-stat-gradient .ji-stat-sub { color: var(--ink) !important; }
+  .ji-stat-solid .ji-stat-head, .ji-stat-solid .ji-stat-sub,
+  .ji-stat-gradient .ji-stat-head, .ji-stat-gradient .ji-stat-sub { opacity: .88; }
+  .ji-stat-solid .ji-stat-icon, .ji-stat-gradient .ji-stat-icon { background: color-mix(in srgb, var(--ink) 18%, transparent); }
   .ji-number { text-align: center; padding: 18px 0 16px; display: flex; flex-direction: column; justify-content: center; }
   .ji-number-value { font-size: 52px; }
 
@@ -401,15 +412,56 @@ def safe_color(value: str, fallback: str = ACCENTS[0]) -> str:
     return value if isinstance(value, str) and _HEX.match(value) else fallback
 
 
-def stat_tiles_html(tiles: list[tuple[str, str, str, str, str]]) -> str:
-    """tiles: (icon, label, value, caption, accent)."""
-    cells = "".join(
-        f'<div class="ji-stat" style="--a:{safe_color(accent)}"><div class="ji-stat-head">'
-        f'<span class="ji-stat-icon">{html.escape(icon)}</span>{html.escape(label)}</div>'
-        f'<div class="ji-stat-value">{html.escape(value)}</div>'
-        f'<div class="ji-stat-sub">{html.escape(caption)}</div></div>'
-        for icon, label, value, caption, accent in tiles)
-    return f'<div class="ji-stats">{cells}</div>'
+def _channels(color: str) -> tuple[float, ...]:
+    return tuple(int(color[i:i + 2], 16) / 255 for i in (1, 3, 5))
+
+
+def _luminance(color: str) -> float:
+    r, g, b = (c / 12.92 if c <= 0.03928 else ((c + 0.055) / 1.055) ** 2.4 for c in _channels(color))
+    return 0.2126 * r + 0.7152 * g + 0.0722 * b
+
+
+def contrast_ratio(a: str, b: str) -> float:
+    """WCAG contrast of two #rrggbb colours: 1 (identical) to 21 (black on white)."""
+    hi, lo = sorted((_luminance(a), _luminance(b)), reverse=True)
+    return (hi + 0.05) / (lo + 0.05)
+
+
+def _shade(color: str, toward: str, amount: float) -> str:
+    """`color` moved `amount` (0-1) of the way toward `toward` (#000000 or #ffffff)."""
+    return "#" + "".join(f"{round((c + (t - c) * amount) * 255):02x}" for c, t in zip(_channels(color), _channels(toward)))
+
+
+_INK_LIGHT, _INK_DARK = "#ffffff", "#0b1020"
+
+
+def tile_colors(accent: str, style: str) -> dict:
+    """The colours of a filled card: its fill stops (`a`, and `a2` for a gradient) and the `ink` for the figure,
+    label and icon. The ink is whichever of white or near-black reads better on the chosen colour, so it is never
+    the card's own colour. A gradient's second stop is shaded AWAY from the ink (darker under white ink, lighter
+    under dark ink), so the ink is at least as readable on it as on the chosen colour."""
+    base = safe_color(accent)
+    ink = max((_INK_LIGHT, _INK_DARK), key=lambda c: contrast_ratio(c, base))
+    if style == "solid":
+        return {"a": base, "a2": base, "ink": ink}
+    return {"a": base, "a2": _shade(base, "#000000" if ink == _INK_LIGHT else "#ffffff", 0.38), "ink": ink}
+
+
+def stat_tiles_html(tiles: list[tuple]) -> str:
+    """tiles: (icon, label, value, caption, accent[, style]); style is "default" (neutral card), "solid" or "gradient"."""
+    cells = []
+    for icon, label, value, caption, accent, *rest in tiles:
+        style = rest[0] if rest and rest[0] in ("solid", "gradient") else "default"
+        if style == "default":
+            attrs = f'class="ji-stat" style="--a:{safe_color(accent)}"'
+        else:
+            c = tile_colors(accent, style)
+            attrs = f'class="ji-stat ji-stat-{style}" style="--a:{c["a"]};--a2:{c["a2"]};--ink:{c["ink"]}"'
+        cells.append(f'<div {attrs}><div class="ji-stat-head">'
+                     f'<span class="ji-stat-icon">{html.escape(icon)}</span>{html.escape(label)}</div>'
+                     f'<div class="ji-stat-value">{html.escape(value)}</div>'
+                     f'<div class="ji-stat-sub">{html.escape(caption)}</div></div>')
+    return f'<div class="ji-stats">{"".join(cells)}</div>'
 
 
 def number_html(value: str, caption: str, accent: str, min_height: int = 0) -> str:

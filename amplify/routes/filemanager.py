@@ -1,8 +1,11 @@
 """
-Blueprint: File Manager routes
+Blueprint: File Manager routes — ADMINS ONLY
   GET  /api/fm/browse?path=<dir>   - list directory contents
   GET  /api/fm/read?path=<file>    - read file (json/yaml/env/csv/xlsx)
   POST /api/fm/save                - save file
+
+These endpoints take absolute paths anywhere on the server (including server_config.json with the
+Jira / Zephyr / Grid secrets), so every one of them requires an admin.
 """
 from __future__ import annotations
 
@@ -14,7 +17,7 @@ from pathlib import Path
 
 from flask import Blueprint, jsonify, request, g
 from amplify.user_config_reader import UserConfigReader
-from amplify.auth_utils import require_auth
+from amplify.auth_utils import require_admin
 from amplify.command_builder import resolve_python
 
 
@@ -77,7 +80,7 @@ def _ext(p: Path) -> str:
 # ── Browse ─────────────────────────────────────────────────────────────────────
 
 @bp.route("/api/fm/browse")
-@require_auth
+@require_admin
 def browse():
     raw = request.args.get("path", "").strip() or str(Path.home())
     p = _safe_path(raw)
@@ -115,7 +118,7 @@ def browse():
 # ── Read ───────────────────────────────────────────────────────────────────────
 
 @bp.route("/api/fm/read")
-@require_auth
+@require_admin
 def read_file():
     raw = request.args.get("path", "").strip()
     p   = _safe_path(raw)
@@ -224,7 +227,7 @@ def read_file():
 # ── Save ───────────────────────────────────────────────────────────────────────
 
 @bp.route("/api/fm/save", methods=["POST"])
-@require_auth
+@require_admin
 def save_file():
     body = request.json or {}
     raw  = body.get("path", "").strip()

@@ -2,19 +2,31 @@
 Blueprint: Admin routes
   GET    /api/admin/users               — list all users
   GET    /api/admin/users/<id>          — single user detail + activity
-  POST   /api/admin/users/<id>/reset    — reset password
+  POST   /api/admin/users/<id>/reset    — reset password (the user must then choose their own)
   POST   /api/admin/users/<id>/toggle   — enable / disable user
   POST   /api/admin/users/<id>/promote  — grant / revoke admin
   DELETE /api/admin/users/<id>          — delete user and workspace
   GET    /api/admin/metrics             — usage metrics and stats
   GET    /api/admin/activity            — recent activity log
   GET    /api/admin/workspace/<id>      — workspace disk usage for a user
+  GET    /api/admin/grid                — Grid coordinator URL, whether a token is set (never the token)
+  POST   /api/admin/grid                — set the coordinator URL / API token; replies with a connection check
+  GET    /api/admin/ui-tabs             — tab catalog + current visibility + landing tab
+  POST   /api/admin/ui-tabs             — set which tabs every user sees (and, optionally, the landing tab)
+  GET    /api/admin/insights-options    — Jira Insights option catalog + current visibility
+  POST   /api/admin/insights-options    — set which Insights options every user sees
 """
 import shutil
 from pathlib import Path
 from flask import Blueprint, jsonify, request, g
 from amplify.auth_utils import require_admin
 from amplify.models.user import User, ActivityLog
+from amplify.routes.grid import probe as grid_probe
+from amplify.server_secrets import (
+    INSIGHTS_OPTION_CATALOG, UI_TAB_CATALOG,
+    grid_config_summary, load_default_tab, load_insights_options, load_ui_tabs,
+    save_grid_config, save_insights_options, save_ui_tabs,
+)
 from amplify.storage import get_user_workspace_dir
 
 bp = Blueprint("admin", __name__)
@@ -56,14 +68,15 @@ def reset_password(user_id):
     if not user:
         return jsonify({"error": "User not found"}), 404
     body = request.json or {}
-    new_pw = body.get("password", "").strip()
-    if not new_pw or len(new_pw) < 6:
-        return jsonify({"error": "Password must be at least 6 characters"}), 400
-    User.reset_password(user_id, new_pw)
+    new_pw = body.get("password", "").strip() if isinstance(body.get("password", ""), str) else ""
+    problem = User.password_problem(new_pw)
+    if problem:
+        return jsonify({"error": problem}), 400
+    User.reset_password(user_id, new_pw, must_change=True)       # a password an admin chose is temporary
     ActivityLog.record(g.user.id, "admin_reset_password",
-                       f"Reset password for {user.username} (id={user_id})",
+                       f"Reset password for {user.username} (id={user_id}); they must choose a new one at next sign-in",
                        request.remote_addr)
-    return jsonify({"ok": True})
+    return jsonify({"ok": True, "must_change_password": True})
 
 
 @bp.route("/api/admin/users/<int:user_id>/toggle", methods=["POST"])
@@ -140,13 +153,14 @@ def get_activity():
 @require_admin
 def server_config():
     """View or update server-level secrets (Jira/Zephyr credentials)."""
-    from amplify.server_secrets import load_zephyr_config, save_server_config, _load_server_file
+    from amplify.server_secrets import load_zephyr_config, save_zephyr_config
     if request.method == "POST":
         body = request.json or {}
-        server_data = _load_server_file()
-        server_data["zephyr"] = body.get("zephyr", body)
+        updates = body.get("zephyr", body)
+        if not isinstance(updates, dict):
+            return jsonify({"error": "zephyr must be an object"}), 400
         try:
-            save_server_config(server_data)
+            save_zephyr_config(updates)
         except OSError as exc:
             return jsonify({"error": str(exc)}), 500
         ActivityLog.record(g.user.id, "admin_update_secrets",
@@ -159,6 +173,82 @@ def server_config():
         if val and len(val) > 6:
             cfg[key] = val[:3] + "•" * (len(val) - 6) + val[-3:]
     return jsonify({"zephyr": cfg})
+
+
+@bp.route("/api/admin/grid", methods=["GET", "POST"])
+@require_admin
+def grid_coordinator():
+    """Where the Grid tab sends runs (server-wide). The token is write-only: it is never returned."""
+    if request.method == "POST":
+        body = request.json or {}
+        url, token, clear = body.get("coordinator_url"), body.get("api_token"), body.get("clear_token", False)
+        if (url is not None and not isinstance(url, str)) or (token is not None and not isinstance(token, str)) \
+                or not isinstance(clear, bool):
+            return jsonify({"error": "coordinator_url and api_token must be text; clear_token true or false"}), 400
+        try:
+            save_grid_config(url, token, clear)
+        except ValueError as exc:
+            return jsonify({"error": str(exc)}), 400
+        except OSError as exc:
+            return jsonify({"error": str(exc)}), 500
+        summary = grid_config_summary()
+        token_note = "removed" if clear else ("replaced" if (token or "").strip() else "unchanged")
+        ActivityLog.record(g.user.id, "admin_update_grid",
+                           f"Grid coordinator: {summary['coordinator_url'] or 'not set'}; token {token_note}",
+                           request.remote_addr)
+        return jsonify({"ok": True, **summary, "status": grid_probe()})
+    return jsonify(grid_config_summary())
+
+
+def _flags_endpoint(*, body_key, load, save, catalog, action):
+    """GET → current flags + catalog; POST → validate, save, audit-log."""
+    if request.method == "POST":
+        flags = (request.json or {}).get(body_key)
+        if not isinstance(flags, dict):
+            return jsonify({"error": f"{body_key} must be an object"}), 400
+        try:
+            saved = save(flags)
+        except ValueError as exc:
+            return jsonify({"error": str(exc)}), 400
+        except OSError as exc:
+            return jsonify({"error": str(exc)}), 500
+        hidden = [k for k, v in saved.items() if not v]
+        ActivityLog.record(g.user.id, action, "Hidden: " + (", ".join(hidden) or "none"),
+                           request.remote_addr)
+        return jsonify({"ok": True, body_key: saved})
+    return jsonify({body_key: load(), "catalog": catalog})
+
+
+@bp.route("/api/admin/ui-tabs", methods=["GET", "POST"])
+@require_admin
+def ui_tabs():
+    """Tab visibility and the landing tab are server-wide: they apply to every user, admins included."""
+    if request.method == "POST":
+        body = request.json or {}
+        flags = body.get("ui_tabs")
+        if not isinstance(flags, dict):
+            return jsonify({"error": "ui_tabs must be an object"}), 400
+        try:
+            saved = save_ui_tabs(flags, body.get("default_tab"))
+        except ValueError as exc:
+            return jsonify({"error": str(exc)}), 400
+        except OSError as exc:
+            return jsonify({"error": str(exc)}), 500
+        landing = load_default_tab()
+        hidden = [k for k, v in saved.items() if not v]
+        ActivityLog.record(g.user.id, "admin_update_ui_tabs",
+                           f"Hidden: {', '.join(hidden) or 'none'}; landing tab: {landing}", request.remote_addr)
+        return jsonify({"ok": True, "ui_tabs": saved, "default_tab": landing})
+    return jsonify({"ui_tabs": load_ui_tabs(), "default_tab": load_default_tab(), "catalog": UI_TAB_CATALOG})
+
+
+@bp.route("/api/admin/insights-options", methods=["GET", "POST"])
+@require_admin
+def insights_options():
+    """Jira Insights sidebar options and views, server-wide."""
+    return _flags_endpoint(body_key="insights_options", load=load_insights_options,
+                           save=save_insights_options, catalog=INSIGHTS_OPTION_CATALOG,
+                           action="admin_update_insights_options")
 
 
 def _dir_size(path: Path) -> int:

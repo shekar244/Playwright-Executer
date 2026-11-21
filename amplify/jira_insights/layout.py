@@ -9,21 +9,25 @@ shared default layout.
 """
 from __future__ import annotations
 
-from .pivot import ReportSpec
+from .pivot import TABLE, ReportSpec
 
 NUMBERS_PER_ROW = 4
 CHARTS_PER_ROW  = 2
 
 
 def default_layout(reports: list[ReportSpec]) -> list[list[str]]:
-    """Report order: Number tiles four to a row, charts two to a row, gauge sets on their own row."""
+    """Report order: Number tiles four to a row, charts two to a row, gauge sets and tables on their own row."""
     rows: list[list[str]] = []
     row: list[str] = []
     kind = None
     for report in reports:
-        this = "number" if report.chart == "Number" else ("gauges" if report.chart in ("Gauge", "Meter") and report.rows
-                                                          else "chart")
-        cap = {"number": NUMBERS_PER_ROW, "gauges": 1}.get(this, CHARTS_PER_ROW)
+        if report.chart == TABLE:
+            this = "table"
+        elif report.chart == "Number":
+            this = "number"
+        else:
+            this = "gauges" if report.chart in ("Gauge", "Meter") and report.rows else "chart"
+        cap = {"number": NUMBERS_PER_ROW, "gauges": 1, "table": 1}.get(this, CHARTS_PER_ROW)
         if row and (this != kind or len(row) >= cap):
             rows.append(row)
             row = []

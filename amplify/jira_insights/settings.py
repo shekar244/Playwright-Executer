@@ -1,12 +1,12 @@
 """
 Jira Insights settings — Jira connection details and workspace location.
 
-Jira credentials are reused from the Test Management config section
-(Config → Zephyr: Jira URL, username, API token, verify SSL) so Jira is
-configured once. Environment variables win, which lets containers inject
-secrets without writing them to config.json:
+The Jira connection is set up once, by an admin, in Amplify QEA (Admin Panel →
+Server Secrets) and shared by Test Management and Jira Insights. Users never
+enter or see the credentials. Environment variables supply initial defaults,
+which lets containers inject secrets; a value saved in the Admin Panel wins:
 
-  JIRA_URL, JIRA_USERNAME, JIRA_API_TOKEN, JIRA_VERIFY_SSL
+  JIRA_URL, JIRA_USERNAME, JIRA_API_TOKEN
   JIRA_INSIGHTS_HOME   — workspace directory (datasets, reports, chart specs)
 """
 from __future__ import annotations
@@ -16,6 +16,9 @@ from dataclasses import dataclass
 from pathlib import Path
 
 TOOL_ROOT = Path(__file__).resolve().parent.parent
+
+# Shown wherever Jira is missing, so users are pointed at the right person, not at a screen they cannot use.
+SETUP_BY_ADMIN = "Ask an admin to set up Jira in Amplify QEA (Admin Panel → Server Secrets)."
 
 _IN_CONTAINER = os.environ.get("CONTAINER", "0") == "1"
 _DEFAULT_WORKSPACE = (
@@ -52,12 +55,15 @@ def workspace_dir(user_id: int | str | None = None) -> Path:
 
 
 def _resolve_user_id() -> str | None:
-    """Get user ID from Streamlit query params, then env var fallback."""
+    """The signed-in Insights user, else the USER_ID env var.
+
+    Never a URL parameter: anything in the URL is editable by the person holding it.
+    """
     try:
         import streamlit as st
-        uid = st.query_params.get("user_id")
+        uid = st.session_state.get("ji_auth_user_id")
         if uid:
-            return uid
+            return str(uid)
     except Exception:
         pass
     return os.environ.get("USER_ID")

@@ -25,6 +25,30 @@ spec:
               value: "1"
             - name: HOME
               value: "/tmp"
+            # Same secret as amplify-qea: Insights verifies the sign-in token QEA issues with this key.
+            - name: JWT_SECRET_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: amplify-secrets
+                  key: jwt-secret-key
+            - name: JIRA_URL
+              valueFrom:
+                secretKeyRef: { name: amplify-secrets, key: jira-url, optional: true }
+            - name: JIRA_USERNAME
+              valueFrom:
+                secretKeyRef: { name: amplify-secrets, key: jira-username, optional: true }
+            - name: JIRA_API_TOKEN
+              valueFrom:
+                secretKeyRef: { name: amplify-secrets, key: jira-api-token, optional: true }
+            - name: ZEPHYR_ACCESS_KEY
+              valueFrom:
+                secretKeyRef: { name: amplify-secrets, key: zephyr-access-key, optional: true }
+            - name: ZEPHYR_SECRET_KEY
+              valueFrom:
+                secretKeyRef: { name: amplify-secrets, key: zephyr-secret-key, optional: true }
+            - name: ZEPHYR_ACCOUNT_ID
+              valueFrom:
+                secretKeyRef: { name: amplify-secrets, key: zephyr-account-id, optional: true }
           volumeMounts:
             - name: amplify-data
               mountPath: /app/data

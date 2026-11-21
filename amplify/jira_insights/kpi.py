@@ -19,6 +19,10 @@ from .pivot import AGGREGATIONS, apply_filters
 CAPTIONS = {"share": "Share of issues", "dataset": "Dataset size", "metric": "Second metric",
             "text": "Text", "none": "None"}
 
+# How a card is filled: "default" is the neutral card (the colour only tints the icon); the others fill the whole
+# card with the chosen colour and the figure, label and icon take a colour that is readable on it (ui/style.py).
+TILE_STYLES = {"default": "Plain", "solid": "Full colour", "gradient": "Gradient"}
+
 # Equivalent column names across Jira flavours (company- vs team-managed projects).
 _COLUMN_ALIASES = {"story points": ("story point estimate",), "story point estimate": ("story points",)}
 
@@ -50,6 +54,7 @@ class KpiSpec:
     as_percent: bool = False                 # show a ratio as a percentage (pass rate)
     requires: list = field(default_factory=list)   # columns that must exist, else the tile hides
     id: str = ""
+    style: str = "default"                   # key of TILE_STYLES
 
     @classmethod
     def from_dict(cls, data: dict) -> "KpiSpec":
@@ -59,6 +64,8 @@ class KpiSpec:
         spec.metric = Metric.from_dict(data.get("metric")) or Metric()
         spec.divide_by = Metric.from_dict(data.get("divide_by"))
         spec.caption_metric = Metric.from_dict(data.get("caption_metric"))
+        if spec.style not in TILE_STYLES:        # a hand-edited or newer file: fall back to the neutral card
+            spec.style = "default"
         return spec
 
     def to_dict(self) -> dict:

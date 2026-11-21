@@ -1,0 +1,93 @@
+# Manual batch trigger, one Job per browser. Render with `oc process` and use
+# `oc create` (not apply) because the Job name is generated:
+#   oc process -f opns/grid-03-runner-job.yaml \
+#     -p BROWSER=firefox -p PARALLELISM=4 | oc create -f -
+# Images are named <REGISTRY>/playwright-runner-<BROWSER>:<IMAGE_TAG>.
+# Includes the /dev/shm memory mount required for 3 parallel browser instances.
+apiVersion: template.openshift.io/v1
+kind: Template
+metadata:
+  name: playwright-runner-job
+parameters:
+- name: REGISTRY
+  description: Image registry (and optional repo path) the runner images are pulled from
+  value: artifactory.lipstack.sephoraus.com:443
+- name: BROWSER
+  description: Browser this runner runs (edge, chrome, chromium, firefox, webkit)
+  value: edge
+- name: IMAGE_TAG
+  value: latest
+- name: PARALLELISM
+  description: Number of runner pods (also used as completions)
+  value: "4"
+- name: COORDINATOR_URL
+  value: "http://central-coordinator-svc:8000"
+objects:
+- apiVersion: batch/v1
+  kind: Job
+  metadata:
+    # generateName so re-running the template never collides with a previous Job
+    generateName: playwright-${BROWSER}-runners-
+    labels:
+      app: playwright-runner
+      browser: ${BROWSER}
+  spec:
+    parallelism: ${{PARALLELISM}}
+    completions: ${{PARALLELISM}}
+    ttlSecondsAfterFinished: 300
+    template:
+      metadata:
+        labels:
+          app: playwright-runner
+          browser: ${BROWSER}
+      spec:
+        restartPolicy: Never
+        automountServiceAccountToken: false
+        containers:
+        - name: ${BROWSER}-runner
+          image: ${REGISTRY}/playwright-runner-${BROWSER}:${IMAGE_TAG}
+          env:
+          - name: BROWSER
+            value: ${BROWSER}
+          - name: COORDINATOR_URL
+            value: ${COORDINATOR_URL}
+          # Pods get the POD-ONLY token: create key pod-api-token in this Secret with the coordinator's POD_API_TOKEN
+          # value. Runners must NOT receive the full token: test code in the pod can read this environment, and the
+          # pod token only allows what a pod does (lease, submit, Allure upload, release, heartbeat, code download).
+          # Key api-token is the coordinator's FULL API_TOKEN (the Amplify token); it is deliberately not used here.
+          # optional: without the key GRID_API_TOKEN stays unset (a coordinator with auth on answers 401).
+          - name: GRID_API_TOKEN
+            valueFrom:
+              secretKeyRef:
+                name: playwright-db-credentials
+                key: pod-api-token
+                optional: true
+          # Optional: wall-clock limit of ONE chunk's pytest run, in seconds (default 1800). On expiry the
+          # whole pytest process group is killed and the chunk is reported as failed ("Chunk timed out").
+          # - name: GRID_CHUNK_TIMEOUT_SECONDS
+          #   value: "1800"
+          resources:
+            requests:
+              cpu: "1500m"
+              memory: "3Gi"
+            limits:
+              cpu: "3000m"
+              memory: "6Gi"
+          volumeMounts:
+          - mountPath: /dev/shm
+            name: dshm
+          # Optional: shared read-only tests-store with <repo>/<sha>/ snapshots written by Amplify.
+          # Without it pods download the snapshot from the coordinator. The claim must be ReadWriteMany.
+          # - name: tests-store
+          #   mountPath: /code
+          #   readOnly: true
+        volumes:
+        - name: dshm
+          emptyDir:
+            medium: Memory
+            sizeLimit: 2Gi
+        # Optional: see the tests-store mount above (PVC tests-store, ReadWriteMany).
+        # - name: tests-store
+        #   persistentVolumeClaim:
+        #     claimName: tests-store
+        #     readOnly: true

@@ -16,6 +16,34 @@ from .transform import MULTI_SEP, issues_to_frame
 _GH_SPRINT = re.compile(r"name=([^,\]]+)")
 _GH_SPRINT_ID = re.compile(r"id=(\d+)")
 
+CARRIED_FORWARD_FROM = "Carried Forward From"
+
+
+def carried_forward_from(sprints) -> str | None:
+    """The sprints an issue was carried forward FROM, as a multi-value cell; None when it never was.
+
+    Jira lists every sprint an issue has been in, oldest first. It was carried forward out of each of them
+    except the last: it appears in a later sprint too. Counting an issue once under every sprint it left is
+    what makes a sprint-by-sprint carry-forward count possible; an issue in a single sprint (or in none)
+    was not carried anywhere yet, and the issue's last sprint is not counted because nothing follows it.
+    """
+    if sprints is None or (isinstance(sprints, float) and pd.isna(sprints)):
+        return None
+    names = list(dict.fromkeys(p.strip() for p in str(sprints).split(MULTI_SEP) if p.strip()))
+    return MULTI_SEP.join(names[:-1]) if len(names) > 1 else None
+
+
+def add_carry_forward(df: pd.DataFrame, multi_cols=()) -> tuple[pd.DataFrame, list[str]]:
+    """(frame, multi-value columns) with "Carried Forward From" added when the issues have a Sprint column.
+
+    Safe to call again (a frame that has the column is returned as it is), and it never changes the frame it is given.
+    """
+    multi = list(multi_cols)
+    if "Sprint" not in df.columns or CARRIED_FORWARD_FROM in df.columns:
+        return df, multi
+    out = df.assign(**{CARRIED_FORWARD_FROM: df["Sprint"].map(carried_forward_from)})
+    return out, multi + ([CARRIED_FORWARD_FROM] if CARRIED_FORWARD_FROM not in multi else [])
+
 
 def _extract_sprint_name(value) -> str | None:
     if value is None or (isinstance(value, float) and pd.isna(value)):
@@ -94,7 +122,7 @@ def sprint_issues_to_frame(issues: list[dict], field_names: dict[str, str] | Non
     if "Story Points" in df.columns:
         df["Story Points"] = pd.to_numeric(df["Story Points"], errors="coerce")
 
-    return df, multi
+    return add_carry_forward(df, multi)
 
 
 def compute_velocity(df: pd.DataFrame) -> pd.DataFrame:

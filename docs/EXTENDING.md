@@ -11,13 +11,21 @@ Amplify-QEA/
 ├── amplify.sh / amplify.bat         ← launchers (python -m amplify.server)
 └── amplify/
     ├── server.py                        ← app factory: registers blueprints, serves templates
+    ├── consolidated.py                  ← Reporting Dashboard logic: Grid + local runs in one model, filters, roll-ups (pure, unit-tested)
+    ├── payload_coerce.py                ← reads numbers/text from payloads we don't control (pod results, history files): never raises
+    ├── request_body.py                  ← json_object(): a malformed JSON body is a JSON 400, never an HTML 500
+    ├── grid_data.py                     ← reads Grid runs from the coordinator for the dashboard (cached; a finished run is kept for good only once its Allure results are in)
+    ├── grid_snapshot.py                 ← Grid code delivery: git snapshot of a repo's HEAD → shared volume (GRID_CODE_DIR, with retention pruning) or coordinator (safe tar extraction)
+    ├── grid_reports.py                  ← a Grid run's Allure 3 report, fetched from the coordinator and cached per run + ETag
+    ├── report_viewer.py                 ← signed, per-user links for viewing HTML reports inside the dashboard
     ├── routes/
     │   ├── __init__.py
     │   ├── state.py                     ← shared run state (runner, is_running, SSE queues)
     │   ├── history.py                   ← allure result parsing + per-repo run-history persistence
     │   ├── executor.py                  ← Blueprint: run/stop/stream/repos/tests/features/git/venv
     │   ├── config.py                    ← Blueprint: /api/config/* endpoints
-    │   ├── dashboard.py                 ← Blueprint: /api/dashboard + /api/report
+    │   ├── grid.py                      ← Blueprint: /api/grid/* — proxy to the Grid coordinator; POST /api/grid/runs starts a run (optionally from a repo snapshot, see grid_snapshot.py)
+    │   ├── dashboard.py                 ← Blueprint: /api/dashboard (+ /overview, /run, /report-link), /rv viewer, /api/report
     │   ├── zephyr.py                    ← Blueprint: all /api/zephyr/* and /api/jira/*
     │   ├── filemanager.py               ← Blueprint: /api/fm/browse, read, save
     │   └── insights.py                  ← Blueprint: /api/insights/* (start/stop the Streamlit side-car)
@@ -41,7 +49,8 @@ Amplify-QEA/
     │   ├── base.html                    ← HTML shell: <head>, CSS, nav, shared JS, {% include %} calls
     │   └── partials/
     │       ├── executor.html            ← Executor page + Config page HTML
-    │       ├── dashboard.html           ← Reports Dashboard page HTML
+    │       ├── dashboard.html           ← Reporting Dashboard page (filters, KPIs, runs, drill-down, viewers)
+    │       ├── grid.html                ← Grid page (new run form, runner pods, runs, run detail)
     │       ├── testmanagement.html      ← Test Management (Zephyr) page HTML
     │       ├── insights.html            ← Jira Insights page (iframe host)
     │       └── filemanager.html         ← File Manager page HTML + inline JS
@@ -50,7 +59,8 @@ Amplify-QEA/
     │   ├── css/amplify.css              ← Apple-style design system (light + dark)
     │   └── js/
     │       ├── executor.js              ← Executor + Config JS
-    │       ├── dashboard.js             ← Dashboard charts + history table JS
+    │       ├── dashboard.js             ← Reporting Dashboard JS (consolidated Grid + local runs)
+    │       ├── grid.js                  ← Grid tab JS: renders pods/runs/results (all data escaped; ids via data-* attributes + one delegated click handler)
     │       ├── testmanagement.js        ← Zephyr / Test Management JS
     │       └── insights.js              ← Jira Insights start/embed JS
     ├── command_builder.py               ← builds pytest command; venv Python resolution
@@ -58,9 +68,7 @@ Amplify-QEA/
     ├── report_resolver.py               ← finds the latest Allure HTML report
     ├── runner.py                        ← subprocess + SSE stream
     ├── test_discovery.py                ← discovers suites and test files
-    ├── tests/                           ← unit tests
-    └── docs/
-        └── EXTENDING.md                 ← this file
+    └── tests/                           ← unit tests
 ```
 
 ---
@@ -153,9 +161,9 @@ Add page-specific styles to `amplify/static/css/amplify.css` (or a `<style>` blo
 
 ---
 
-## Making a new tab controllable from the 🎛️ Tabs kill-switch
+## Making a new tab controllable by admins
 
-The kill-switch in **Config → 🎛️ Tabs** lets users show/hide any tab without reloading. Follow these four steps to plug a new tab in.
+Admins show or hide tabs for **all users** in **Admin Panel → Tab Visibility** (settings are stored server-wide in `server_config.json`, not in any user's `config.json`). The list of tabs lives in one place — `UI_TAB_CATALOG` in `amplify/server_secrets.py` — and the Admin Panel checkboxes, the `ui_tabs` value returned by `/api/config`, and `applyUiTabs()` in `base.html` all derive from it. Two steps plug a new tab in.
 
 ### A — Give the nav button a predictable `id`
 
@@ -167,55 +175,30 @@ The kill-switch in **Config → 🎛️ Tabs** lets users show/hide any tab with
 </button>
 ```
 
-### B — Register the key in `UI_TAB_MAP` (in base.html inline script)
+Config sub-tab buttons use `id="ctab-<name>"` instead (e.g. `ctab-mykey`).
 
-```js
-const UI_TAB_MAP = {
-  dashboard:   { nav: 'navbtn-dashboard' },
-  zephyr:      { nav: 'navbtn-zephyr' },
-  testdesign:  { nav: 'navbtn-testdesign' },   // ← add this
-  cfg_git:     { cfg: 'ctab-git' },
-  // ... rest unchanged
-};
+### B — Add the tab to `UI_TAB_CATALOG` (`amplify/server_secrets.py`)
+
+```python
+UI_TAB_CATALOG = [
+    # ...
+    {"key": "testdesign", "label": "Test Design", "group": "main",   "default": True},
+    # Config sub-tab: key "cfg_mykey" controls button #ctab-mykey
+    {"key": "cfg_mykey",  "label": "My Key",      "group": "config", "default": True},
+]
 ```
 
-`applyUiTabs()` will automatically show/hide `navbtn-testdesign` based on the saved config.
-
-### C — Add a checkbox to the 🎛️ Tabs panel (`amplify/templates/partials/executor.html`)
-
-Find the `cfgUiTabs` div and add a checkbox in the **Main Navigation** section:
-
-```html
-<label class="checkbox-label" style="gap:10px;cursor:pointer;">
-  <input type="checkbox" id="uitab_testdesign" onchange="saveUiTabs()" />
-  <span>🎨 Test Design</span>
-</label>
-```
-
-### D — Register the key in `_UI_TAB_KEYS` (`amplify/static/js/executor.js`)
-
-```js
-const _UI_TAB_KEYS = [
-  'dashboard', 'zephyr',
-  'testdesign',   // ← add this
-  'cfg_git', 'cfg_tools', 'cfg_mapping', 'cfg_zephyr'
-];
-```
-
-`loadUiTabs()` reads this array to populate checkboxes; `saveUiTabs()` reads it to persist state.
+That is all. The button id is derived from the key: `"<key>"` → `#navbtn-<key>`, `"cfg_<name>"` → `#ctab-<name>`.
 
 ### Summary of touch-points
 
 | File | Change |
 |---|---|
 | `amplify/templates/base.html` | Add `id="navbtn-testdesign"` to the nav button |
-| `amplify/templates/base.html` | Add `testdesign: { nav: 'navbtn-testdesign' }` to `UI_TAB_MAP` |
-| `amplify/templates/partials/executor.html` | Add `<input id="uitab_testdesign">` checkbox in the Tabs panel |
-| `amplify/static/js/executor.js` | Add `'testdesign'` to `_UI_TAB_KEYS` |
+| `amplify/server_secrets.py` | Add the entry to `UI_TAB_CATALOG` (key, label, group, default) |
 
-> **Config sub-tabs** (tabs inside the Config page, not main nav) use `{ cfg: 'ctab-mykey' }` in
-> `UI_TAB_MAP`. The checkbox id is `uitab_cfg_mykey` and the key in `_UI_TAB_KEYS` is `cfg_mykey`.
-> See the existing Git / CLI Tools entries as reference.
+> **Server-side rules** (`save_ui_tabs`): unknown keys and non-boolean values are rejected, at least one main tab must stay visible, and Config cannot be visible with every Config sub-tab hidden.
+> Visibility is a UI control only — it hides the tab, it does not block the underlying `/api/...` routes.
 
 ---
 
@@ -257,7 +240,7 @@ When adding a new config key, add its default to `_DEFAULTS` in `config_reader.p
 | Keep `_fmtDur`, `appendLine`, `setRunning`, `switchTab` in `base.html` | Shared globals — must be defined before the external JS files load |
 | JS files load after `base.html` inline script | Execution order matters; never use a shared function before it is declared |
 | Give every nav button `id="navbtn-<key>"` | Required for `applyUiTabs()` to show/hide it |
-| Add key to both `UI_TAB_MAP` and `_UI_TAB_KEYS` | Map controls visibility; array controls checkbox load/save |
+| Add every new tab to `UI_TAB_CATALOG` in `server_secrets.py` | Single source for defaults, the Admin Panel checkboxes, and the `ui_tabs` value from `/api/config` |
 | Dynamic Zephyr statuses live in `_ZS` (`testmanagement.js`) | Call `_rebuildStatusDropdowns()` after any mutation to keep all UI in sync |
 | Venv Python resolved via `resolve_python(repo, venv_path)` from `command_builder.py` | Use this helper in any new route that needs to run Python in the repo's environment |
 

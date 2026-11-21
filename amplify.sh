@@ -15,46 +15,39 @@ echo "  Launcher root : $EXECUTER_ROOT"
 echo ""
 
 # ----------------------------------------------------------
-# Locate Python (prefer Homebrew 3.13 which has Flask)
+# Python environment: ./venv, created on first run
+# (keeps Amplify's dependencies out of your system Python)
 # ----------------------------------------------------------
-PYTHON=""
+VENV="$EXECUTER_ROOT/venv"
 
-if [ -f "$EXECUTER_ROOT/venv/bin/python" ]; then
-    PYTHON="$EXECUTER_ROOT/venv/bin/python"
-    echo "[INFO] Using Executer venv Python: $PYTHON"
-elif command -v /opt/homebrew/bin/python3.13 &>/dev/null; then
-    PYTHON="/opt/homebrew/bin/python3.13"
-    echo "[INFO] Using Homebrew python3.13: $PYTHON"
-elif command -v /usr/local/bin/python3.13 &>/dev/null; then
-    PYTHON="/usr/local/bin/python3.13"
-    echo "[INFO] Using python3.13: $PYTHON"
-elif command -v python3 &>/dev/null; then
-    PYTHON="python3"
-    echo "[INFO] Using system python3: $(command -v python3)"
-else
-    echo "[ERROR] Python not found. Install Python 3.11+ and retry."
-    exit 1
+if [ ! -x "$VENV/bin/python" ]; then
+    BASE_PYTHON=""
+    for candidate in /opt/homebrew/bin/python3.13 /usr/local/bin/python3.13 python3.13 python3; do
+        if command -v "$candidate" &>/dev/null; then
+            BASE_PYTHON="$(command -v "$candidate")"
+            break
+        fi
+    done
+    if [ -z "$BASE_PYTHON" ]; then
+        echo "[ERROR] Python not found. Install Python 3.11+ and retry."
+        exit 1
+    fi
+    echo "[INFO] Creating virtualenv with $BASE_PYTHON ..."
+    "$BASE_PYTHON" -m venv "$VENV"
 fi
 
-# ----------------------------------------------------------
-# Verify required packages are available
-# ----------------------------------------------------------
-if ! "$PYTHON" -c "import flask" 2>/dev/null; then
-    echo ""
-    echo "[INFO] Flask not found — installing..."
-    "$PYTHON" -m pip install flask --break-system-packages --quiet
-fi
+PYTHON="$VENV/bin/python"
+echo "[INFO] Using venv Python: $PYTHON"
 
-if ! "$PYTHON" -c "import openpyxl" 2>/dev/null; then
+# ----------------------------------------------------------
+# Install requirements.txt when anything the app imports is missing
+# (first run, or after requirements.txt changes). Covers the server
+# (flask, bcrypt, PyJWT, ...) and Jira Insights (streamlit, plotly, ...).
+# ----------------------------------------------------------
+if ! "$PYTHON" -c "import flask, bcrypt, jwt, yaml, openpyxl, streamlit, plotly, pandas, pygwalker, streamlit_sortables" 2>/dev/null; then
     echo ""
-    echo "[INFO] openpyxl not found — installing (needed for Excel support)..."
-    "$PYTHON" -m pip install openpyxl --break-system-packages --quiet
-fi
-
-if ! "$PYTHON" -c "import yaml" 2>/dev/null; then
-    echo ""
-    echo "[INFO] pyyaml not found — installing (needed for YAML support)..."
-    "$PYTHON" -m pip install pyyaml --break-system-packages --quiet
+    echo "[INFO] Installing requirements (first run takes a minute)..."
+    "$PYTHON" -m pip install --quiet -r "$EXECUTER_ROOT/requirements.txt"
 fi
 
 # ----------------------------------------------------------

@@ -1,0 +1,7 @@
+resources:
+- coordinator.yaml
+
+# Retarget the image (registry / tag) without editing the manifest:
+# images:
+# - name: artifactory.lipstack.sephoraus.com:443/playwright-coordinator
+#   newTag: "1.0.0"
