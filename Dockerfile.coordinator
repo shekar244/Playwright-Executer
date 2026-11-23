@@ -1,4 +1,4 @@
-# Build context: repository root (Dockerfile.coordinator.dockerignore limits it to coordinator/*.py and coordinator-requirements.txt)
+# Build context: repository root (Dockerfile.coordinator.dockerignore limits it to src/coordinator/*.py and coordinator-requirements.txt)
 #   docker build -f Dockerfile.coordinator -t artifactory.lipstack.sephoraus.com:443/playwright-coordinator:latest .
 #   docker push artifactory.lipstack.sephoraus.com:443/playwright-coordinator:latest
 # Pin another Allure 3 release with --build-arg ALLURE_VERSION=<x.y.z> (3.16.0 is the tested one).
@@ -21,7 +21,8 @@ COPY --from=allure /usr/local/bin/node /usr/local/bin/node
 COPY --from=allure /opt/allure /opt/allure
 RUN ln -s /opt/allure/node_modules/.bin/allure /usr/local/bin/allure
 
-COPY coordinator/*.py ./
+COPY src/coordinator/ /app/src/coordinator/
+ENV PYTHONPATH=/app/src
 
 # Non-root user, group 0 (works with Kubernetes runAsUser and OpenShift's restricted SCC arbitrary UID).
 # /data holds code snapshots, raw Allure results and cached reports (mount a volume here);
@@ -34,4 +35,4 @@ ENV NODE_OPTIONS=--max-old-space-size=1024
 USER 1001
 
 EXPOSE 8000
-CMD ["uvicorn", "coordinator:app", "--host", "0.0.0.0", "--port", "8000"]
+CMD ["uvicorn", "coordinator.coordinator:app", "--host", "0.0.0.0", "--port", "8000"]

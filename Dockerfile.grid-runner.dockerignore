@@ -2,16 +2,10 @@
 # root .dockerignore (which keeps the Grid sources out of the Amplify image). Everything is excluded except what
 # the Dockerfile COPYs, so the venv, .git and the Amplify sources are never sent to the builder.
 **
-!runner/runner_client.py
-!runner/chunk_runner.py
-!runner/code_download.py
-!runner/tar_guard.py
-!runner/lease_token.py
-!runner/live_view.py
-!runner/pytest_args.py
+!src/runner/**
+!src/gridtest/**
 !runner-requirements.txt
 !pytest.ini
-!src/
-!tests/
+!tests/sample/**
 **/__pycache__
 **/*.pyc

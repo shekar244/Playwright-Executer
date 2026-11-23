@@ -19,6 +19,7 @@ echo ""
 # (keeps Amplify's dependencies out of your system Python)
 # ----------------------------------------------------------
 VENV="$EXECUTER_ROOT/venv"
+export PYTHONPATH="$EXECUTER_ROOT/src${PYTHONPATH:+:$PYTHONPATH}"
 
 if [ ! -x "$VENV/bin/python" ]; then
     BASE_PYTHON=""
@@ -96,4 +97,4 @@ cd "$EXECUTER_ROOT"
 echo "[INFO] Starting server at http://amplify-qea:$PORT"
 echo "[INFO] Press Ctrl+C to stop."
 echo ""
-exec "$PYTHON" -m amplify.server
+exec "$PYTHON" -m amplify_server.server

@@ -85,7 +85,7 @@ On first run the launcher creates `./venv` (Python 3.13 preferred), installs `am
 
 ```bash
 python3 -m venv venv && venv/bin/pip install -r amplify-requirements.txt
-venv/bin/python -m amplify.server
+venv/bin/python -m amplify_server.server
 ```
 
 ### Render.com
@@ -263,7 +263,7 @@ amplify-qea/
 │   ├── amplify-secrets.example.yaml # template — create the real secret with kubectl
 │   ├── grid-secrets.example.yaml    # template — Grid database URL and API tokens
 │   └── grid-coordinator/ grid-postgres/ grid-runners/   # Grid backend, one kustomize base each
-└── amplify/                         # Application package
+└── src/amplify_server/                         # Application package
     ├── server.py                    # Flask app — registers blueprints, auth middleware
     ├── auth_utils.py                # JWT, @require_auth, @require_admin
     ├── server_secrets.py            # Server-level Jira/Zephyr credential resolution
@@ -303,11 +303,15 @@ amplify-qea/
     ├── static/
     │   ├── css/amplify.css          # Design system (8 themes, responsive)
     │   └── js/                      # Per-tab JavaScript
-    └── jira_insights/               # Streamlit app (port 8501)
-        ├── app.py
-        ├── launcher.py
-        ├── settings.py
-        └── ...
+├── src/jira_insights/               # Separate Streamlit package (port 8501)
+├── src/coordinator/                 # FastAPI Grid coordinator
+├── src/runner/                      # Grid runner pod package
+├── src/gridtest/                    # pytest-Playwright runner framework
+└── tests/
+    ├── amplify_server/              # Flask and Jira Insights tests by feature
+    ├── coordinator/                 # Coordinator tests
+    ├── runner/                      # Runner tests
+    └── sample/                      # Playwright sample suite
 ```
 
 ---

@@ -19,6 +19,7 @@ env/
 .env
 *.env
 config.json
+config/amplify_server/config.json
 **/jira_connection.json
 *.pem
 *.key
@@ -45,12 +46,14 @@ amplify.bat
 allure/
 allure-results/
 .pytest_cache/
-amplify/tests/
+tests/amplify_server/
+tests/coordinator/
+tests/runner/
+tests/sample/
 
 # ── Jira Insights local workspace (pulled Jira data) ──────────────────────────
-amplify/jira_insights/workspace/
-Jira_ReportBuilder/workspace/
 report_history.json
+src/jira_insights/workspace/
 
 # ── Not part of the app image: local deployment files and the Grid backend (own images) ──
 # (the coordinator and runner images are built from this same context but have their own lists:
@@ -58,10 +61,9 @@ report_history.json
 config/
 scripts/
 docs/
-coordinator/
-runner/
-src/
-tests/
 pytest.ini
 coordinator-requirements.txt
 runner-requirements.txt
+src/coordinator/
+src/runner/
+src/gridtest/

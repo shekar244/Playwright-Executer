@@ -1,7 +1,7 @@
 # Implementation Plan: Distributed Pytest-Playwright (Microsoft Edge) on OpenShift (SQL-Backed)
 > **Superseded in part.** Sections 1-3 are the original, pre-feature specification, kept for background. Where they differ from the section **Test code delivery and Allure reports** below, that section wins: the coordinator is several modules (`artifacts.py`, `tar_limits.py`, ...) rather than one `coordinator.py`, it also stores code snapshots and Allure results, runners run a chunk from a delivered snapshot, and the manifests in `opns/` (OpenShift) and `k8s/` (Kubernetes) are authoritative, not the YAML embedded here.
 >
-> **Terminology: runners, not workers.** The pods that lease and execute chunks are **runners**; earlier revisions of this plan, the code and the database called them *workers*. Everything now uses the new name: the `runner/` folder and `Dockerfile.grid-runner`, the API (`/api/runner/lease`, `/api/runners/{id}/heartbeat`, `/api/runners/{id}/exit`; JSON fields `runner_id`, `assigned_runner`), the `runners` table, the `RUNNER_ID` / `RUNNER_STALE_SECONDS` / `RUNNER_POD_SELECTOR` environment variables, the `app=playwright-runner` pod label and the `playwright-runner-<browser>` images. An existing coordinator database is renamed in place the first time the new coordinator starts (rows are kept); this is one-way, so redeploy the coordinator, the runner images and Amplify together. pytest-xdist's own "workers" are a different thing and keep their name.
+> **Terminology: runners, not workers.** The pods that lease and execute chunks are **runners**; earlier revisions of this plan, the code and the database called them *workers*. Everything now uses the new name: the `src/runner/` folder and `Dockerfile.grid-runner`, the API (`/api/runner/lease`, `/api/runners/{id}/heartbeat`, `/api/runners/{id}/exit`; JSON fields `runner_id`, `assigned_runner`), the `runners` table, the `RUNNER_ID` / `RUNNER_STALE_SECONDS` / `RUNNER_POD_SELECTOR` environment variables, the `app=playwright-runner` pod label and the `playwright-runner-<browser>` images. An existing coordinator database is renamed in place the first time the new coordinator starts (rows are kept); this is one-way, so redeploy the coordinator, the runner images and Amplify together. pytest-xdist's own "workers" are a different thing and keep their name.
 ## 1. Architecture Overview
 
 This project implements a multi-tier, distributed test automation execution framework running on **Red Hat OpenShift**, utilizing a **standard SQL database (PostgreSQL)** for both atomic test chunk queuing and durable test result storage.
@@ -25,11 +25,16 @@ distributed-playwright-openshift/
 ├── Dockerfile.grid-runner
 ├── coordinator-requirements.txt
 ├── runner-requirements.txt
-├── coordinator/
+├── src/coordinator/
 │   └── coordinator.py
-├── runner/
+├── src/runner/
 │   ├── runner_client.py
-│   └── conftest.py
+│   ├── chunk_runner.py
+│   └── pytest_args.py
+├── tests/
+│   ├── coordinator/
+│   ├── runner/
+│   └── sample/
 ├── scripts/
 │   └── seed_tests.py
 ├── tests/
@@ -45,7 +50,7 @@ distributed-playwright-openshift/
 
 ## 3. Step-by-Step Implementation Specifications
 
-### Step 1: Central Coordination Tier (`coordinator/`)
+### Step 1: Central Coordination Tier (`src/coordinator/`)
 
 #### `coordinator-requirements.txt`
 
@@ -68,17 +73,18 @@ WORKDIR /app
 COPY coordinator-requirements.txt .
 RUN pip install --no-cache-dir -r coordinator-requirements.txt
 
-COPY coordinator.py .
+COPY src/coordinator/ /app/src/coordinator/
+ENV PYTHONPATH=/app/src
 
 # OpenShift Restricted SCC compliance (non-root user)
 RUN useradd -u 1001 -ms /bin/bash appuser && chown -R appuser:appuser /app
 USER 1001
 
 EXPOSE 8000
-CMD ["uvicorn", "coordinator:app", "--host", "0.0.0.0", "--port", "8000"]
+CMD ["uvicorn", "coordinator.coordinator:app", "--host", "0.0.0.0", "--port", "8000"]
 ```
 
-#### `coordinator/coordinator.py`
+#### `src/coordinator/coordinator.py`
 
 Implements SQLAlchemy models and atomic row-level locking (`SELECT ... FOR UPDATE SKIP LOCKED`) so concurrent runner pods never collide when leasing chunks.
 
@@ -220,7 +226,7 @@ def get_summary(db: Session = Depends(get_db)):
 
 ---
 
-### Step 2: Ephemeral Runner Tier (`runner/`)
+### Step 2: Ephemeral Runner Tier (`src/runner/`)
 
 #### `runner-requirements.txt`
 
@@ -289,9 +295,11 @@ RUN python -m pip install --no-cache-dir --upgrade pip && \
 RUN playwright install-deps chromium
 
 # Copy runner scripts and test suite
-COPY runner/runner_client.py .
-COPY runner/conftest.py .
-COPY tests/ ./tests/
+COPY src/runner/ /app/src/runner/
+COPY src/gridtest/ /app/src/gridtest/
+COPY pytest.ini .
+COPY tests/sample/ /app/tests/sample/
+ENV PYTHONPATH=/app/src
 
 # OpenShift Restricted SCC compliance (non-root user)
 RUN useradd -u 1001 -ms /bin/bash testrunner && \
@@ -300,10 +308,10 @@ USER 1001
 
 ENV HOME=/home/testrunner
 ENTRYPOINT ["dumb-init", "--"]
-CMD ["python", "runner_client.py"]
+CMD ["python", "-m", "runner.runner_client"]
 ```
 
-#### `runner/conftest.py`
+#### `tests/runner/conftest.py`
 
 Configures Playwright to launch the installed Microsoft Edge binary with shared memory flags safe for OpenShift containers.
 
@@ -330,7 +338,7 @@ def page():
         browser.close()
 ```
 
-#### `runner/runner_client.py`
+#### `src/runner/runner_client.py`
 
 Leases chunks of 3 tests and executes them **in parallel** inside the pod using `pytest -n 3` (`pytest-xdist`), spinning up 3 concurrent Edge browser instances per pod.
 
@@ -656,7 +664,7 @@ spec:
 
 ## Test code delivery and Allure reports
 
-A run can carry the code it tests and yields one Allure 3 report. All coordinator logic lives in `coordinator/artifacts.py`, `tar_limits.py` (bounded tar reading), `report_support.py` and `report_environments.py` (no database imports; `coordinator.py` only wraps them in endpoints).
+A run can carry the code it tests and yields one Allure 3 report. The coordinator logic lives under `src/coordinator/`; `coordinator.py` wraps the artifact, tar, report and environment modules as API endpoints.
 
 **Flow**
 
@@ -698,8 +706,8 @@ An admin defines which pytest options a run passes to the pods and the values us
 
 - `POST /api/runs` takes `pytest_args: [{"flag", "style": "separate"|"joined"|"switch", "value"}]` (at most 20, each option once). The coordinator stores them on the run and on every chunk, returns them with `GET /runs`, `/runs/{id}` and in the lease (`pytest_args`, `[]` when none), and announces the `pytest-args` feature; Amplify refuses to start a run with arguments on a coordinator without it, rather than have them dropped.
 - The runner places the words after its own options and before the `--` that precedes the test ids. A chunk whose arguments break the rules fails with the reason instead of running without them.
-- The same rules are applied in `amplify/grid_args.py`, `coordinator/pytest_args.py` and `runner/pytest_args.py` (a test keeps them identical): an option is `-x` or `--name`; values are 1-200 printable characters and, in the separate style, cannot start with `-`; short options cannot be joined; a switch has no value. Options the runner sets itself are reserved: `-p -n --numprocesses --maxprocesses --dist --alluredir -o --override-ini --headed --basetemp --rootdir --confcutdir --pyargs -h --help -V --version`.
-- The gridtest plugin no longer registers `--env` (a repo that defines `--env` itself, like p13n-mktg-exp-qe-automation, failed at start-up with a conflicting option); the baked sample suite registers it in its own `tests/conftest.py`.
+- The same rules are applied in `src/amplify_server/grid_args.py`, `src/coordinator/pytest_args.py` and `src/runner/pytest_args.py` (a test keeps them identical): an option is `-x` or `--name`; values are 1-200 printable characters and, in the separate style, cannot start with `-`; short options cannot be joined; a switch has no value. Options the runner sets itself are reserved: `-p -n --numprocesses --maxprocesses --dist --alluredir -o --override-ini --headed --basetemp --rootdir --confcutdir --pyargs -h --help -V --version`.
+- The gridtest plugin no longer registers `--env` (a repo that defines `--env` itself, like p13n-mktg-exp-qe-automation, failed at start-up with a conflicting option); the baked sample suite registers it in its own `tests/sample/conftest.py`.
 
 **Live view** (watching a pod's browser while its tests run; Amplify's Grid tab → **👁 Live**)
 
@@ -711,7 +719,7 @@ A runner started with `GRID_LIVE_VIEW=1` (the default in the runner manifests an
 | `GET /runners/{runner_id}/view` | **Full token only.** `host`, `port`, `password`, `status`, `browser`, `run_id`, `chunk_id`; 404 when the pod has no live view, exited (its address and password are cleared on exit) or stopped heartbeating. |
 | `GET /pods` | Each pod carries `live_view` (true/false), never the address or password. |
 
-Amplify (`amplify/routes/grid_live.py`) is the only client: `GET /api/grid/pods/<pod>/view` returns the password to the person who started the run the pod is executing, or to an admin (a pod between runs: admins only), and `GET /api/grid/pods/<pod>/vnc` is a WebSocket (subprotocol `binary`) that Amplify relays to the pod's 5900, after the same check, refusing other origins and any address that is not a plain unicast IP. The viewer is noVNC 1.7.0 (MPL-2.0), vendored under `amplify/static/vendor/novnc/`. Amplify settings: `GRID_LIVE_VIEW_MAX` (viewers at once, default 4; each holds a gunicorn thread, so the image runs 16) and `GRID_LIVE_VIEW_MAX_SECONDS` (default 3600). In a cluster Amplify must reach the runner pods on TCP 5900 (allow it in any NetworkPolicy); nothing else needs that port, and test code in other pods can reach it only with the password. With `pytest -n 3` the three browser windows share one display and overlap; the viewer shows the one on top.
+Amplify (`src/amplify_server/routes/grid_live.py`) is the only client: `GET /api/grid/pods/<pod>/view` returns the password to the person who started the run the pod is executing, or to an admin (a pod between runs: admins only), and `GET /api/grid/pods/<pod>/vnc` is a WebSocket (subprotocol `binary`) that Amplify relays to the pod's 5900, after the same check, refusing other origins and any address that is not a plain unicast IP. The viewer is noVNC 1.7.0 (MPL-2.0), vendored under `src/amplify_server/static/vendor/novnc/`. Amplify settings: `GRID_LIVE_VIEW_MAX` (viewers at once, default 4; each holds a gunicorn thread, so the image runs 16) and `GRID_LIVE_VIEW_MAX_SECONDS` (default 3600). In a cluster Amplify must reach the runner pods on TCP 5900 (allow it in any NetworkPolicy); nothing else needs that port, and test code in other pods can reach it only with the password. With `pytest -n 3` the three browser windows share one display and overlap; the viewer shows the one on top.
 
 **Operation notes**
 

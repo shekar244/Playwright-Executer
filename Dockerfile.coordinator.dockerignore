@@ -2,5 +2,5 @@
 # root .dockerignore (which keeps the Grid sources out of the Amplify image). Everything is excluded except what
 # the Dockerfile COPYs, so the venv, .git, the Amplify sources and the coordinator's own tests are never sent.
 **
-!coordinator/*.py
+!src/coordinator/*.py
 !coordinator-requirements.txt

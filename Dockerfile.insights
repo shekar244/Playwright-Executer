@@ -24,6 +24,7 @@ COPY . .
 ENV PORT=8501
 ENV CONTAINER=1
 ENV HOME=/tmp
+ENV PYTHONPATH=/app/src
 
 RUN mkdir -p /app/data /app/workspaces /tmp/.streamlit && \
     chown -R 0:0 /app && chmod -R g=u /app && \
@@ -34,10 +35,9 @@ EXPOSE 8501
 HEALTHCHECK --interval=30s --timeout=10s --start-period=20s --retries=3 \
     CMD python -c "import os, urllib.request; p = os.environ.get('STREAMLIT_SERVER_BASE_URL_PATH', '').strip('/'); urllib.request.urlopen('http://localhost:8501/' + (p + '/' if p else '') + '_stcore/health', timeout=5)" || exit 1
 
-# Started from amplify/ like the side-car (launcher.py), so Streamlit reads amplify/.streamlit/config.toml
-# (upload limit, theme, iframe settings); app.py puts the repo root on sys.path itself.
-WORKDIR /app/amplify
-CMD ["streamlit", "run", "jira_insights/app.py", \
+# Streamlit runs from the standalone Jira Insights package.
+WORKDIR /app/src/jira_insights
+CMD ["streamlit", "run", "app.py", \
      "--server.port", "8501", \
      "--server.address", "0.0.0.0", \
      "--server.headless", "true", \

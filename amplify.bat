@@ -109,12 +109,13 @@ if defined PID_TO_KILL (
 :: Launch the web server
 :: ----------------------------------------------------------
 cd /d "%EXECUTER_ROOT%"
+set "PYTHONPATH=%EXECUTER_ROOT%\src;%PYTHONPATH%"
 
 echo [INFO] Starting server at http://amplify-qea:7777
 echo [INFO] Your browser will open automatically.
 echo [INFO] Press Ctrl+C to stop.
 echo.
-"%PYTHON%" -m amplify.server
+"%PYTHON%" -m amplify_server.server
 
 set "EXIT_CODE=%errorlevel%"
 if %EXIT_CODE% neq 0 (

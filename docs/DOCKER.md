@@ -69,7 +69,7 @@ Edit the copied configuration:
 - Update pinned repositories, scripts, report paths, and Allure binary paths that refer to macOS locations.
 - Check the QA repository's own `config.json`: repository configuration can override tool settings.
 
-Optionally copy existing `amplify/jira_insights/workspace/` contents into the external `insights` directory before first startup to retain your saved reports and datasets. Otherwise, the container starts with an empty Insights workspace.
+Jira Insights standalone workspaces live outside the source package. Local standalone runs use `~/.amplify-qea/jira_insights/`; container runs default to `/app/data/jira_insights_default/`. When an Amplify user is signed in, Insights writes to that user's `/app/data/workspaces/<id>/jira_insights/` directory instead.
 
 ## 5. Run Your Deployment Locally
 

@@ -11,10 +11,10 @@ Amplify QEA has been transformed into a **multi-tenant application** deployable 
 ### 1. Authentication & Authorization
 
 **New Files:**
-- `amplify/routes/auth.py` — Authentication endpoints (register, login, logout, refresh)
-- `amplify/auth_utils.py` — JWT token generation, verification, and `@require_auth` decorator
-- `amplify/models/user.py` — User model with bcrypt password hashing
-- `amplify/models/db.py` — SQLite database setup and initialization
+- `src/amplify_server/routes/auth.py` — Authentication endpoints (register, login, logout, refresh)
+- `src/amplify_server/auth_utils.py` — JWT token generation, verification, and `@require_auth` decorator
+- `src/amplify_server/models/user.py` — User model with bcrypt password hashing
+- `src/amplify_server/models/db.py` — SQLite database setup and initialization
 
 **Endpoints:**
 ```
@@ -38,7 +38,7 @@ GET    /api/auth/me              — Get current user info
 ### 2. User Workspaces
 
 **New Files:**
-- `amplify/storage.py` — User workspace path resolution and initialization
+- `src/amplify_server/storage.py` — User workspace path resolution and initialization
 
 **Structure:**
 ```
@@ -73,7 +73,7 @@ GET    /api/auth/me              — Get current user info
 ### 3. Multi-Tenant Config Storage
 
 **New Files:**
-- `amplify/user_config_reader.py` — User-scoped version of ConfigReader
+- `src/amplify_server/user_config_reader.py` — User-scoped version of ConfigReader
 
 **Changes:**
 All routes that read/write config now use `UserConfigReader(g.user.id)` instead of `ConfigReader()`. This ensures:
@@ -82,9 +82,9 @@ All routes that read/write config now use `UserConfigReader(g.user.id)` instead 
 - Config loading/saving is automatic from user context
 
 **Modified Routes:**
-- `amplify/routes/config.py` — All endpoints updated with `@require_auth` and `UserConfigReader`
-- `amplify/routes/executor.py` — Needs `@require_auth` and `UserConfigReader` updates
-- `amplify/routes/dashboard.py` — Needs `@require_auth` and user-scoped history
+- `src/amplify_server/routes/config.py` — All endpoints updated with `@require_auth` and `UserConfigReader`
+- `src/amplify_server/routes/executor.py` — Needs `@require_auth` and `UserConfigReader` updates
+- `src/amplify_server/routes/dashboard.py` — Needs `@require_auth` and user-scoped history
 - Other route files similarly updated
 
 ---
@@ -92,11 +92,11 @@ All routes that read/write config now use `UserConfigReader(g.user.id)` instead 
 ### 4. Frontend Authentication
 
 **New Pages:**
-- `amplify/templates/login.html` — Login form with email/password
-- `amplify/templates/register.html` — Registration form with validation
+- `src/amplify_server/templates/login.html` — Login form with email/password
+- `src/amplify_server/templates/register.html` — Registration form with validation
 
 **Updated Pages:**
-- `amplify/templates/base.html` — Added user menu in header with logout button
+- `src/amplify_server/templates/base.html` — Added user menu in header with logout button
 
 **Session Management:**
 - JWT tokens in httpOnly cookies (secure, inaccessible to JavaScript)
@@ -136,8 +136,8 @@ CREATE TABLE user_sessions (
 **Local Development:**
 ```bash
 pip install -r amplify-requirements.txt
-python3 -m amplify.models.db    # Initialize database
-python3 amplify/server.py        # Run server
+python3 -m amplify_server.models.db    # Initialize database
+python3 src/amplify_server/server.py        # Run server
 ```
 
 Database stored in `~/.amplify-qea/amplify.db`, workspaces in `~/.amplify-qea/workspaces/`
@@ -148,7 +148,7 @@ FROM python:3.13-slim
 WORKDIR /app
 RUN mkdir -p /app/data /app/workspaces && chmod 777 /app/data /app/workspaces
 # ... copy files ...
-CMD ["sh", "-c", "python -m amplify.models.db && gunicorn ..."]
+CMD ["sh", "-c", "python -m amplify_server.models.db && gunicorn ..."]
 ```
 
 **Environment Variables:**
@@ -188,20 +188,20 @@ volumeMounts:
 - [x] Requirements.txt updated (bcrypt, PyJWT)
 
 ### ⏳ To Complete (per existing routes)
-1. **Executor routes** (`amplify/routes/executor.py`):
+1. **Executor routes** (`src/amplify_server/routes/executor.py`):
    - Add `@require_auth` to all endpoints
    - Use `UserConfigReader(g.user.id)` for config
    - Update test discovery to user workspace
 
-2. **Dashboard routes** (`amplify/routes/dashboard.py`):
+2. **Dashboard routes** (`src/amplify_server/routes/dashboard.py`):
    - Add `@require_auth` to all endpoints
    - Use user-scoped history path
 
-3. **Zephyr routes** (`amplify/routes/zephyr.py`):
+3. **Zephyr routes** (`src/amplify_server/routes/zephyr.py`):
    - Add `@require_auth` to all endpoints
    - Store credentials in user's workspace config
 
-4. **File Manager routes** (`amplify/routes/filemanager.py`):
+4. **File Manager routes** (`src/amplify_server/routes/filemanager.py`):
    - Add `@require_auth` to all endpoints
    - Scope file access to user's workspace and repo
 

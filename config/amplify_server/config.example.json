@@ -1,0 +1,29 @@
+{
+  "repo_root": "",
+  "browsers": ["chromium", "firefox", "webkit"],
+  "default_browser": "chromium",
+  "markers": [],
+  "report_paths": [
+    "allure/reports/latest/index.html",
+    "allure/reports/html/index.html"
+  ],
+  "default_workers": 1,
+  "auto_open_report": false,
+  "allure_results_dir": "allure/results",
+  "report_consolidated_dir": "allure/reports/consolidated",
+  "report_pertest_dir": "allure/reports/individual",
+  "report_individual_dir": "allure/reports",
+  "allure_format": "allure2",
+  "allure2_bin": "",
+  "allure3_bin": "",
+  "allure_history_dir": "allure/allure-history",
+  "generate_pertest_reports": true,
+  "extra_options": [],
+  "config_override_path": "",
+  "venv_path": "",
+  "pinned_repos": [],
+  "jfrog_url": "",
+  "jfrog_repo": "pypi-remote",
+  "jfrog_email": "",
+  "jfrog_token": ""
+}

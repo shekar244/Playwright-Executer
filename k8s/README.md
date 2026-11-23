@@ -50,7 +50,7 @@ The first account to register becomes the admin. To promote another user later (
 
 ```bash
 kubectl -n amplify exec deploy/amplify-qea -- \
-  python -c "from amplify.models.user import User; u=User.get_by_username('NAME'); User.set_admin(u.id, True)"
+  python -c "from amplify_server.models.user import User; u=User.get_by_username('NAME'); User.set_admin(u.id, True)"
 ```
 
 ## Images

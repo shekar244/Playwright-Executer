@@ -19,6 +19,7 @@ env/
 .env.*
 *.env
 .streamlit/secrets.toml
+**/.streamlit/secrets.toml
 
 # Test / coverage artifacts
 .pytest_cache/
@@ -53,6 +54,8 @@ last_run.json
 .firecrawl/
 report_history.json
 config.json
+config/amplify_server/config.json
+src/jira_insights/workspace/
 
 # Jira Insights workspace (pulled Jira data, saved reports, explorer specs)
 **/jira_insights/workspace/

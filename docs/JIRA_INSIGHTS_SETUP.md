@@ -25,7 +25,7 @@ If auto-start fails, you can start Streamlit manually:
 cd /Users/admin/Documents/GitHub/amplify
 
 # Start Streamlit on port 8501
-streamlit run amplify/jira_insights/app.py --server.port 8501
+streamlit run src/jira_insights/app.py --server.port 8501
 ```
 
 Then refresh the **📈 Jira Insights** tab and it should connect.
@@ -67,7 +67,7 @@ The Streamlit app is **NOT started by default** in Docker. You need to:
 2. **Option B: Manual startup in container**
    ```bash
    docker exec -it amplify-qea-test \
-     streamlit run amplify/jira_insights/app.py --server.port 8501
+     streamlit run src/jira_insights/app.py --server.port 8501
    ```
 
 3. **Option C: Modify Dockerfile to auto-start** (not recommended)
@@ -130,7 +130,7 @@ ps aux | grep streamlit
 cat ~/.amplify-qea/workspaces/1/streamlit.log
 
 # Try manual start to see errors
-streamlit run amplify/jira_insights/app.py
+streamlit run src/jira_insights/app.py
 ```
 
 ### Issue: "Streamlit is not installed"
@@ -150,7 +150,7 @@ pip install streamlit>=1.45,<1.57
 
 ```bash
 # Start on a different port
-INSIGHTS_PORT=8502 streamlit run amplify/jira_insights/app.py
+INSIGHTS_PORT=8502 streamlit run src/jira_insights/app.py
 ```
 
 Then in the Flask app environment:
@@ -214,7 +214,7 @@ pip install openpyxl pandas
 
 ## 📝 Configuration Files
 
-Streamlit config: `amplify/.streamlit/config.toml`
+Streamlit config: `src/amplify_server/.streamlit/config.toml`
 
 Workspace data: `~/.amplify-qea/workspaces/{user_id}/`
 - `streamlit.log` — Error logs
@@ -253,7 +253,7 @@ spec:
       containers:
         - name: insights
           image: amplify-qea:latest
-          command: ["streamlit", "run", "amplify/jira_insights/app.py", "--server.port", "8501"]
+          command: ["streamlit", "run", "src/jira_insights/app.py", "--server.port", "8501"]
           ports:
             - containerPort: 8501
 ```
@@ -286,7 +286,7 @@ Data is **completely isolated** per user — no cross-user data leakage.
 
 1. **Run with verbose logging:**
    ```bash
-   streamlit run amplify/jira_insights/app.py --logger.level=debug
+   streamlit run src/jira_insights/app.py --logger.level=debug
    ```
 
 2. **Check Python version:**
@@ -305,7 +305,7 @@ Data is **completely isolated** per user — no cross-user data leakage.
    ```bash
    rm -rf ~/.streamlit/
    rm -rf ~/.cache/streamlit/
-   streamlit run amplify/jira_insights/app.py
+   streamlit run src/jira_insights/app.py
    ```
 
 5. **Check if port is actually listening:**

@@ -58,15 +58,15 @@ RUN apt-get update && apt-get install -y --no-install-recommends xvfb x11vnc && 
     mkdir -p /tmp/.X11-unix && chmod 1777 /tmp/.X11-unix
 EXPOSE 5900
 
-# Tell runner_client.py and conftest.py which browser this image drives
+# Tell runner.runner_client and conftest.py which browser this image drives
 ENV BROWSER=${BROWSER}
 
-# Copy runner scripts and the pytest framework (src/ + tests/ layout). Every module runner_client.py
-# imports must be listed here (runner/tests/test_image_layout.py checks it).
-COPY runner/runner_client.py runner/chunk_runner.py runner/code_download.py runner/tar_guard.py runner/lease_token.py runner/live_view.py runner/pytest_args.py ./
+# Copy runner scripts and the pytest framework from src/ and tests/.
+COPY src/runner/ /app/src/runner/
+COPY src/gridtest/ /app/src/gridtest/
 COPY pytest.ini .
-COPY src/ ./src/
-COPY tests/ ./tests/
+COPY tests/sample/ /app/tests/sample/
+ENV PYTHONPATH=/app/src
 
 # Test code of the run being executed. /code is where the optional shared read-only volume (PVC
 # tests-store) is mounted: <repo>/<sha>/ snapshots. Without it the runner downloads the snapshot
@@ -97,4 +97,4 @@ USER 1001
 
 ENV HOME=/home/testrunner
 ENTRYPOINT ["dumb-init", "--"]
-CMD ["python", "runner_client.py"]
+CMD ["python", "-m", "runner.runner_client"]

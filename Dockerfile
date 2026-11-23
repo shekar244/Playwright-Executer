@@ -64,6 +64,7 @@ ENV PORT=8080
 ENV CONTAINER=1
 ENV INSIGHTS_PORT=8501
 ENV HOME=/tmp
+ENV PYTHONPATH=/app/src
 
 EXPOSE 8080
 EXPOSE 8501
@@ -80,4 +81,4 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=15s --retries=3 \
     CMD python -c "import urllib.request; urllib.request.urlopen('http://localhost:8080/login', timeout=5)" || exit 1
 
 # ── Start command ─────────────────────────────────────────────────────────────
-CMD ["sh", "-c", "python -m amplify.models.db && gunicorn amplify.server:app --bind 0.0.0.0:8080 --workers 1 --threads 16 --timeout 300 --access-logfile - --error-logfile -"]
+CMD ["sh", "-c", "python -m amplify_server.models.db && gunicorn amplify_server.server:app --bind 0.0.0.0:8080 --workers 1 --threads 16 --timeout 300 --access-logfile - --error-logfile -"]

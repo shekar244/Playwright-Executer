@@ -1,0 +1,82 @@
+"""JWT and authentication utilities."""
+import jwt
+import hashlib
+from datetime import datetime, timedelta
+from functools import wraps
+from flask import request, jsonify, g
+from amplify_server.config import settings
+from amplify_server.models.user import User
+
+def generate_jwt(user_id: int, exp_hours: int = None) -> str:
+    """Generate a JWT token for a user."""
+    exp_hours = exp_hours or settings.JWT_EXPIRATION_HOURS
+    payload = {
+        "user_id": user_id,
+        "exp": datetime.utcnow() + timedelta(hours=exp_hours),
+        "iat": datetime.utcnow()
+    }
+    return jwt.encode(payload, settings.JWT_SECRET_KEY, algorithm=settings.JWT_ALGORITHM)
+
+def verify_jwt(token: str) -> int:
+    """Verify JWT and return user_id. Returns None if invalid."""
+    try:
+        payload = jwt.decode(token, settings.JWT_SECRET_KEY, algorithms=[settings.JWT_ALGORITHM])
+        return payload.get("user_id")
+    except jwt.ExpiredSignatureError:
+        return None
+    except jwt.InvalidTokenError:
+        return None
+
+# While an admin-reset password is still in force, these are the only API calls a user may make.
+_ALLOWED_WHILE_PASSWORD_CHANGE_REQUIRED = {"auth.change_password", "auth.logout", "auth.get_me"}
+
+
+def require_auth(f):
+    """Decorator to protect routes with JWT authentication."""
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        token = None
+
+        if "Authorization" in request.headers:
+            auth_header = request.headers["Authorization"]
+            try:
+                token = auth_header.split(" ")[1]
+            except IndexError:
+                return jsonify({"error": "Invalid authorization header"}), 401
+
+        if not token:
+            token = request.cookies.get("access_token")
+
+        if not token:
+            return jsonify({"error": "Missing authentication token"}), 401
+
+        user_id = verify_jwt(token)
+        if not user_id:
+            return jsonify({"error": "Invalid or expired token"}), 401
+
+        user = User.get_by_id(user_id)
+        if not user:
+            return jsonify({"error": "User not found"}), 401
+
+        if not user.is_active:
+            return jsonify({"error": "Account is disabled"}), 403
+
+        if user.must_change_password and request.endpoint not in _ALLOWED_WHILE_PASSWORD_CHANGE_REQUIRED:
+            return jsonify({"error": "You must choose a new password before continuing.",
+                            "code": "password_change_required"}), 403
+
+        g.user = user
+        return f(*args, **kwargs)
+
+    return decorated_function
+
+
+def require_admin(f):
+    """Decorator to restrict routes to admin users only."""
+    @wraps(f)
+    @require_auth
+    def decorated_function(*args, **kwargs):
+        if not g.user.is_admin:
+            return jsonify({"error": "Admin access required"}), 403
+        return f(*args, **kwargs)
+    return decorated_function

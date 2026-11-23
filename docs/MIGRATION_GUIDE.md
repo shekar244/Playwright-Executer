@@ -9,8 +9,8 @@ This guide explains how to update the remaining route files to work with the mul
 Add to the top of your route file:
 ```python
 from flask import g
-from amplify.auth_utils import require_auth
-from amplify.user_config_reader import UserConfigReader
+from amplify_server.auth_utils import require_auth
+from amplify_server.user_config_reader import UserConfigReader
 ```
 
 ### 2. Protect Endpoints with @require_auth
@@ -53,7 +53,7 @@ History reading/writing:
 history_path = Path(repo_root) / "report_history.json"
 
 # After
-from amplify.storage import get_user_history_path
+from amplify_server.storage import get_user_history_path
 history_path = get_user_history_path(g.user.id)
 ```
 
@@ -61,7 +61,7 @@ history_path = get_user_history_path(g.user.id)
 
 ## Routes to Update
 
-### 1. amplify/routes/executor.py
+### 1. src/amplify_server/routes/executor.py
 
 **Changes:**
 - Add `@require_auth` to all endpoints
@@ -72,7 +72,7 @@ history_path = get_user_history_path(g.user.id)
   - `venv_status()` — venv_path from config
   - `venv_install()` — venv config
 - Update history path resolution:
-  - Import `from amplify.storage import get_user_history_path`
+  - Import `from amplify_server.storage import get_user_history_path`
   - Replace local repo-scoped history with user-scoped: `get_user_history_path(g.user.id)`
 
 **Key functions:**
@@ -85,7 +85,7 @@ def run_tests():
     # ... rest of logic uses repo_root ...
 ```
 
-### 2. amplify/routes/dashboard.py
+### 2. src/amplify_server/routes/dashboard.py
 
 **Changes:**
 - Add `@require_auth` to all endpoints
@@ -101,7 +101,7 @@ def run_tests():
       # ... build dashboard response ...
   ```
 
-### 3. amplify/routes/zephyr.py
+### 3. src/amplify_server/routes/zephyr.py
 
 **Changes:**
 - Add `@require_auth` to all endpoints
@@ -119,7 +119,7 @@ def run_tests():
       return jsonify(zephyr_creds)
   ```
 
-### 4. amplify/routes/filemanager.py
+### 4. src/amplify_server/routes/filemanager.py
 
 **Changes:**
 - Add `@require_auth` to all endpoints
@@ -137,20 +137,20 @@ def run_tests():
       # ... rest of logic ...
   ```
 
-### 5. amplify/routes/git.py
+### 5. src/amplify_server/routes/git.py
 
 **Changes:**
 - Add `@require_auth` to all endpoints
 - Use `UserConfigReader(g.user.id)` for git commands config
 - Git operations are already scoped to repo_root, which is user-configured
 
-### 6. amplify/routes/studio.py
+### 6. src/amplify_server/routes/studio.py
 
 **Changes:**
 - Add `@require_auth` to all endpoints
 - Use `UserConfigReader(g.user.id)` for any config reads
 
-### 7. amplify/routes/insights.py
+### 7. src/amplify_server/routes/insights.py
 
 **Changes:**
 - Add `@require_auth` if exposing API endpoints
@@ -215,7 +215,7 @@ def save_setting():
 @bp.route("/api/report/history")
 @require_auth
 def get_history():
-    from amplify.storage import get_user_history_path
+    from amplify_server.storage import get_user_history_path
     history_path = get_user_history_path(g.user.id)
     
     if not history_path.exists():
@@ -229,7 +229,7 @@ def get_history():
 
 ```python
 def append_to_history(user_id, run_record):
-    from amplify.storage import get_user_history_path
+    from amplify_server.storage import get_user_history_path
     history_path = get_user_history_path(user_id)
     
     history = []
@@ -253,7 +253,7 @@ For PostgreSQL migration:
    ```bash
    pip install psycopg2-binary
    ```
-3. Run migrations (add `amplify/migrations/` later if needed)
+3. Run migrations (add `src/amplify_server/migrations/` later if needed)
 4. Both SQLite and PostgreSQL use same query interface via `sqlite3` for now
 
 For production, consider:
@@ -282,7 +282,7 @@ For production, consider:
 
 ```python
 # Auth
-from amplify.auth_utils import require_auth, generate_jwt, verify_jwt
+from amplify_server.auth_utils import require_auth, generate_jwt, verify_jwt
 from flask import g
 
 @require_auth
@@ -291,7 +291,7 @@ def protected_route():
     username = g.user.username
 
 # Config
-from amplify.user_config_reader import UserConfigReader
+from amplify_server.user_config_reader import UserConfigReader
 
 reader = UserConfigReader(g.user.id)
 cfg = reader.load()
@@ -299,7 +299,7 @@ cfg["key"] = value
 reader.save(cfg)
 
 # Storage
-from amplify.storage import (
+from amplify_server.storage import (
     get_user_workspace_dir,
     get_user_config_path,
     get_user_history_path,

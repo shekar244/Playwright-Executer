@@ -8,79 +8,40 @@ This guide explains the project structure and the steps required to add new feat
 
 ```
 Amplify-QEA/
-├── amplify.sh / amplify.bat         ← launchers (python -m amplify.server)
-└── amplify/
-    ├── server.py                        ← app factory: registers blueprints, serves templates
-    ├── consolidated.py                  ← Reporting Dashboard logic: Grid + local runs in one model, filters, roll-ups (pure, unit-tested)
-    ├── payload_coerce.py                ← reads numbers/text from payloads we don't control (pod results, history files): never raises
-    ├── request_body.py                  ← json_object(): a malformed JSON body is a JSON 400, never an HTML 500
-    ├── grid_data.py                     ← reads Grid runs from the coordinator for the dashboard (cached; a finished run is kept for good only once its Allure results are in)
-    ├── grid_snapshot.py                 ← Grid code delivery: git snapshot of a repo's HEAD → shared volume (GRID_CODE_DIR, with retention pruning) or coordinator (safe tar extraction)
-    ├── grid_reports.py                  ← a Grid run's Allure 3 report, fetched from the coordinator and cached per run + ETag
-    ├── report_viewer.py                 ← signed, per-user links for viewing HTML reports inside the dashboard
-    ├── routes/
-    │   ├── __init__.py
-    │   ├── state.py                     ← shared run state (runner, is_running, SSE queues)
-    │   ├── history.py                   ← allure result parsing + per-repo run-history persistence
-    │   ├── executor.py                  ← Blueprint: run/stop/stream/repos/tests/features/git/venv
-    │   ├── config.py                    ← Blueprint: /api/config/* endpoints
-    │   ├── grid.py                      ← Blueprint: /api/grid/* — proxy to the Grid coordinator; POST /api/grid/runs starts a run (optionally from a repo snapshot, see grid_snapshot.py)
-    │   ├── testdata.py                  ← Blueprint: /api/testdata/* — list, upload and delete files in the active cloned repo
-    │   ├── dashboard.py                 ← Blueprint: /api/dashboard (+ /overview, /run, /report-link), /rv viewer, /api/report
-    │   ├── zephyr.py                    ← Blueprint: all /api/zephyr/* and /api/jira/*
-    │   ├── filemanager.py               ← Blueprint: /api/fm/browse, read, save
-    │   └── insights.py                  ← Blueprint: /api/insights/* (start/stop the Streamlit side-car)
-    ├── jira_insights/                   ← Jira Insights Streamlit app (embedded via <iframe>)
-    │   ├── app.py                       ← Streamlit entry: sidebar data source + view switcher
-    │   ├── launcher.py                  ← side-car process start/stop/health (used by routes/insights.py)
-    │   ├── jira_client.py               ← JQL search (Cloud /search/jql + Server/DC /search)
-    │   ├── transform.py                 ← issues / CSV export → flat DataFrame + derived columns
-    │   ├── pivot.py                     ← ReportSpec + pivot engine (pure pandas; Gauge/Meter %, filters)
-    │   ├── charts.py                    ← Plotly figure factory (bars, lines, donut, heatmap, treemap)
-    │   ├── chart_theme.py               ← colours, validated themes, Plotly template
-    │   ├── dials.py                     ← Gauge (arc) + Meter (needle) with configurable colour bands
-    │   ├── layout.py                    ← dashboard rows for drag-and-drop arranging
-    │   ├── kpi.py                       ← configurable KPI tiles
-    │   ├── executions.py                ← Zephyr test runs → flat table
-    │   ├── zephyr.py                    ← test-run fetch via routes/zephyr.py (_z_call / _jira_call)
-    │   ├── store.py                     ← workspace persistence (datasets, reports, tiles, settings)
-    │   └── ui/                          ← Streamlit views (dashboard, tile editor, builder, explorer, data, Zephyr source)
-    ├── .streamlit/config.toml           ← Streamlit server + theme settings for Jira Insights
-    ├── templates/
-    │   ├── base.html                    ← HTML shell: <head>, CSS, nav, shared JS, {% include %} calls
-    │   └── partials/
-    │       ├── executor.html            ← Executor page + Config page HTML
-    │       ├── dashboard.html           ← Reporting Dashboard page (filters, KPIs, runs, drill-down, viewers)
-    │       ├── grid.html                ← Grid page (new run form, runner pods, runs, run detail)
-    │       ├── testmanagement.html      ← Test Management (Zephyr) page HTML
-    │       ├── insights.html            ← Jira Insights page (iframe host)
-    │       └── filemanager.html         ← File Manager page HTML + inline JS
-    ├── static/
-    │   ├── css/amplify.css              ← Apple-style design system (light + dark)
-    │   ├── css/amplify.css              ← Apple-style design system (light + dark)
-    │   └── js/
-    │       ├── executor.js              ← Executor + Config JS
-    │       ├── dashboard.js             ← Reporting Dashboard JS (consolidated Grid + local runs)
-    │       ├── grid.js                  ← Grid tab JS: renders pods/runs/results (all data escaped; ids via data-* attributes + one delegated click handler)
-    │       ├── testmanagement.js        ← Zephyr / Test Management JS
-    │       └── insights.js              ← Jira Insights start/embed JS
-    ├── command_builder.py               ← builds pytest command; venv Python resolution
-    ├── config_reader.py                 ← three-level config resolution chain
-    ├── report_resolver.py               ← finds the latest Allure HTML report
-    ├── runner.py                        ← subprocess + SSE stream
-    ├── test_discovery.py                ← discovers suites and test files
-    └── tests/                           ← unit tests
+Amplify-QEA/
+├── amplify.sh / amplify.bat              ← local launchers
+├── src/
+│   ├── amplify_server/                   ← Flask application package
+│   │   ├── server.py                    ← app factory and blueprint registration
+│   │   ├── routes/                      ← authenticated Flask blueprints
+│   │   ├── models/                      ← SQLite models
+│   │   ├── templates/                  ← Jinja2 HTML
+│   │   ├── static/                     ← CSS and browser JavaScript
+│   ├── jira_insights/                   ← standalone Streamlit package
+│   ├── coordinator/                     ← FastAPI Grid coordinator
+│   ├── runner/                          ← Grid runner pod package
+│   └── gridtest/                        ← runner-baked pytest/Playwright framework
+├── tests/
+│   ├── amplify_server/                  ← Flask and Insights tests grouped by feature
+│   ├── coordinator/                     ← coordinator tests
+│   ├── runner/                          ← runner tests
+│   └── sample/                          ← baked Playwright sample suite
+├── config/
+│   └── amplify_server/config.example.json
+├── docs/                                ← architecture, setup and testing docs
+├── k8s/                                 ← Kubernetes manifests
+└── opns/                                ← OpenShift manifests
 ```
 
 ---
 
 ## How to add a new feature module (e.g. "Test Design")
 
-### 1 — Backend: create `amplify/routes/testdesign.py`
+### 1 — Backend: create `src/amplify_server/routes/testdesign.py`
 
 ```python
 from flask import Blueprint, jsonify, request
-from amplify.config_reader import ConfigReader
+from amplify_server.config_reader import ConfigReader
 
 bp = Blueprint("testdesign", __name__)
 
@@ -98,14 +59,14 @@ def save_items():
     return jsonify({"ok": True})
 ```
 
-### 2 — Register the blueprint in `amplify/server.py`
+### 2 — Register the blueprint in `src/amplify_server/server.py`
 
 ```python
-from amplify.routes.testdesign import bp as testdesign_bp
+from amplify_server.routes.testdesign import bp as testdesign_bp
 app.register_blueprint(testdesign_bp)
 ```
 
-### 3 — Add HTML partial: `amplify/templates/partials/testdesign.html`
+### 3 — Add HTML partial: `src/amplify_server/templates/partials/testdesign.html`
 
 ```html
 <!-- ── Test Design page ── -->
@@ -117,7 +78,7 @@ app.register_blueprint(testdesign_bp)
 </div>
 ```
 
-### 4 — Add JS file: `amplify/static/js/testdesign.js`
+### 4 — Add JS file: `src/amplify_server/static/js/testdesign.js`
 
 ```js
 // ── Test Design JS ─────────────────────────────────────────────────────────────
@@ -128,7 +89,7 @@ async function loadTestDesign() {
 }
 ```
 
-### 5 — Wire up in `amplify/templates/base.html`
+### 5 — Wire up in `src/amplify_server/templates/base.html`
 
 **a) Add a nav button** (in the `<nav class="tab-nav">` block):
 ```html
@@ -158,13 +119,13 @@ if (tab === 'testdesign') loadTestDesign();
 
 ### 6 — Add CSS (if needed)
 
-Add page-specific styles to `amplify/static/css/amplify.css` (or a `<style>` block in the new partial). All CSS variables (`--bg`, `--accent`, `--surface`, `--green`, `--red`, etc.) are already available.
+Add page-specific styles to `src/amplify_server/static/css/amplify.css` (or a `<style>` block in the new partial). All CSS variables (`--bg`, `--accent`, `--surface`, `--green`, `--red`, etc.) are already available.
 
 ---
 
 ## Making a new tab controllable by admins
 
-Admins show or hide tabs for **all users** in **Admin Panel → Tab Visibility** (settings are stored server-wide in `server_config.json`, not in any user's `config.json`). The list of tabs lives in one place — `UI_TAB_CATALOG` in `amplify/server_secrets.py` — and the Admin Panel checkboxes, the `ui_tabs` value returned by `/api/config`, and `applyUiTabs()` in `base.html` all derive from it. Two steps plug a new tab in.
+Admins show or hide tabs for **all users** in **Admin Panel → Tab Visibility** (settings are stored server-wide in `server_config.json`, not in any user's `config.json`). The list of tabs lives in one place — `UI_TAB_CATALOG` in `src/amplify_server/server_secrets.py` — and the Admin Panel checkboxes, the `ui_tabs` value returned by `/api/config`, and `applyUiTabs()` in `base.html` all derive from it. Two steps plug a new tab in.
 
 ### A — Give the nav button a predictable `id`
 
@@ -178,7 +139,7 @@ Admins show or hide tabs for **all users** in **Admin Panel → Tab Visibility**
 
 Config sub-tab buttons use `id="ctab-<name>"` instead (e.g. `ctab-mykey`).
 
-### B — Add the tab to `UI_TAB_CATALOG` (`amplify/server_secrets.py`)
+### B — Add the tab to `UI_TAB_CATALOG` (`src/amplify_server/server_secrets.py`)
 
 ```python
 UI_TAB_CATALOG = [
@@ -195,8 +156,8 @@ That is all. The button id is derived from the key: `"<key>"` → `#navbtn-<key>
 
 | File | Change |
 |---|---|
-| `amplify/templates/base.html` | Add `id="navbtn-testdesign"` to the nav button |
-| `amplify/server_secrets.py` | Add the entry to `UI_TAB_CATALOG` (key, label, group, default) |
+| `src/amplify_server/templates/base.html` | Add `id="navbtn-testdesign"` to the nav button |
+| `src/amplify_server/server_secrets.py` | Add the entry to `UI_TAB_CATALOG` (key, label, group, default) |
 
 > **Server-side rules** (`save_ui_tabs`): unknown keys and non-boolean values are rejected, at least one main tab must stay visible, and Config cannot be visible with every Config sub-tab hidden.
 > Visibility is a UI control only — it hides the tab, it does not block the underlying `/api/...` routes.
@@ -205,7 +166,7 @@ That is all. The button id is derived from the key: `"<key>"` → `#navbtn-<key>
 
 ## Config resolution chain
 
-`amplify/config_reader.py` implements a three-level merge:
+`src/amplify_server/config_reader.py` implements a three-level merge:
 
 ```
 1. {tool_dir}/config.json          ← always read first; provides repo_root + config_override_path
@@ -232,7 +193,7 @@ When adding a new config key, add its default to `_DEFAULTS` in `config_reader.p
 
 | Rule | Reason |
 |---|---|
-| Import shared state via `from amplify.routes import state` | `global` only works within the same module |
+| Import shared state via `from amplify_server.routes import state` | `global` only works within the same module |
 | Modify state as `state._is_running = True` | Attribute assignment crosses module boundaries |
 | Use `_history_file(repo)` — not a module-level constant | History is per-repo; the file lives at `{repo}/report_history.json` |
 | `ConfigReader().save(cfg)` writes to `_active_config_path` | Respects the resolution chain; never hard-codes a path |
@@ -251,9 +212,9 @@ When adding a new config key, add its default to `_DEFAULTS` in `config_reader.p
 
 Given a second project with its own `index.html` and backend routes:
 
-1. **Backend** — copy the route functions into a new blueprint file in `amplify/routes/` and register it in `amplify/server.py`.
-2. **HTML** — extract the page `<div>` from `index.html` into a new file in `amplify/templates/partials/`.
-3. **JS** — extract the JavaScript into a new file in `amplify/static/js/`.
+1. **Backend** — copy the route functions into a new blueprint file in `src/amplify_server/routes/` and register it in `src/amplify_server/server.py`.
+2. **HTML** — extract the page `<div>` from `index.html` into a new file in `src/amplify_server/templates/partials/`.
+3. **JS** — extract the JavaScript into a new file in `src/amplify_server/static/js/`.
 4. Wire up the nav button, `switchTab`, `{% include %}`, and `<script src>` in `base.html`.
 
 No manual search-and-splice into a large monolithic file — each concern lives in its own file.
