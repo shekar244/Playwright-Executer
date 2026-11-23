@@ -29,6 +29,8 @@ JFROG_USERNAME="${JFROG_USERNAME:-}"
 JFROG_PASSWORD="${JFROG_PASSWORD:-}"
 OC_PROJECT="${OC_PROJECT:-amplify-qea}"
 IMAGE_TAG="${IMAGE_TAG:-latest}"
+RUNNER_BROWSERS="${RUNNER_BROWSERS:-chromium,firefox,webkit}"
+DEPLOY_POSTGRES="${DEPLOY_POSTGRES:-1}"
 
 if [ -z "$JFROG_REGISTRY" ]; then
   read -p "JFrog Registry (e.g. yourcompany.jfrog.io): " JFROG_REGISTRY
@@ -43,6 +45,7 @@ fi
 
 FULL_IMAGE="${JFROG_REGISTRY}/${JFROG_REPO}/amplify-qea:${IMAGE_TAG}"
 INSIGHTS_IMAGE="${JFROG_REGISTRY}/${JFROG_REPO}/amplify-insights:${IMAGE_TAG}"   # Jira Insights: its own pod
+COORDINATOR_IMAGE="${JFROG_REGISTRY}/${JFROG_REPO}/playwright-coordinator:${IMAGE_TAG}"
 
 echo ""
 echo "═══════════════════════════════════════════════════════════════"
@@ -50,6 +53,8 @@ echo "  Registry:  ${JFROG_REGISTRY}"
 echo "  Repo:      ${JFROG_REPO}"
 echo "  Image:     ${FULL_IMAGE}"
 echo "  Insights:  ${INSIGHTS_IMAGE}"
+echo "  Coordinator: ${COORDINATOR_IMAGE}"
+echo "  Runners:   ${RUNNER_BROWSERS}"
 echo "  Project:   ${OC_PROJECT}"
 echo "═══════════════════════════════════════════════════════════════"
 echo ""
@@ -60,7 +65,15 @@ docker build -t amplify-qea:${IMAGE_TAG} .
 docker tag amplify-qea:${IMAGE_TAG} ${FULL_IMAGE}
 docker build -f Dockerfile.insights -t amplify-insights:${IMAGE_TAG} .
 docker tag amplify-insights:${IMAGE_TAG} ${INSIGHTS_IMAGE}
-echo "✓ Images built and tagged: ${FULL_IMAGE}, ${INSIGHTS_IMAGE}"
+docker build -f Dockerfile.coordinator -t playwright-coordinator:${IMAGE_TAG} .
+docker tag playwright-coordinator:${IMAGE_TAG} ${COORDINATOR_IMAGE}
+
+for browser in $(echo "${RUNNER_BROWSERS}" | tr ',' ' '); do
+  runner_image="${JFROG_REGISTRY}/${JFROG_REPO}/playwright-runner-${browser}:${IMAGE_TAG}"
+  docker build -f Dockerfile.grid-runner --build-arg BROWSER="${browser}" -t "playwright-runner-${browser}:${IMAGE_TAG}" .
+  docker tag "playwright-runner-${browser}:${IMAGE_TAG}" "${runner_image}"
+done
+echo "✓ Amplify, Insights, Coordinator and runner images built"
 echo ""
 
 # ── Step 2: Login to JFrog ───────────────────────────────────────────
@@ -73,6 +86,10 @@ echo ""
 echo "▶ Step 3: Pushing image to JFrog..."
 docker push ${FULL_IMAGE}
 docker push ${INSIGHTS_IMAGE}
+docker push ${COORDINATOR_IMAGE}
+for browser in $(echo "${RUNNER_BROWSERS}" | tr ',' ' '); do
+  docker push "${JFROG_REGISTRY}/${JFROG_REPO}/playwright-runner-${browser}:${IMAGE_TAG}"
+done
 echo "✓ Images pushed: ${FULL_IMAGE}, ${INSIGHTS_IMAGE}"
 echo ""
 
@@ -126,6 +143,54 @@ apply_with_image opns/amplify-deployment-insights.yaml "${INSIGHTS_IMAGE}"
 AMPLIFY_HOST=$(oc get route amplify-qea -o jsonpath='{.spec.host}')
 sed "s|AMPLIFY_HOST|${AMPLIFY_HOST}|" opns/amplify-route-insights.yaml | oc apply -f -
 
+# Add Grid credentials and deploy the Grid backend.
+if [ -z "${GRID_API_TOKEN:-}" ]; then
+  GRID_API_TOKEN="$(openssl rand -hex 32)"
+fi
+if [ -z "${POD_API_TOKEN:-}" ]; then
+  POD_API_TOKEN="$(openssl rand -hex 32)"
+fi
+if [ -z "${PG_PASSWORD:-}" ]; then
+  PG_PASSWORD="$(openssl rand -hex 24)"
+fi
+
+oc delete secret playwright-db-credentials --ignore-not-found=true
+DATABASE_URL="postgresql://testuser:${PG_PASSWORD}@postgres-service:5432/testdb"
+KEDA_CONNECTION="postgresql://testuser:${PG_PASSWORD}@postgres-service.${OC_PROJECT}.svc.cluster.local:5432/testdb?sslmode=disable"
+oc create secret generic playwright-db-credentials \
+  --from-literal=postgres-user=testuser \
+  --from-literal=postgres-password="${PG_PASSWORD}" \
+  --from-literal=postgres-db=testdb \
+  --from-literal=api-token="${GRID_API_TOKEN}" \
+  --from-literal=pod-api-token="${POD_API_TOKEN}" \
+  --from-literal=database-url="${DATABASE_URL}" \
+  --from-literal=keda-connection="${KEDA_CONNECTION}"
+
+oc patch secret amplify-secrets --type merge -p \
+  "{\"stringData\":{\"grid-coordinator-url\":\"http://central-coordinator-svc:8000\",\"grid-api-token\":\"${GRID_API_TOKEN}\"}}" || true
+
+if [ "${DEPLOY_POSTGRES}" = "1" ]; then
+  oc apply -f opns/grid-01-postgres.yaml
+fi
+
+sed "s|artifactory.lipstack.sephoraus.com:443/playwright-coordinator:latest|${COORDINATOR_IMAGE}|" \
+  opns/grid-02-coordinator.yaml | oc apply -f -
+
+for browser in $(echo "${RUNNER_BROWSERS}" | tr ',' ' '); do
+  runner_image="${JFROG_REGISTRY}/${JFROG_REPO}/playwright-runner-${browser}:${IMAGE_TAG}"
+  if oc api-resources --api-group=keda.sh -o name 2>/dev/null | grep -q keda; then
+    oc process -f opns/grid-04-keda-scaledjob.yaml \
+      -p BROWSER="${browser}" \
+      -p REGISTRY="${JFROG_REGISTRY}/${JFROG_REPO}" \
+      -p IMAGE_TAG="${IMAGE_TAG}" \
+      | oc apply -f -
+  else
+    echo "KEDA is not installed; runner ${browser} is not autoscaled. Use grid-03 manually."
+  fi
+done
+
+oc rollout restart deployment/amplify-qea deployment/amplify-insights
+
 echo "✓ Deployments applied"
 echo ""
 
@@ -133,6 +198,7 @@ echo ""
 echo "▶ Step 6: Waiting for rollout..."
 oc rollout status deployment/amplify-qea --timeout=120s
 oc rollout status deployment/amplify-insights --timeout=180s
+oc rollout status deployment/central-coordinator --timeout=180s
 
 ROUTE_URL=$(oc get route amplify-qea -o jsonpath='{.spec.host}' 2>/dev/null || echo "")
 

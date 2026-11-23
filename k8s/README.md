@@ -46,6 +46,29 @@ kubectl apply -k k8s/
 kubectl -n amplify get pods -w
 ```
 
+## Distributed Grid
+
+The K8s Grid uses separate manifests and a `playwright-db-credentials` Secret:
+
+```bash
+kubectl -n amplify create secret generic playwright-db-credentials \
+  --from-literal=postgres-user=testuser \
+  --from-literal=postgres-password="$(openssl rand -hex 24)" \
+  --from-literal=postgres-db=testdb \
+  --from-literal=api-token="$(openssl rand -hex 32)" \
+  --from-literal=pod-api-token="$(openssl rand -hex 32)" \
+  --from-literal=database-url='postgresql://testuser:PASSWORD@postgres-service:5432/testdb' \
+  --from-literal=keda-connection='postgresql://testuser:PASSWORD@postgres-service.amplify.svc.cluster.local:5432/testdb?sslmode=disable'
+
+kubectl apply -n amplify -k k8s/grid-postgres
+kubectl apply -n amplify -k k8s/grid-coordinator
+kubectl apply -n amplify -k k8s/grid-runners
+```
+
+Add `grid-coordinator-url` and `grid-api-token` to `amplify-secrets`. The coordinator accepts `qa3`, `qa4`, `int`, `dev`, `qa`, `perf`, and `prod`.
+
+Use `k8s/deploy-grid.sh` to build/push the coordinator and runner images and apply these manifests when a registry and namespace are configured.
+
 The first account to register becomes the admin. To promote another user later (they must have registered first):
 
 ```bash
@@ -84,6 +107,36 @@ kubectl delete -k k8s/                                 # remove Amplify (the gri
 Both apps mount the same volume. `ReadWriteOnce` (the default here) allows pods on **one node**, so `amplify-deployment-insights.yaml` carries a `podAffinity` that keeps Insights next to the QEA pod. With a `ReadWriteMany` class (NFS, CephFS, EFS, Azure Files) set `accessModes: [ReadWriteMany]` in `amplify-pvc.yaml` and delete the `podAffinity` block.
 
 Both deployments use `strategy: Recreate` and `replicas: 1` on purpose: the users database is SQLite, so two QEA pods must never run at once — not even briefly during a rollout.
+
+## Distributed Grid
+
+Create the Grid credentials Secret, apply PostgreSQL and the Coordinator, then apply runner workloads:
+
+```bash
+kubectl -n amplify create secret generic playwright-db-credentials \
+  --from-literal=postgres-user=testuser \
+  --from-literal=postgres-password="$(openssl rand -hex 24)" \
+  --from-literal=postgres-db=testdb \
+  --from-literal=api-token="$(openssl rand -hex 32)" \
+  --from-literal=pod-api-token="$(openssl rand -hex 32)" \
+  --from-literal=database-url='postgresql://testuser:PASSWORD@postgres-service:5432/testdb' \
+  --from-literal=keda-connection='postgresql://testuser:PASSWORD@postgres-service.amplify.svc.cluster.local:5432/testdb?sslmode=disable'
+
+kubectl apply -n amplify -k k8s/grid-postgres
+kubectl apply -n amplify -k k8s/grid-coordinator
+kubectl apply -n amplify -k k8s/grid-runners
+```
+
+Set `grid-coordinator-url` and `grid-api-token` in `amplify-secrets` so QEA can reach the Coordinator. The `GRID_COORDINATOR_URL` value is normally `http://central-coordinator-svc.amplify.svc.cluster.local:8000` when Grid and Amplify share a namespace.
+
+The Coordinator supports `dev, qa, perf, prod, qa3, qa4, int`. KEDA must be installed before applying `grid-runners`; without KEDA, use `k8s/grid-runners/job-example.yaml`.
+
+`k8s/deploy-grid.sh` is the image/build/deploy helper:
+
+```bash
+REGISTRY=registry.example.com REPOSITORY=docker-local NAMESPACE=amplify \
+  k8s/deploy-grid.sh
+```
 
 ## Manifest files and the Grid backend
 

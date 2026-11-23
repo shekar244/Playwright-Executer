@@ -85,7 +85,7 @@ spec:
               optional: true
         # Environments a run may target; the UI offers exactly these.
         - name: SUPPORTED_ENVIRONMENTS
-          value: "dev,qa,perf,prod"
+          value: "dev,qa,perf,prod,qa3,qa4,int"
         - name: DEFAULT_ENVIRONMENT
           value: "qa"
         # Code snapshots, raw Allure results and generated reports (all on the /data volume).

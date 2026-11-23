@@ -215,6 +215,56 @@ What makes it one app to users:
 
 Users always enter through QEA (**Jira Insights** tab, or **↗ New tab**), already signed in as themselves.
 
+### Distributed Grid
+
+The OpenShift Grid consists of PostgreSQL, the Coordinator, and browser runner pods.
+
+```bash
+oc create secret generic playwright-db-credentials \
+  --from-literal=postgres-user=testuser \
+  --from-literal=postgres-password="$(openssl rand -hex 24)" \
+  --from-literal=postgres-db=testdb \
+  --from-literal=api-token="$(openssl rand -hex 32)" \
+  --from-literal=pod-api-token="$(openssl rand -hex 32)" \
+  --from-literal=database-url='postgresql://testuser:PASSWORD@postgres-service:5432/testdb' \
+  --from-literal=keda-connection='postgresql://testuser:PASSWORD@postgres-service.NAMESPACE.svc.cluster.local:5432/testdb?sslmode=disable'
+
+oc apply -f opns/grid-01-postgres.yaml
+oc apply -f opns/grid-02-coordinator.yaml
+```
+
+The Coordinator image and runner images must be pushed to JFrog or the OpenShift internal registry before starting runners.
+
+```bash
+docker build -f Dockerfile.coordinator -t <registry>/playwright-coordinator:latest .
+docker push <registry>/playwright-coordinator:latest
+
+for browser in chromium firefox webkit; do
+  docker build -f Dockerfile.grid-runner --build-arg BROWSER="$browser" \
+    -t "<registry>/playwright-runner-${browser}:latest" .
+  docker push "<registry>/playwright-runner-${browser}:latest"
+done
+```
+
+Add `grid-coordinator-url` and `grid-api-token` to `amplify-secrets`, then restart Amplify so the deployment receives the values. The Coordinator supports `dev, qa, perf, prod, qa3, qa4, int`.
+
+Start runner pods manually:
+
+```bash
+oc process -f opns/grid-03-runner-job.yaml \
+  -p BROWSER=chromium -p PARALLELISM=4 \
+  -p REGISTRY="<registry>" -p IMAGE_TAG=latest \
+  | oc create -f -
+```
+
+For KEDA autoscaling:
+
+```bash
+oc process -f opns/grid-04-keda-scaledjob.yaml \
+  -p BROWSER=chromium -p REGISTRY="<registry>" -p IMAGE_TAG=latest \
+  | oc apply -f -
+```
+
 ### Step 10: Create Admin User
 
 ```bash
@@ -239,7 +289,7 @@ JFROG_PASSWORD=your-api-key \
 ./opns/amplify-jfrog-deploy.sh
 ```
 
-The script handles all steps: build, tag, push, create secrets, deploy, and verify.
+The script handles all steps: build, tag, and push Amplify, Jira Insights, Coordinator, and runner images; create secrets; deploy Amplify, Grid, and verify rollouts.
 
 ---
 
@@ -325,8 +375,9 @@ Files are named `<system>-<resource>`: `amplify-*` for Amplify QEA and Jira Insi
 | `amplify-secrets.yaml` | Secret (template) | Template for JWT key and Jira/Zephyr credentials |
 | `amplify-deployment-insights.yaml` | Deployment + Service | Jira Insights in its own pod (port 8501, served under `/jira-insights`), same PVC and `JWT_SECRET_KEY` as QEA |
 | `amplify-route-insights.yaml` | Route | The path `/jira-insights` of QEA's host → the `amplify-insights` Service |
-| `amplify-jfrog-deploy.sh` | Script | Automated build, push, and deploy of Amplify QEA and Jira Insights |
-| `grid-01-postgres.yaml` | Secret + Deployment + Service | Grid database credentials and an in-cluster PostgreSQL (skip the Deployment/Service for an external database) |
+| `amplify-jfrog-deploy.sh` | Script | Automated build, push, and deploy of Amplify QEA, Jira Insights, Coordinator, and runner images |
+| `grid-secrets.example.yaml` | Secret template | PostgreSQL and Grid API credentials; create it before applying Grid manifests |
+| `grid-01-postgres.yaml` | PVC + Deployment + Service | Optional in-cluster PostgreSQL storage and service |
 | `grid-02-coordinator.yaml` | ServiceAccount, Role, RoleBinding, PVC, Deployment, Service | Grid coordinator API and queue, its data volume, and read access to runner pods |
 | `grid-03-runner-job.yaml` | Template | Manual batch trigger: one runner Job per browser (`oc process … \| oc create`) |
 | `grid-04-keda-scaledjob.yaml` | Template | Optional KEDA ScaledJob per browser: one runner pod per pending chunk, scaling to 0 when idle |

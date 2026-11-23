@@ -18,25 +18,16 @@
 #     --from-literal=database-url='postgresql://testuser:<strong-password>@postgres-service:5432/testdb' \
 #     --from-literal=keda-connection='postgresql://testuser:<strong-password>@postgres-service.<namespace>.svc.cluster.local:5432/testdb?sslmode=disable'
 apiVersion: v1
-kind: Secret
+kind: PersistentVolumeClaim
 metadata:
-  name: playwright-db-credentials
-type: Opaque
-stringData:
-  postgres-user: testuser
-  postgres-password: CHANGE_ME
-  postgres-db: testdb
-  # The FULL token for the coordinator API (X-API-Token): Amplify and the seeder send it and it
-  # may call every endpoint. Generate one with: openssl rand -hex 32
-  api-token: CHANGE_ME
-  # OPTIONAL token for the RUNNER PODS. Test code runs inside the pods and can read the token
-  # they hold, so this one only opens the endpoints a pod needs (lease, submit, Allure upload,
-  # release, heartbeat, exit, GET code); everything else answers 403. The runners' GRID_API_TOKEN
-  # should be THIS token, Amplify keeps api-token. Use a different value (openssl rand -hex 32).
-  # Remove the key and the coordinator accepts only api-token, which pods must then use.
-  pod-api-token: CHANGE_ME
-  database-url: postgresql://testuser:CHANGE_ME@postgres-service:5432/testdb
-  keda-connection: postgresql://testuser:CHANGE_ME@postgres-service.NAMESPACE.svc.cluster.local:5432/testdb?sslmode=disable
+  name: postgres-pgdata
+  labels:
+    app: postgres-db
+spec:
+  accessModes: ["ReadWriteOnce"]
+  resources:
+    requests:
+      storage: 5Gi
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -79,10 +70,9 @@ spec:
         - name: pg-storage
           mountPath: /var/lib/postgresql/data
       volumes:
-      # emptyDir: queue/results are lost if the pod restarts. Swap for a
-      # PersistentVolumeClaim if results must outlive the database pod.
       - name: pg-storage
-        emptyDir: {}
+        persistentVolumeClaim:
+          claimName: postgres-pgdata
 ---
 apiVersion: v1
 kind: Service

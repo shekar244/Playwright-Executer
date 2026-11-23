@@ -32,6 +32,18 @@ spec:
               value: "/jira-insights"
             - name: INSIGHTS_INTERNAL_URL
               value: "http://amplify-insights:8501/jira-insights"
+            - name: GRID_COORDINATOR_URL
+              valueFrom:
+                secretKeyRef:
+                  name: amplify-secrets
+                  key: grid-coordinator-url
+                  optional: true
+            - name: GRID_API_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: amplify-secrets
+                  key: grid-api-token
+                  optional: true
             - name: JWT_SECRET_KEY
               valueFrom:
                 secretKeyRef:

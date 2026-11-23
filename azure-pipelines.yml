@@ -120,7 +120,7 @@ stages:
             displayName: 'Build and push Grid coordinator'
 
       - job: BuildRunner
-        displayName: 'Amplify Grid Chromium Runner'
+        displayName: 'Amplify Grid Runner Images'
         pool:
           name: 'Default'
           demands:
@@ -134,64 +134,15 @@ stages:
               command: login
               containerRegistry: 'jfrog-docker-connection'
           - script: |
-              docker build \
-                -f Dockerfile.grid-runner \
-                --build-arg BROWSER=chromium \
-                --build-arg BASE_REGISTRY=$(JFROG_REGISTRY)/$(JFROG_REMOTE_REPO)/ \
-                -t $(JFROG_REGISTRY)/$(JFROG_REPO)/playwright-runner-chromium:$(IMAGE_TAG) \
-                -t $(JFROG_REGISTRY)/$(JFROG_REPO)/playwright-runner-chromium:latest \
-                .
-              docker push $(JFROG_REGISTRY)/$(JFROG_REPO)/playwright-runner-chromium:$(IMAGE_TAG)
-              docker push $(JFROG_REGISTRY)/$(JFROG_REPO)/playwright-runner-chromium:latest
-            displayName: 'Build and push Chromium Grid runner'
-
-      - job: BuildCoordinator
-        displayName: 'Amplify Grid Coordinator'
-        pool:
-          name: 'Default'
-          demands:
-            - docker
-        steps:
-          - checkout: self
-            fetchDepth: 1
-          - task: Docker@2
-            displayName: 'Login to JFrog'
-            inputs:
-              command: login
-              containerRegistry: 'jfrog-docker-connection'
-          - script: |
-              docker build \
-                -f Dockerfile.coordinator \
-                --build-arg BASE_REGISTRY=$(JFROG_REGISTRY)/$(JFROG_REMOTE_REPO)/ \
-                -t $(JFROG_REGISTRY)/$(JFROG_REPO)/playwright-coordinator:$(IMAGE_TAG) \
-                -t $(JFROG_REGISTRY)/$(JFROG_REPO)/playwright-coordinator:latest \
-                .
-              docker push $(JFROG_REGISTRY)/$(JFROG_REPO)/playwright-coordinator:$(IMAGE_TAG)
-              docker push $(JFROG_REGISTRY)/$(JFROG_REPO)/playwright-coordinator:latest
-            displayName: 'Build and push Grid coordinator'
-
-      - job: BuildRunner
-        displayName: 'Amplify Grid Chromium Runner'
-        pool:
-          name: 'Default'
-          demands:
-            - docker
-        steps:
-          - checkout: self
-            fetchDepth: 1
-          - task: Docker@2
-            displayName: 'Login to JFrog'
-            inputs:
-              command: login
-              containerRegistry: 'jfrog-docker-connection'
-          - script: |
-              docker build \
-                -f Dockerfile.grid-runner \
-                --build-arg BROWSER=chromium \
-                --build-arg BASE_REGISTRY=$(JFROG_REGISTRY)/$(JFROG_REMOTE_REPO)/ \
-                -t $(JFROG_REGISTRY)/$(JFROG_REPO)/playwright-runner-chromium:$(IMAGE_TAG) \
-                -t $(JFROG_REGISTRY)/$(JFROG_REPO)/playwright-runner-chromium:latest \
-                .
-              docker push $(JFROG_REGISTRY)/$(JFROG_REPO)/playwright-runner-chromium:$(IMAGE_TAG)
-              docker push $(JFROG_REGISTRY)/$(JFROG_REPO)/playwright-runner-chromium:latest
-            displayName: 'Build and push Chromium Grid runner'
+              for browser in chromium firefox webkit; do
+                docker build \
+                  -f Dockerfile.grid-runner \
+                  --build-arg BROWSER="$browser" \
+                  --build-arg BASE_REGISTRY=$(JFROG_REGISTRY)/$(JFROG_REMOTE_REPO)/ \
+                  -t $(JFROG_REGISTRY)/$(JFROG_REPO)/playwright-runner-"$browser":$(IMAGE_TAG) \
+                  -t $(JFROG_REGISTRY)/$(JFROG_REPO)/playwright-runner-"$browser":latest \
+                  .
+                docker push $(JFROG_REGISTRY)/$(JFROG_REPO)/playwright-runner-"$browser":$(IMAGE_TAG)
+                docker push $(JFROG_REGISTRY)/$(JFROG_REPO)/playwright-runner-"$browser":latest
+              done
+            displayName: 'Build and push Grid runner images'
