@@ -16,12 +16,12 @@ resources:
   - amplify-ingress.yaml
 
 # Where the images come from. Defaults to the public Docker Hub images; for JFrog use e.g.
-#   newName: yourcompany.jfrog.io/docker-local/amplify-qea
+#   newName: yourcompany.jfrog.io/docker-local/amplify-qea-grid
 # and uncomment imagePullSecrets in both deployments. Pin a real tag instead of "latest" in production.
 images:
-  - name: amplify-qea
-    newName: docker.io/shekar244/amplify-qea
+  - name: amplify-qea-grid
+    newName: docker.io/shekar244/amplify-qea-grid
     newTag: latest
-  - name: amplify-insights
-    newName: docker.io/shekar244/amplify-insights
+  - name: jira-hub
+    newName: docker.io/shekar244/jira-hub
     newTag: latest

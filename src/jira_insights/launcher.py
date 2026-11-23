@@ -1,5 +1,5 @@
 """
-Start / stop / probe the Jira Insights Streamlit app as a side-car process.
+Start / stop / probe the Jira Hub Streamlit app as a side-car process.
 
 Flask and Streamlit each want to own the server loop, so Insights runs next
 to the Flask app on its own port and the UI embeds it with an <iframe>.
@@ -7,10 +7,10 @@ The process is started from the tool root so .streamlit/config.toml applies.
 
   INSIGHTS_PORT         — Streamlit port (default 8501)
   INSIGHTS_PUBLIC_URL   — browser-facing URL when it differs from http://<flask-host>:<port>: a full URL
-                          (its own host) or a path on QEA's own host, e.g. /jira-insights (a route/ingress
-                          path that sends /jira-insights to the Insights service)
+                          (its own host) or a path on QEA's own host, e.g. /jira-hub (a route/ingress
+                          path that sends /jira-hub to the Jira Hub service)
   INSIGHTS_INTERNAL_URL — Insights runs as its own service (its own pod), e.g.
-                          http://amplify-insights:8501/jira-insights: QEA checks its health there and never
+                          http://jira-hub:8501/jira-hub: QEA checks its health there and never
                           starts a Streamlit process of its own
 
 Standalone:  python -m jira_insights.launcher
@@ -108,8 +108,8 @@ class InsightsProcess:
         if internal_url():                    # its own pod: nothing to start here, only report whether it answers
             status = self._external_status(internal_url())
             if not status["healthy"]:
-                status["error"] = (f"Jira Insights runs as its own service and is not answering at {internal_url()} "
-                                   "— check the amplify-insights pod")
+                status["error"] = (f"Jira Hub runs as its own service and is not answering at {internal_url()} "
+                                   "— check the jira-hub pod")
             return status
         with self._lock:
             if self._probe(port()) or (self._proc is not None and self._proc.poll() is None):
@@ -123,7 +123,7 @@ class InsightsProcess:
                 self._proc = self._popen(build_command(), cwd=str(TOOL_ROOT),
                                          stdout=log, stderr=subprocess.STDOUT)
             except OSError as exc:
-                return {**self.status(), "error": f"Could not start Jira Insights: {exc}"}
+                return {**self.status(), "error": f"Could not start Jira Hub: {exc}"}
             finally:
                 log.close()     # the child holds its own handle
             if not self._atexit_registered:

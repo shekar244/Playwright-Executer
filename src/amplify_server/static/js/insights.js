@@ -1,4 +1,4 @@
-// ── Jira Insights JS ──────────────────────────────────────────────────────────
+// ── Jira Hub JS ──────────────────────────────────────────────────────────
 // The Streamlit app runs beside Flask (see routes/insights.py); this tab starts
 // it on demand, waits for its health check, then embeds it in an iframe.
 
@@ -65,7 +65,7 @@ async function _insightsStatus() {
 
 async function loadInsights() {
   const s = await _insightsStatus();
-  if (!s) return _insightsFail('Cannot reach the Amplify QEA server.', '');
+  if (!s) return _insightsFail('Cannot reach the Amplify QEA Grid server.', '');
   if (s.healthy) return _insightsEmbed(s);
   insightsStart();
 }
@@ -76,7 +76,7 @@ async function insightsStart() {
   const btn = document.getElementById('insightsStartBtn');
   btn.disabled = true;
   _insightsSetState('', 'Starting…');
-  document.getElementById('insightsEmptyMsg').textContent = 'Starting Jira Insights…';
+  document.getElementById('insightsEmptyMsg').textContent = 'Starting Jira Hub…';
   document.getElementById('insightsLog').style.display = 'none';
   try {
     const res = await fetch('/api/insights/start', { method: 'POST' })
@@ -86,10 +86,10 @@ async function insightsStart() {
     for (let i = 0; i < 60; i++) {
       const s = await _insightsStatus();
       if (s?.healthy) return _insightsEmbed(s);
-      if (s?.exited)  return _insightsFail('Jira Insights stopped during start-up.', s.log_tail);
+      if (s?.exited)  return _insightsFail('Jira Hub stopped during start-up.', s.log_tail);
       await new Promise(r => setTimeout(r, 750));
     }
-    _insightsFail('Timed out waiting for Jira Insights to start.', '');
+    _insightsFail('Timed out waiting for Jira Hub to start.', '');
   } finally {
     _insightsStarting = false;
     btn.disabled = false;
@@ -100,7 +100,7 @@ async function insightsStop() {
   await fetch('/api/insights/stop', { method: 'POST' }).catch(() => {});
   document.getElementById('insightsFrame').removeAttribute('src');
   _insightsUrl = '';
-  _insightsFail('Jira Insights is stopped.', '');
+  _insightsFail('Jira Hub is stopped.', '');
 }
 
 function insightsReload() {

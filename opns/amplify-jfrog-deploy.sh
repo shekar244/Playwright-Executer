@@ -16,7 +16,7 @@
 #   JFROG_REPO        — e.g. docker-local (the Docker repo in Artifactory)
 #   JFROG_USERNAME    — your JFrog username or email
 #   JFROG_PASSWORD    — your JFrog password or API key
-#   OC_PROJECT        — OpenShift project name (default: amplify-qea)
+#   OC_PROJECT        — OpenShift project name (default: amplify-qea-grid)
 #   IMAGE_TAG         — image tag (default: latest)
 # ═══════════════════════════════════════════════════════════════════════
 
@@ -27,7 +27,7 @@ JFROG_REGISTRY="${JFROG_REGISTRY:-}"
 JFROG_REPO="${JFROG_REPO:-docker-local}"
 JFROG_USERNAME="${JFROG_USERNAME:-}"
 JFROG_PASSWORD="${JFROG_PASSWORD:-}"
-OC_PROJECT="${OC_PROJECT:-amplify-qea}"
+OC_PROJECT="${OC_PROJECT:-amplify-qea-grid}"
 IMAGE_TAG="${IMAGE_TAG:-latest}"
 RUNNER_BROWSERS="${RUNNER_BROWSERS:-chromium,firefox,webkit}"
 DEPLOY_POSTGRES="${DEPLOY_POSTGRES:-1}"
@@ -43,8 +43,8 @@ if [ -z "$JFROG_PASSWORD" ]; then
   echo
 fi
 
-FULL_IMAGE="${JFROG_REGISTRY}/${JFROG_REPO}/amplify-qea:${IMAGE_TAG}"
-INSIGHTS_IMAGE="${JFROG_REGISTRY}/${JFROG_REPO}/amplify-insights:${IMAGE_TAG}"   # Jira Insights: its own pod
+FULL_IMAGE="${JFROG_REGISTRY}/${JFROG_REPO}/amplify-qea-grid:${IMAGE_TAG}"
+INSIGHTS_IMAGE="${JFROG_REGISTRY}/${JFROG_REPO}/jira-hub:${IMAGE_TAG}"   # Jira Hub: its own pod
 COORDINATOR_IMAGE="${JFROG_REGISTRY}/${JFROG_REPO}/playwright-coordinator:${IMAGE_TAG}"
 
 echo ""
@@ -61,10 +61,10 @@ echo ""
 
 # ── Step 1: Build Docker image ───────────────────────────────────────
 echo "▶ Step 1: Building Docker image..."
-docker build -t amplify-qea:${IMAGE_TAG} .
-docker tag amplify-qea:${IMAGE_TAG} ${FULL_IMAGE}
-docker build -f Dockerfile.insights -t amplify-insights:${IMAGE_TAG} .
-docker tag amplify-insights:${IMAGE_TAG} ${INSIGHTS_IMAGE}
+docker build -t amplify-qea-grid:${IMAGE_TAG} .
+docker tag amplify-qea-grid:${IMAGE_TAG} ${FULL_IMAGE}
+docker build -f Dockerfile.insights -t jira-hub:${IMAGE_TAG} .
+docker tag jira-hub:${IMAGE_TAG} ${INSIGHTS_IMAGE}
 docker build -f Dockerfile.coordinator -t playwright-coordinator:${IMAGE_TAG} .
 docker tag playwright-coordinator:${IMAGE_TAG} ${COORDINATOR_IMAGE}
 
@@ -136,11 +136,13 @@ apply_with_image() {
 }
 apply_with_image opns/amplify-deployment.yaml "${FULL_IMAGE}"
 
-# Jira Insights in its own pod, at /jira-insights on the same host as QEA (same users, same workspaces: the
-# shared amplify-data PVC and the same JWT_SECRET_KEY). Drop the side-car route of older versions.
+# Jira Hub in its own pod, at /jira-hub on the same host as QEA (same users, same workspaces: the
+# shared amplify-data PVC and the same JWT_SECRET_KEY). Drop legacy Jira Hub Routes, not the main QEA Grid Route.
 oc delete route amplify-qea-insights --ignore-not-found=true
+oc delete route amplify-qea-grid-insights --ignore-not-found=true
+oc delete route amplify-insights --ignore-not-found=true
 apply_with_image opns/amplify-deployment-insights.yaml "${INSIGHTS_IMAGE}"
-AMPLIFY_HOST=$(oc get route amplify-qea -o jsonpath='{.spec.host}')
+AMPLIFY_HOST=$(oc get route amplify-qea-grid -o jsonpath='{.spec.host}')
 sed "s|AMPLIFY_HOST|${AMPLIFY_HOST}|" opns/amplify-route-insights.yaml | oc apply -f -
 
 # Add Grid credentials and deploy the Grid backend.
@@ -189,18 +191,18 @@ for browser in $(echo "${RUNNER_BROWSERS}" | tr ',' ' '); do
   fi
 done
 
-oc rollout restart deployment/amplify-qea deployment/amplify-insights
+oc rollout restart deployment/amplify-qea-grid deployment/jira-hub
 
 echo "✓ Deployments applied"
 echo ""
 
 # ── Step 6: Wait for rollout ─────────────────────────────────────────
 echo "▶ Step 6: Waiting for rollout..."
-oc rollout status deployment/amplify-qea --timeout=120s
-oc rollout status deployment/amplify-insights --timeout=180s
+oc rollout status deployment/amplify-qea-grid --timeout=120s
+oc rollout status deployment/jira-hub --timeout=180s
 oc rollout status deployment/central-coordinator --timeout=180s
 
-ROUTE_URL=$(oc get route amplify-qea -o jsonpath='{.spec.host}' 2>/dev/null || echo "")
+ROUTE_URL=$(oc get route amplify-qea-grid -o jsonpath='{.spec.host}' 2>/dev/null || echo "")
 
 echo ""
 echo "═══════════════════════════════════════════════════════════════"
@@ -210,13 +212,13 @@ echo "  Image:     ${FULL_IMAGE}"
 echo "  Project:   ${OC_PROJECT}"
 if [ -n "$ROUTE_URL" ]; then
 echo "  URL:       https://${ROUTE_URL}"
-echo "  Insights:  https://${ROUTE_URL}/jira-insights  (opened from the Jira Insights tab, signed in)"
+echo "  Jira Hub:  https://${ROUTE_URL}/jira-hub  (opened from the Jira Hub tab, signed in)"
 fi
 echo ""
 echo "  Next steps:"
 echo "    1. Register at https://${ROUTE_URL}/register"
 echo "    2. Promote to admin:"
-echo "       oc exec deployment/amplify-qea -- \\"
+echo "       oc exec deployment/amplify-qea-grid -- \\"
 echo "         sqlite3 /app/data/amplify.db \\"
 echo "         \"UPDATE users SET is_admin = 1 WHERE username = 'YOUR_USER';\""
 echo "    3. Configure Jira/Zephyr in Admin Panel"

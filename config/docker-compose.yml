@@ -1,4 +1,4 @@
-# Local Docker deployment of the whole repo: Amplify QEA (its Jira Insights side-car included) plus the
+# Local Docker deployment of the whole repo: Amplify QEA (its Jira Hub side-car included) plus the
 # Grid backend from coordinator/ and runner/ (PostgreSQL + coordinator). Runner pods are started on demand by
 # scripts/local_pod_launcher.py, a local stand-in for KEDA.
 #
@@ -61,8 +61,8 @@ services:
     build:
       context: ..
       dockerfile: Dockerfile
-    # Its own tag: the existing amplify-qea:latest / :local images are left alone.
-    image: amplify-qea:grid-local
+    # Its own tag: the existing amplify-qea-grid-grid:latest / :local images are left alone.
+    image: amplify-qea-grid-grid:grid-local
     depends_on:
       coordinator:
         condition: service_healthy
@@ -74,7 +74,7 @@ services:
       - amplify-data:/app/data
     ports:
       - "127.0.0.1:8080:8080"   # Amplify QEA
-      - "127.0.0.1:8501:8501"   # Jira Insights (started by Amplify on first use of the Insights tab)
+      - "127.0.0.1:8501:8501"   # Jira Hub (started by Amplify on first use of the Insights tab)
 
   # Not started by `up`: only here so `--profile runners build runner` builds the image the launcher runs.
   # chromium is the one browser that exists for both arm64 and amd64 (Edge/Chrome are amd64-only);

@@ -3,7 +3,7 @@ kind: PersistentVolumeClaim
 metadata:
   name: amplify-data-pvc
   labels:
-    app: amplify-qea
+    app: amplify-qea-grid
 spec:
   accessModes:
     - ReadWriteOnce

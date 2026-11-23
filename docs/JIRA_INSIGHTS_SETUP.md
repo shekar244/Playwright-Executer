@@ -1,13 +1,13 @@
-# Jira Insights Setup Guide
+# Jira Hub Setup Guide
 
-Jira Insights is a **separate Streamlit application** that runs alongside the main Flask server.
+Jira Hub is a **separate Streamlit application** that runs alongside the main Flask server.
 
 ## 🚀 Quick Start
 
 ### Option 1: Auto-Start from UI (Recommended)
 
-1. Click the **📈 Jira Insights** tab in the main navigation
-2. You should see a **"▶ Start Jira Insights"** button
+1. Click the **📈 Jira Hub** tab in the main navigation
+2. You should see a **"▶ Start Jira Hub"** button
 3. Click the button
 4. Wait ~10 seconds for Streamlit to boot
 5. The app will embed in the iframe
@@ -28,7 +28,7 @@ cd /Users/admin/Documents/GitHub/amplify
 streamlit run src/jira_insights/app.py --server.port 8501
 ```
 
-Then refresh the **📈 Jira Insights** tab and it should connect.
+Then refresh the **📈 Jira Hub** tab and it should connect.
 
 ---
 
@@ -62,11 +62,11 @@ If not configured, you can still:
 The Streamlit app is **NOT started by default** in Docker. You need to:
 
 1. **Option A: Start from UI (if image has terminal access)**
-   - Just use the "▶ Start Jira Insights" button in the tab
+   - Just use the "▶ Start Jira Hub" button in the tab
 
 2. **Option B: Manual startup in container**
    ```bash
-   docker exec -it amplify-qea-test \
+   docker exec -it amplify-qea-grid-test \
      streamlit run src/jira_insights/app.py --server.port 8501
    ```
 
@@ -78,7 +78,7 @@ The Streamlit app is **NOT started by default** in Docker. You need to:
 ### Ports
 
 - **Flask (Main app):** `8080`
-- **Streamlit (Jira Insights):** `8501`
+- **Streamlit (Jira Hub):** `8501`
 
 Both must be exposed if running in Docker.
 
@@ -95,7 +95,7 @@ curl http://localhost:8501/_stcore/health
 
 ### Check tab status:
 
-Look at the Jira Insights tab header:
+Look at the Jira Hub tab header:
 - Shows the port it's running on
 - Shows connection status
 - Shows error messages if startup failed
@@ -104,20 +104,20 @@ Look at the Jira Insights tab header:
 
 ```bash
 # Logs are written to workspace dir
-tail -f ~/.amplify-qea/workspaces/<user_id>/streamlit.log
+tail -f ~/.amplify-qea-grid/workspaces/<user_id>/streamlit.log
 ```
 
 ---
 
 ## 🐛 Troubleshooting
 
-### Issue: "Connection refused" on Jira Insights tab
+### Issue: "Connection refused" on Jira Hub tab
 
 **Cause:** Streamlit server is not running
 
-**Fix:** Click "▶ Start Jira Insights" button and wait 10 seconds
+**Fix:** Click "▶ Start Jira Hub" button and wait 10 seconds
 
-### Issue: "Timed out waiting for Jira Insights to start"
+### Issue: "Timed out waiting for Jira Hub to start"
 
 **Cause:** Streamlit is taking >45 seconds to boot, or failed to start
 
@@ -127,7 +127,7 @@ tail -f ~/.amplify-qea/workspaces/<user_id>/streamlit.log
 ps aux | grep streamlit
 
 # Check error logs
-cat ~/.amplify-qea/workspaces/1/streamlit.log
+cat ~/.amplify-qea-grid/workspaces/1/streamlit.log
 
 # Try manual start to see errors
 streamlit run src/jira_insights/app.py
@@ -169,7 +169,7 @@ pip install openpyxl pandas
 
 ---
 
-## 📊 What You Can Do in Jira Insights
+## 📊 What You Can Do in Jira Hub
 
 ### 📊 Dashboard
 - Pin reports and view them on one page
@@ -216,7 +216,7 @@ pip install openpyxl pandas
 
 Streamlit config: `src/amplify_server/.streamlit/config.toml`
 
-Workspace data: `~/.amplify-qea/workspaces/{user_id}/`
+Workspace data: `~/.amplify-qea-grid/workspaces/{user_id}/`
 - `streamlit.log` — Error logs
 - `jira_insights_state/` — Dashboard/report definitions (auto-created)
 
@@ -224,19 +224,19 @@ Workspace data: `~/.amplify-qea/workspaces/{user_id}/`
 
 ## 🚀 Production (OpenShift)
 
-### As its own pod at `/jira-insights`
+### As its own pod at `/jira-hub`
 
-The manifests in `opns/` and `k8s/` run Insights in its own pod, served at `/jira-insights` on QEA's host, with the same users, workspaces and sign-in as QEA. See *Jira Insights (its own pod, at `/jira-insights`)* in `opns/README.md` for the settings. The example below is the older layout with Insights on its own host.
+The manifests in `opns/` and `k8s/` run Insights in its own pod, served at `/jira-hub` on QEA's host, with the same users, workspaces and sign-in as QEA. See *Jira Hub (its own pod, at `/jira-hub`)* in `opns/README.md` for the settings. The example below is the older layout with Insights on its own host.
 
 ### As Sidecar Service
 
-In Kubernetes/OpenShift, run Jira Insights as a **separate service**:
+In Kubernetes/OpenShift, run Jira Hub as a **separate service**:
 
 ```yaml
 apiVersion: v1
 kind: Service
 metadata:
-  name: amplify-insights
+  name: jira-hub
 spec:
   ports:
     - port: 8501
@@ -246,13 +246,13 @@ spec:
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: amplify-insights
+  name: jira-hub
 spec:
   template:
     spec:
       containers:
         - name: insights
-          image: amplify-qea:latest
+          image: amplify-qea-grid:latest
           command: ["streamlit", "run", "src/jira_insights/app.py", "--server.port", "8501"]
           ports:
             - containerPort: 8501
@@ -267,10 +267,10 @@ INSIGHTS_PUBLIC_URL=https://insights.example.com
 
 ## 🔗 User-Scoped Data
 
-Each user has their own Jira Insights workspace:
+Each user has their own Jira Hub workspace:
 
 ```
-~/.amplify-qea/workspaces/{user_id}/
+~/.amplify-qea-grid/workspaces/{user_id}/
 ├── streamlit.log              # Startup/error logs
 └── jira_insights_state/       # Dashboard definitions (auto-created)
     ├── datasets/              # Uploaded/pulled issues
@@ -320,10 +320,10 @@ Data is **completely isolated** per user — no cross-user data leakage.
 
 | Scenario | Action |
 |----------|--------|
-| Fresh install | Click "▶ Start Jira Insights" button on the tab |
+| Fresh install | Click "▶ Start Jira Hub" button on the tab |
 | Container restart | Auto-starts from UI button or manual CLI |
 | Port conflict | Set `INSIGHTS_PORT=8502` |
 | Slow boot | Wait 15 seconds, then refresh |
-| Connection refused | Check `~/.amplify-qea/workspaces/1/streamlit.log` |
+| Connection refused | Check `~/.amplify-qea-grid/workspaces/1/streamlit.log` |
 | Jira credentials | Configure in Config → Zephyr Config (optional) |
 

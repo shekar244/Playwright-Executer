@@ -1,8 +1,8 @@
 """
-Jira Insights settings — Jira connection details and workspace location.
+Jira Hub settings — Jira connection details and workspace location.
 
-The Jira connection is set up once, by an admin, in Amplify QEA (Admin Panel →
-Server Secrets) and shared by Test Management and Jira Insights. Users never
+The Jira connection is set up once, by an admin, in Amplify QEA Grid (Admin Panel →
+Server Secrets) and shared by Test Management and Jira Hub. Users never
 enter or see the credentials. Environment variables supply initial defaults,
 which lets containers inject secrets; a value saved in the Admin Panel wins:
 
@@ -18,7 +18,7 @@ from pathlib import Path
 TOOL_ROOT = Path(__file__).resolve().parent
 
 # Shown wherever Jira is missing, so users are pointed at the right person, not at a screen they cannot use.
-SETUP_BY_ADMIN = "Ask an admin to set up Jira in Amplify QEA (Admin Panel → Server Secrets)."
+SETUP_BY_ADMIN = "Ask an admin to set up Jira in Amplify QEA Grid (Admin Panel → Server Secrets)."
 
 _IN_CONTAINER = os.environ.get("CONTAINER", "0") == "1"
 

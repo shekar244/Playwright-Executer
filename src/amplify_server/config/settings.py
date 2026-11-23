@@ -21,7 +21,7 @@ def _jwt_secret() -> str:
     """JWT_SECRET_KEY, or — when it isn't set — a random key generated once and kept beside the database.
 
     There is deliberately no built-in default: a well-known key would let anyone forge sessions and
-    Jira Insights sign-in links. QEA and Insights on the same host or volume find the same file and so
+    Jira Hub sign-in links. QEA and Jira Hub on the same host or volume find the same file and so
     agree on the key; services deployed apart (separate volumes) must be given the same JWT_SECRET_KEY.
     """
     configured = os.environ.get("JWT_SECRET_KEY", "").strip()

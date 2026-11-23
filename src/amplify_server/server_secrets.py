@@ -251,7 +251,7 @@ def save_grid_config(coordinator_url=None, api_token=None, clear_token: bool = F
 # Two sets live in server_config.json, each a {key: bool} map the admin edits in
 # the Admin Panel and every user receives:
 #   "ui_tabs"          tabs of the main app             (UI_TAB_CATALOG)
-#   "insights_options" sidebar options + views of Jira Insights (INSIGHTS_OPTION_CATALOG)
+#   "insights_options" sidebar options + views of Jira Hub (INSIGHTS_OPTION_CATALOG)
 # A catalog entry is {"key", "label", "group", "default"}; unknown keys are rejected on save.
 
 def _load_flags(section: str, defaults: dict) -> dict:
@@ -300,7 +300,7 @@ UI_TAB_CATALOG = [
     {"key": "zephyr",       "label": "Test Management", "group": "main",   "default": True},
     {"key": "testdata",     "label": "Test Data",       "group": "main",   "default": True},
     {"key": "filemanager",  "label": "File Manager (admins only)", "group": "main", "default": True},
-    {"key": "insights",     "label": "Jira Insights",   "group": "main",   "default": False},
+    {"key": "insights",     "label": "Jira Hub",   "group": "main",   "default": False},
     {"key": "tools",        "label": "Config",          "group": "main",   "default": True},
     {"key": "cfg_features", "label": "Features",        "group": "config", "default": True},
     {"key": "cfg_repo",     "label": "Repo",            "group": "config", "default": True},
@@ -356,7 +356,7 @@ def save_ui_tabs(tabs: dict, default_tab: str | None = None) -> dict:
     return merged
 
 
-# ── Jira Insights options ─────────────────────────────────────────────────────
+# ── Jira Hub options ─────────────────────────────────────────────────────
 # group "sidebar": the sidebar sections (keys src_* are the ways to create a dataset).
 # group "views":   the view switcher along the top of the Insights page.
 
@@ -378,7 +378,7 @@ _INSIGHTS_SOURCE_KEYS = [k for k in _DEFAULT_INSIGHTS_OPTIONS if k.startswith("s
 
 
 def load_insights_options() -> dict:
-    """Effective Jira Insights option visibility: saved values over defaults."""
+    """Effective Jira Hub option visibility: saved values over defaults."""
     return _load_flags("insights_options", _DEFAULT_INSIGHTS_OPTIONS)
 
 

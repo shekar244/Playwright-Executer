@@ -40,25 +40,25 @@ stages:
               docker build \
                 --build-arg BASE_REGISTRY=$(JFROG_REGISTRY)/$(JFROG_REMOTE_REPO)/ \
                 --build-arg APT_PROXY=https://$(JFROG_REGISTRY)/artifactory/debian-remote \
-                -t $(JFROG_REGISTRY)/$(JFROG_REPO)/amplify-qea:$(IMAGE_TAG) \
-                -t $(JFROG_REGISTRY)/$(JFROG_REPO)/amplify-qea:latest \
+                -t $(JFROG_REGISTRY)/$(JFROG_REPO)/amplify-qea-grid:$(IMAGE_TAG) \
+                -t $(JFROG_REGISTRY)/$(JFROG_REPO)/amplify-qea-grid:latest \
                 .
-            displayName: 'Build amplify-qea'
+            displayName: 'Build amplify-qea-grid'
 
           - script: |
-              docker push $(JFROG_REGISTRY)/$(JFROG_REPO)/amplify-qea:$(IMAGE_TAG)
-              docker push $(JFROG_REGISTRY)/$(JFROG_REPO)/amplify-qea:latest
-            displayName: 'Push amplify-qea'
+              docker push $(JFROG_REGISTRY)/$(JFROG_REPO)/amplify-qea-grid:$(IMAGE_TAG)
+              docker push $(JFROG_REGISTRY)/$(JFROG_REPO)/amplify-qea-grid:latest
+            displayName: 'Push amplify-qea-grid'
 
           - script: |
               echo "=========================================="
-              echo "  amplify-qea pushed"
-              echo "  $(JFROG_REGISTRY)/$(JFROG_REPO)/amplify-qea:$(IMAGE_TAG)"
+              echo "  amplify-qea-grid pushed"
+              echo "  $(JFROG_REGISTRY)/$(JFROG_REPO)/amplify-qea-grid:$(IMAGE_TAG)"
               echo "=========================================="
             displayName: 'Print QEA Info'
 
-      - job: BuildInsights
-        displayName: 'Amplify Insights (Streamlit)'
+      - job: BuildJiraHub
+        displayName: 'Jira Hub (Streamlit)'
         pool:
           name: 'Default'
           demands:
@@ -77,22 +77,22 @@ stages:
               docker build \
                 -f Dockerfile.insights \
                 --build-arg BASE_REGISTRY=$(JFROG_REGISTRY)/$(JFROG_REMOTE_REPO)/ \
-                -t $(JFROG_REGISTRY)/$(JFROG_REPO)/amplify-insights:$(IMAGE_TAG) \
-                -t $(JFROG_REGISTRY)/$(JFROG_REPO)/amplify-insights:latest \
+                -t $(JFROG_REGISTRY)/$(JFROG_REPO)/jira-hub:$(IMAGE_TAG) \
+                -t $(JFROG_REGISTRY)/$(JFROG_REPO)/jira-hub:latest \
                 .
-            displayName: 'Build amplify-insights'
+            displayName: 'Build jira-hub'
 
           - script: |
-              docker push $(JFROG_REGISTRY)/$(JFROG_REPO)/amplify-insights:$(IMAGE_TAG)
-              docker push $(JFROG_REGISTRY)/$(JFROG_REPO)/amplify-insights:latest
-            displayName: 'Push amplify-insights'
+              docker push $(JFROG_REGISTRY)/$(JFROG_REPO)/jira-hub:$(IMAGE_TAG)
+              docker push $(JFROG_REGISTRY)/$(JFROG_REPO)/jira-hub:latest
+            displayName: 'Push jira-hub'
 
           - script: |
               echo "=========================================="
-              echo "  amplify-insights pushed"
-              echo "  $(JFROG_REGISTRY)/$(JFROG_REPO)/amplify-insights:$(IMAGE_TAG)"
+              echo "  jira-hub pushed"
+              echo "  $(JFROG_REGISTRY)/$(JFROG_REPO)/jira-hub:$(IMAGE_TAG)"
               echo "=========================================="
-            displayName: 'Print Insights Info'
+            displayName: 'Print Jira Hub Info'
 
       - job: BuildCoordinator
         displayName: 'Amplify Grid Coordinator'

@@ -1,25 +1,25 @@
-# Jira Insights at /jira-insights on the SAME host as Amplify QEA (amplify-route.yaml): OpenShift sends requests whose
-# path starts with /jira-insights to the amplify-insights service, everything else to amplify-qea. The path is not
-# rewritten: Insights serves under it (STREAMLIT_SERVER_BASE_URL_PATH=jira-insights in amplify-deployment-insights.yaml).
+# Jira Hub at /jira-hub on the SAME host as Amplify QEA (amplify-route.yaml): OpenShift sends requests whose
+# path starts with /jira-hub to the jira-hub service, everything else to amplify-qea-grid. The path is not
+# rewritten: Insights serves under it (STREAMLIT_SERVER_BASE_URL_PATH=jira-hub in amplify-deployment-insights.yaml).
 #
-# `host` must be the amplify-qea route's host. amplify-jfrog-deploy.sh fills it in; by hand:
-#   HOST=$(oc get route amplify-qea -o jsonpath='{.spec.host}')
+# `host` must be the amplify-qea-grid route's host. amplify-jfrog-deploy.sh fills it in; by hand:
+#   HOST=$(oc get route amplify-qea-grid -o jsonpath='{.spec.host}')
 #   sed "s|AMPLIFY_HOST|$HOST|" opns/amplify-route-insights.yaml | oc apply -f -
 apiVersion: route.openshift.io/v1
 kind: Route
 metadata:
-  name: amplify-insights
+  name: jira-hub
   labels:
-    app: amplify-insights
+    app: jira-hub
   annotations:
     # Streamlit keeps a WebSocket open; the router's default 30s idle timeout would drop a quiet session.
     haproxy.router.openshift.io/timeout: 3600s
 spec:
   host: AMPLIFY_HOST
-  path: /jira-insights
+  path: /jira-hub
   to:
     kind: Service
-    name: amplify-insights
+    name: jira-hub
   port:
     targetPort: streamlit
   tls:

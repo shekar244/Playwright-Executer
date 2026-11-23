@@ -73,7 +73,7 @@ function applyRepo(path, andDiscover = true) {
   document.getElementById('repo').value = path;
   const name = path.split(/[/\\]/).filter(Boolean).pop() || path;
   document.getElementById('repoSubtitle').textContent = '📁 ' + name;
-  document.title = 'Amplify QEA — ' + name;
+  document.title = 'Amplify QEA Grid — ' + name;
 
   // Update active banner
   const banner = document.getElementById('activeRepoBanner');
@@ -182,7 +182,7 @@ async function loadRepoStatus() {
     brEl.textContent = s.branch ? '⎇ ' + s.branch : '';
     document.getElementById('repo').value = s.repo_path;
     document.getElementById('repoSubtitle').textContent = '📁 ' + s.repo_name;
-    document.title = 'Amplify QEA — ' + s.repo_name;
+    document.title = 'Amplify QEA Grid — ' + s.repo_name;
 
     // Venv section
     venvSec.style.display = 'block';

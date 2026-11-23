@@ -1,8 +1,8 @@
 # ── Amplify QEA — OpenShift / Docker Image ────────────────────────────────────
 #
-# Build (public):   docker build -t amplify-qea .
-# Build (JFrog):    docker build --build-arg BASE_REGISTRY=yourcompany.jfrog.io/docker-remote/ -t amplify-qea .
-# Run:              docker run -p 8080:8080 amplify-qea
+# Build (public):   docker build -t amplify-qea-grid .
+# Build (JFrog):    docker build --build-arg BASE_REGISTRY=yourcompany.jfrog.io/docker-remote/ -t amplify-qea-grid .
+# Run:              docker run -p 8080:8080 amplify-qea-grid
 # ─────────────────────────────────────────────────────────────────────────────
 
 ARG BASE_REGISTRY=

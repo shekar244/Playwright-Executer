@@ -1,7 +1,7 @@
-"""Admin-controlled visibility of Jira Insights options.
+"""Admin-controlled visibility of Jira Hub options.
 
-An Amplify QEA admin chooses which sidebar options and views Insights shows (Admin
-Panel → Jira Insights Options). This module resolves that setting:
+An Amplify QEA Grid admin chooses which sidebar options and views Insights shows (Admin
+Panel → Jira Hub Options). This module resolves that setting:
 
   * QEA_API_URL set  → fetched from QEA over HTTP. Needed when Insights runs on its own
                        disk (e.g. Render) and cannot read QEA's server_config.json.

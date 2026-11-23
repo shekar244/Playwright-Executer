@@ -1,5 +1,5 @@
 """
-Zephyr test runs for Jira Insights — a thin adapter over Amplify QEA's own
+Zephyr test runs for Jira Hub — a thin adapter over Amplify QEA Grid's own
 Test Management code (routes/zephyr.py).
 
 Every request goes through _z_call (Zephyr Squad Cloud, JWT-signed with the
@@ -41,7 +41,7 @@ def default_project_key(settings=None) -> str:
 
 
 def setup_hint() -> str:
-    return ("⚪ Zephyr isn't configured yet. Ask an admin to set it up in Amplify QEA "
+    return ("⚪ Zephyr isn't configured yet. Ask an admin to set it up in Amplify QEA Grid "
             "(Admin Panel → Server Secrets: Jira URL, access key, secret key, account id).")
 
 

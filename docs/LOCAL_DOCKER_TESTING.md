@@ -16,16 +16,16 @@ docker --version
 cd /Users/admin/Documents/GitHub/amplify
 
 # Build the image
-docker build -t amplify-qea:latest .
+docker build -t amplify-qea-grid:latest .
 
 # Verify build succeeded
-docker images | grep amplify-qea
+docker images | grep amplify-qea-grid
 ```
 
 **Expected output:**
 ```
 REPOSITORY      TAG       IMAGE ID      CREATED       SIZE
-amplify-qea     latest    abc123def456  10 seconds ago  500MB
+amplify-qea-grid     latest    abc123def456  10 seconds ago  500MB
 ```
 
 ## Step 2: Run the Container Locally
@@ -36,7 +36,7 @@ amplify-qea     latest    abc123def456  10 seconds ago  500MB
 docker run -p 8080:8080 \
   -e JWT_SECRET_KEY="local-test-key-change-me" \
   -e CONTAINER=1 \
-  amplify-qea:latest
+  amplify-qea-grid:latest
 ```
 
 **Expected output:**
@@ -60,7 +60,7 @@ docker run -p 8080:8080 \
   -e JWT_SECRET_KEY="local-test-key-change-me" \
   -e CONTAINER=1 \
   -v ~/amplify-test-data:/app/data \
-  amplify-qea:latest
+  amplify-qea-grid:latest
 ```
 
 **Verify volume mount:**
@@ -227,7 +227,7 @@ docker run -p 8080:8080 \
   -e JWT_SECRET_KEY="local-test-key-change-me" \
   -e CONTAINER=1 \
   -v ~/amplify-test-data:/app/data \
-  amplify-qea:latest
+  amplify-qea-grid:latest
 
 # Wait for startup (~5 seconds)
 
@@ -400,7 +400,7 @@ diff ~/amplify-test-data/workspaces/1/config/config.json \
 docker stop $(docker ps -a -q)
 
 # Remove the image
-docker rmi amplify-qea:latest
+docker rmi amplify-qea-grid:latest
 
 # Remove test data
 rm -rf ~/amplify-test-data
@@ -415,10 +415,10 @@ Once local testing passes, you can deploy to OpenShift:
 
 ```bash
 # Tag for registry
-docker tag amplify-qea:latest <your-registry>/amplify-qea:latest
+docker tag amplify-qea-grid:latest <your-registry>/amplify-qea-grid:latest
 
 # Push to registry
-docker push <your-registry>/amplify-qea:latest
+docker push <your-registry>/amplify-qea-grid:latest
 
 # Create OpenShift deployment (see ARCHITECTURE.md)
 ```

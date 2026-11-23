@@ -15,7 +15,7 @@ Blueprint: Admin routes
   POST   /api/admin/grid/pytest-args    — replace them {"arguments": [...]} (see src/amplify_server/grid_args.py)
   GET    /api/admin/ui-tabs             — tab catalog + current visibility + landing tab
   POST   /api/admin/ui-tabs             — set which tabs every user sees (and, optionally, the landing tab)
-  GET    /api/admin/insights-options    — Jira Insights option catalog + current visibility
+  GET    /api/admin/insights-options    — Jira Hub option catalog + current visibility
   POST   /api/admin/insights-options    — set which Insights options every user sees
 """
 import shutil
@@ -278,7 +278,7 @@ def ui_tabs():
 @bp.route("/api/admin/insights-options", methods=["GET", "POST"])
 @require_admin
 def insights_options():
-    """Jira Insights sidebar options and views, server-wide."""
+    """Jira Hub sidebar options and views, server-wide."""
     return _flags_endpoint(body_key="insights_options", load=load_insights_options,
                            save=save_insights_options, catalog=INSIGHTS_OPTION_CATALOG,
                            action="admin_update_insights_options")

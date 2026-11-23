@@ -17,9 +17,9 @@ Deployable on **Docker**, **OpenShift**, **Render.com**, or any container platfo
 | **Test Management** | Full Zephyr for Jira Cloud — import tests, bulk upload results, view/mark executions, hierarchical metrics |
 | **File Manager** | **Admins only.** Browse and edit `.json`, `.yaml`, `.env`, `.csv`, `.xlsx` files with dedicated editors per format. It reaches any path on the server (including the saved Jira / Zephyr / Grid secrets), so its tab is shown to admins only and its endpoints reject everyone else |
 | **AI Studio** | AI-powered test assistance |
-| **Jira Insights** | Streamlit-based reporting — pull Jira issues with JQL, build pivot reports and charts, or a **Table** report of just the columns you pick (downloadable as CSV and Excel; the **Key** column links to the issue in Jira). **Sprint Reports** include stories and defects carried forward out of each sprint, and KPI tiles can be plain, full colour or gradient (runs on port 8501) |
+| **Jira Hub** | Streamlit-based reporting — pull Jira issues with JQL, build pivot reports and charts, or a **Table** report of just the columns you pick (downloadable as CSV and Excel; the **Key** column links to the issue in Jira). **Sprint Reports** include stories and defects carried forward out of each sprint, and KPI tiles can be plain, full colour or gradient (runs on port 8501) |
 | **Config** | Repository config, features/scripts, git commands, CLI tools, Allure settings, JFrog Artifactory, field mappings |
-| **Admin Panel** | Tabbed admin portal: Overview, Users, Server Config, Grid, Tab Visibility, Jira Insights and Activity. Includes user management, password resets, server secrets, Grid settings and server-wide UI visibility controls |
+| **Admin Panel** | Tabbed admin portal: Overview, Users, Server Config, Grid, Tab Visibility, Jira Hub and Activity. Includes user management, password resets, server secrets, Grid settings and server-wide UI visibility controls |
 
 ---
 
@@ -30,7 +30,7 @@ Deployable on **Docker**, **OpenShift**, **Render.com**, or any container platfo
 │  Amplify QEA Server                                  │
 │                                                      │
 │  Flask (gunicorn) ──── port 8080                     │
-│  Streamlit (Jira Insights) ── port 8501              │
+│  Streamlit (Jira Hub) ── port 8501              │
 │                                                      │
 │  /app/data/ (persistent volume)                      │
 │    ├── amplify.db            (SQLite: users, sessions,│
@@ -54,12 +54,12 @@ Deployable on **Docker**, **OpenShift**, **Render.com**, or any container platfo
 ### Docker (recommended)
 
 ```bash
-docker build -t amplify-qea .
+docker build -t amplify-qea-grid .
 docker run -p 8080:8080 -p 8501:8501 \
   -e JWT_SECRET_KEY="$(openssl rand -base64 32)" \
   -e CONTAINER=1 \
   -v amplify-data:/app/data \
-  amplify-qea
+  amplify-qea-grid
 ```
 
 Open `http://localhost:8080/register` to create your account. The first registered user is automatically promoted to admin.
@@ -67,12 +67,12 @@ Open `http://localhost:8080/register` to create your account. The first register
 ### Docker Hub
 
 ```bash
-docker pull shekar244/amplify-qea:latest
+docker pull shekar244/amplify-qea-grid:latest
 docker run -p 8080:8080 -p 8501:8501 \
   -e JWT_SECRET_KEY="$(openssl rand -base64 32)" \
   -e CONTAINER=1 \
   -v amplify-data:/app/data \
-  shekar244/amplify-qea:latest
+  shekar244/amplify-qea-grid:latest
 ```
 
 ### Local Development
@@ -81,7 +81,7 @@ docker run -p 8080:8080 -p 8501:8501 \
 bash amplify.sh
 ```
 
-On first run the launcher creates `./venv` (Python 3.13 preferred), installs `amplify-requirements.txt` into it — including the Jira Insights dependencies — initializes the database and opens http://amplify-qea:7777. Jira Insights starts from its tab using the same venv. To run without the launcher:
+On first run the launcher creates `./venv` (Python 3.13 preferred), installs `amplify-requirements.txt` into it — including the Jira Hub dependencies — initializes the database and opens http://amplify-qea-grid:7777. Jira Hub starts from its tab using the same venv. To run without the launcher:
 
 ```bash
 python3 -m venv venv && venv/bin/pip install -r amplify-requirements.txt
@@ -90,7 +90,7 @@ venv/bin/python -m amplify_server.server
 
 ### Render.com
 
-1. Use image: `docker.io/shekar244/amplify-qea:latest`
+1. Use image: `docker.io/shekar244/amplify-qea-grid:latest`
 2. Set env var: `JWT_SECRET_KEY` = (generate with `openssl rand -base64 32`)
 3. Set env var: `CONTAINER` = `1`
 4. Add disk: mount path `/app/data`
@@ -124,7 +124,7 @@ Every user gets a completely isolated workspace:
 - **History** — separate `report_history.json` per user
 - **Repos** — cloned repos stored in the user's workspace, `/app/data/workspaces/<user id>/repos/<name>` (Amplify's data folder: the `amplify-data` volume locally, the `amplify-data-pvc` PVC in OpenShift; runner pods never see it — a Grid run sends them a snapshot of the committed code). Managed in the **Repository** tab: the active repo (what the Executor runs and the Grid snapshots), its branch and last commit, pull, switch branch, the user's other clones, clone a new one. Hide the Executor in Admin → Tab Visibility and users land on the Repository tab
 - **Access tokens (PATs)** — saved per repo in `repo_configs.json` (mode 0600), never returned to a browser and never written into a repo's `.git/config` (tests run inside that folder): git gets the token for each call from its environment. Config → Git commands get it (and the repo's certificate choice) the same way. Clones made by older versions kept the token in their remote URL; it is moved into the saved settings and the URL cleaned the first time the Repository tab, the repo status or the saved repos are read
-- **Jira Insights** — datasets and reports per user
+- **Jira Hub** — datasets and reports per user
 - No cross-user data visibility
 
 ### Admin Panel (`/admin`)
@@ -143,7 +143,7 @@ Accessible only to admin users (via user dropdown menu):
 | **Server Secrets** | Configure Jira/Zephyr credentials (admin only) |
 | **Grid** | Set the Grid coordinator URL and API token for every user, configure the environment choices shown in the Grid tab, choose the default environment, and define optional pytest arguments passed to runner pods. Saving checks the coordinator connection. The token is write-only. Saved coordinator values override `GRID_COORDINATOR_URL` / `GRID_API_TOKEN` |
 | **Tab Visibility** | Choose which main tabs and Config sub-tabs every user sees, and which tab they **land on** after signing in or reloading (default: Executor; if the chosen tab is later hidden, users land on the first visible tab). Server-wide, admin only |
-| **Jira Insights Options** | Choose which Insights sidebar options (JQL / Zephyr / Sprint / Upload, Excluded fields, Colour theme) and views (Dashboard, Sprint Reports, Report Builder, Explorer, Data) every user sees. Hidden options are not rendered at all |
+| **Jira Hub Options** | Choose which Insights sidebar options (JQL / Zephyr / Sprint / Upload, Excluded fields, Colour theme) and views (Dashboard, Sprint Reports, Report Builder, Explorer, Data) every user sees. Hidden options are not rendered at all |
 
 ### Admin Bootstrap (for platforms without shell access)
 
@@ -235,7 +235,7 @@ The UI adapts to phone and tablet screens:
 | openpyxl | 3.1+ | Excel file editing |
 | pyyaml | 6.0+ | YAML file editing |
 
-Jira Insights additionally requires: `streamlit`, `pygwalker`, `plotly`, `pandas`
+Jira Hub additionally requires: `streamlit`, `pygwalker`, `plotly`, `pandas`
 
 ```bash
 pip install -r amplify-requirements.txt
@@ -246,7 +246,7 @@ pip install -r amplify-requirements.txt
 ## Project Layout
 
 ```
-amplify-qea/
+amplify-qea-grid/
 ├── amplify.sh / amplify.bat         # Local launchers
 ├── amplify-requirements.txt / coordinator-requirements.txt / runner-requirements.txt   # Python deps of each image
 ├── Dockerfile
@@ -291,7 +291,7 @@ amplify-qea/
     │   ├── filemanager.py           # File browse/read/write
     │   ├── git.py                   # Git commands
     │   ├── studio.py                # AI Studio
-    │   ├── insights.py              # Jira Insights launcher
+    │   ├── insights.py              # Jira Hub launcher
     │   ├── history.py               # Run history persistence
     │   └── state.py                 # Shared run state
     ├── templates/
@@ -308,7 +308,7 @@ amplify-qea/
 ├── src/runner/                      # Grid runner pod package
 ├── src/gridtest/                    # pytest-Playwright runner framework
 └── tests/
-    ├── amplify_server/              # Flask and Jira Insights tests by feature
+    ├── amplify_server/              # Flask and Jira Hub tests by feature
     ├── coordinator/                 # Coordinator tests
     ├── runner/                      # Runner tests
     └── sample/                      # Playwright sample suite
@@ -441,7 +441,7 @@ amplify-qea/
 | GET | `/api/fm/read` | Read file |
 | POST | `/api/fm/save` | Write file |
 
-### Jira Insights
+### Jira Hub
 
 | Method | Route | Purpose |
 |---|---|---|
@@ -464,10 +464,10 @@ amplify-qea/
 
 | Variable | Required | Default | Description |
 |---|---|---|---|
-| `JWT_SECRET_KEY` | **Yes** (in containers) | generated | Signing key for sessions and for the Jira Insights sign-in link. Set it explicitly in any real deployment. If unset, a random key is generated once and stored in the data directory, so QEA and Insights on the same host or volume agree automatically. **Insights deployed separately must be given the same value as QEA**, otherwise sign-in from QEA is refused |
-| `INSIGHTS_PUBLIC_URL` | When Insights has its own address | `http(s)://<host>:8501` | Browser-facing URL of Jira Insights — where the Insights tab and **↗ New tab** send the user: a full URL, or a path on QEA's own host such as `/jira-insights` (OpenShift/Kubernetes manifests) |
-| `INSIGHTS_INTERNAL_URL` | When Insights is its own pod | — | Where QEA reaches the Insights service, e.g. `http://amplify-insights:8501/jira-insights`. Set, QEA only checks its health there and never starts a Streamlit process of its own |
-| `STREAMLIT_SERVER_BASE_URL_PATH` | On the Insights pod, under a path | — | e.g. `jira-insights`: Insights serves its pages, assets, WebSocket and health check under `/jira-insights/` |
+| `JWT_SECRET_KEY` | **Yes** (in containers) | generated | Signing key for sessions and for the Jira Hub sign-in link. Set it explicitly in any real deployment. If unset, a random key is generated once and stored in the data directory, so QEA and Insights on the same host or volume agree automatically. **Insights deployed separately must be given the same value as QEA**, otherwise sign-in from QEA is refused |
+| `INSIGHTS_PUBLIC_URL` | When Insights has its own address | `http(s)://<host>:8501` | Browser-facing URL of Jira Hub — where the Insights tab and **↗ New tab** send the user: a full URL, or a path on QEA's own host such as `/jira-hub` (OpenShift/Kubernetes manifests) |
+| `INSIGHTS_INTERNAL_URL` | When Insights is its own pod | — | Where QEA reaches the Insights service, e.g. `http://jira-hub:8501/jira-hub`. Set, QEA only checks its health there and never starts a Streamlit process of its own |
+| `STREAMLIT_SERVER_BASE_URL_PATH` | On the Jira Hub pod, under a path | — | e.g. `jira-hub`: Jira Hub serves its pages, assets, WebSocket and health check under `/jira-hub/` |
 | `CONTAINER` | Yes | `1` | Set by Dockerfile |
 | `PORT` | No | `8080` | Flask listen port |
 | `ALLURE3_BIN` | No | `/usr/local/bin` (image) | Where the Allure 3 CLI is: the folder `npm install -g allure` installs into (what `echo $(npm config get prefix)/bin` prints) or the executable. The image ships Node, npm and the CLI and sets this. It is the default for each user's **Allure 3 binary path** (`allure3_bin`, Config → Allure) when that is empty; a path saved there wins. Where it is set, Allure 3 is also the default report format for new users (Allure 2 needs Java, which the image does not include). |

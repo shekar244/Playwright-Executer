@@ -1,5 +1,5 @@
 # Assumes the ingress-nginx controller. Replace amplify.example.com with your host in both Ingresses: QEA at /,
-# Jira Insights at /jira-insights (INSIGHTS_PUBLIC_URL in amplify-deployment.yaml).
+# Jira Hub at /jira-hub (INSIGHTS_PUBLIC_URL in amplify-deployment.yaml).
 #
 # TLS: either create the secret yourself
 #   kubectl -n amplify create secret tls amplify-tls --cert=tls.crt --key=tls.key
@@ -7,9 +7,9 @@
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
-  name: amplify-qea
+  name: amplify-qea-grid
   labels:
-    app: amplify-qea
+    app: amplify-qea-grid
   annotations:
     # Live test logs stream over Server-Sent Events — nginx must not buffer them.
     nginx.ingress.kubernetes.io/proxy-buffering: "off"
@@ -30,18 +30,18 @@ spec:
             pathType: Prefix
             backend:
               service:
-                name: amplify-qea
+                name: amplify-qea-grid
                 port:
                   name: http
 ---
-# Jira Insights at /jira-insights on the same host as QEA (ingress-nginx merges Ingresses for one host; the longer
-# path wins). Not rewritten: Insights serves under /jira-insights (STREAMLIT_SERVER_BASE_URL_PATH).
+# Jira Hub at /jira-hub on the same host as QEA (ingress-nginx merges Ingresses for one host; the longer
+# path wins). Not rewritten: Insights serves under /jira-hub (STREAMLIT_SERVER_BASE_URL_PATH).
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
-  name: amplify-insights
+  name: jira-hub
   labels:
-    app: amplify-insights
+    app: jira-hub
   annotations:
     # Streamlit runs on WebSockets; ingress-nginx upgrades them automatically, but the
     # default 60s idle timeout would drop a quiet session.
@@ -57,10 +57,10 @@ spec:
     - host: amplify.example.com
       http:
         paths:
-          - path: /jira-insights
+          - path: /jira-hub
             pathType: Prefix
             backend:
               service:
-                name: amplify-insights
+                name: jira-hub
                 port:
                   name: streamlit

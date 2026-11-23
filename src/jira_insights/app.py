@@ -1,5 +1,5 @@
 """
-Jira Insights — Streamlit reporting workspace for Amplify QEA.
+Jira Hub — Streamlit reporting workspace for Amplify QEA Grid.
 
 Pull Jira issues with JQL (or upload a Jira CSV/Excel export), then build
 pivot reports and charts from the UI — no code per chart:
@@ -9,7 +9,7 @@ pivot reports and charts from the UI — no code per chart:
   🎨 Explorer        PyGWalker drag-and-drop canvas
   🗃️ Data            raw issues with Jira links and downloads
 
-Started from the Jira Insights tab, or standalone from the tool root:
+Started from the Jira Hub tab, or standalone from the tool root:
   streamlit run src/jira_insights/app.py
 """
 from __future__ import annotations
@@ -34,7 +34,7 @@ from amplify_server.sso import verify_insights_token  # noqa: E402
 
 VIEWS = {"Dashboard": "📊", "Sprint Reports": "🏃", "Report Builder": "🧮", "Explorer": "🎨", "Data": "🗃️"}
 
-st.set_page_config(page_title="Jira Insights", page_icon="📈", layout="wide",
+st.set_page_config(page_title="Jira Hub", page_icon="📈", layout="wide",
                    initial_sidebar_state="expanded")
 
 ss = st.session_state
@@ -42,7 +42,7 @@ ss.setdefault("ji_dark_mode", st.query_params.get("theme", "light") == "dark")
 inject_css()
 
 # ── Authentication ────────────────────────────────────────────────────────────
-# Amplify QEA owns sign-in. Insights trusts exactly two things:
+# Amplify QEA Grid owns sign-in. Insights trusts exactly two things:
 #   1. a short-lived, signed ?sso= token minted by QEA — both the embedded tab and "New tab"
 #      go through QEA's /api/insights/open, which redirects here carrying one; or
 #   2. the sign-in form below (checked against QEA, or the shared user database).
@@ -106,14 +106,14 @@ if not _logged_in:
                  display:flex;align-items:center;justify-content:center;font-size:22px;
                  box-shadow:0 2px 8px rgba(0,113,227,.3);">⚡</div>
             <div style="font-size:24px;font-weight:800;letter-spacing:-0.03em;">Amplify <span style="color:#6e6e73;font-weight:400;">QEA</span></div>
-            <div style="color:#6e6e73;font-size:13px;margin-top:6px;">Jira Insights</div>
+            <div style="color:#6e6e73;font-size:13px;margin-top:6px;">Jira Hub</div>
         </div>
         """, unsafe_allow_html=True)
 
         if ss.pop("ji_sso_rejected", False):
             st.info("That sign-in link has expired or was already used. Sign in below, "
-                    "or reopen Jira Insights from Amplify QEA. If this keeps happening, ask an admin to "
-                    "check that Amplify QEA and Jira Insights are set up with the same JWT_SECRET_KEY.")
+                    "or reopen Jira Hub from Amplify QEA Grid. If this keeps happening, ask an admin to "
+                    "check that Amplify QEA Grid and Jira Hub are set up with the same JWT_SECRET_KEY.")
 
         _login_tab, _register_tab = st.tabs(["Sign In", "Create Account"])
 
@@ -194,7 +194,7 @@ ds = data_source.render_sidebar(store)
 _opts = get_options()          # admin-controlled: which options and views are enabled
 
 if ds is None:
-    hero("Jira Insights", ["Pull issues with JQL", "Build pivot reports", "No code per chart"])
+    hero("Jira Hub", ["Pull issues with JQL", "Build pivot reports", "No code per chart"])
     _sources = [text for key, text in (
         ("src_jql", "**New dataset from JQL** — pulls issues straight from Jira"),
         ("src_zephyr", "**New dataset from Zephyr** — test runs and executions"),

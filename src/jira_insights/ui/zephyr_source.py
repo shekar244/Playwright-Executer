@@ -8,7 +8,7 @@ Both fetch through the paged ZQL search — one search instead of an executions 
 per cycle, which hit Zephyr's rate limits on large versions. The drill-down shows
 the query it builds and can hand it to the ZQL editor for tweaking.
 
-This module is identical in the standalone Jira Report Builder and in Amplify QEA;
+This module is identical in the standalone Jira Report Builder and in Amplify QEA Grid;
 each app's zephyr.py provides the connection (is_configured, zephyr_client, …).
 """
 from __future__ import annotations

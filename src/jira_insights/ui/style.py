@@ -1,5 +1,5 @@
 """
-Visual layer for Jira Insights: page CSS (Apple-style flat surfaces, soft
+Visual layer for Jira Hub: page CSS (Apple-style flat surfaces, soft
 shadows, pill controls) and small HTML components — brand mark,
 hero header, card titles, and stat tiles.
 
@@ -384,7 +384,7 @@ def accent_for(key: str) -> str:
 
 def brand() -> None:
     st.markdown('<div class="ji-brand"><div class="ji-brand-mark">📈</div>'
-                '<div class="ji-brand-name">Jira Insights</div></div>', unsafe_allow_html=True)
+                '<div class="ji-brand-name">Jira Hub</div></div>', unsafe_allow_html=True)
 
 
 def swatches(colors) -> None:

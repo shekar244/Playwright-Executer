@@ -31,8 +31,8 @@
  Developer Machine               JFrog Artifactory              OpenShift Cluster
 ┌──────────────────┐           ┌──────────────────┐          ┌─────────────────────────┐
 │                  │  docker   │                  │  oc pull  │                         │
-│  Source Code     │──push───→ │  docker-local/   │────────→ │  Pod: amplify-qea       │
-│  + Dockerfile    │           │  amplify-qea     │          │  ├── Flask :8080         │
+│  Source Code     │──push───→ │  docker-local/   │────────→ │  Pod: amplify-qea-grid       │
+│  + Dockerfile    │           │  amplify-qea-grid     │          │  ├── Flask :8080         │
 │                  │           │  :latest         │          │  └── Streamlit :8501     │
 └──────────────────┘           └──────────────────┘          │                         │
                                                              │  PVC: /app/data (10Gi)  │
@@ -58,19 +58,19 @@
 ```bash
 cd /path/to/amplify
 
-docker build -t amplify-qea:latest .
+docker build -t amplify-qea-grid:latest .
 ```
 
 Verify the build:
 ```bash
-docker images | grep amplify-qea
+docker images | grep amplify-qea-grid
 ```
 
 ### Step 2: Tag for JFrog Artifactory
 
 ```bash
-# Format: <jfrog-registry>/<docker-repo>/amplify-qea:<tag>
-docker tag amplify-qea:latest yourcompany.jfrog.io/docker-local/amplify-qea:latest
+# Format: <jfrog-registry>/<docker-repo>/amplify-qea-grid:<tag>
+docker tag amplify-qea-grid:latest yourcompany.jfrog.io/docker-local/amplify-qea-grid:latest
 ```
 
 Replace:
@@ -86,19 +86,19 @@ docker login yourcompany.jfrog.io -u your-email@company.com
 # Enter your JFrog API key when prompted for password
 
 # Push the image
-docker push yourcompany.jfrog.io/docker-local/amplify-qea:latest
+docker push yourcompany.jfrog.io/docker-local/amplify-qea-grid:latest
 ```
 
-Verify in JFrog UI: Artifactory > docker-local > amplify-qea > latest
+Verify in JFrog UI: Artifactory > docker-local > amplify-qea-grid > latest
 
 ### Step 4: Create OpenShift Project
 
 ```bash
 oc login https://your-openshift-cluster
 
-oc new-project amplify-qea --display-name="Amplify QEA"
+oc new-project amplify-qea-grid --display-name="Amplify QEA"
 # or switch to existing:
-oc project amplify-qea
+oc project amplify-qea-grid
 ```
 
 ### Step 5: Create JFrog Pull Secret
@@ -140,10 +140,10 @@ Edit `opns/amplify-deployment.yaml` — change the image line to your JFrog path
 
 ```yaml
 # Find this line:
-image: image-registry.openshift-image-registry.svc:5000/${NAMESPACE}/amplify-qea:latest
+image: image-registry.openshift-image-registry.svc:5000/${NAMESPACE}/amplify-qea-grid:latest
 
 # Change to:
-image: yourcompany.jfrog.io/docker-local/amplify-qea:latest
+image: yourcompany.jfrog.io/docker-local/amplify-qea-grid:latest
 ```
 
 Add `imagePullSecrets` under `spec.template.spec`:
@@ -154,8 +154,8 @@ spec:
       imagePullSecrets:
         - name: jfrog-pull-secret
       containers:
-        - name: amplify-qea
-          image: yourcompany.jfrog.io/docker-local/amplify-qea:latest
+        - name: amplify-qea-grid
+          image: yourcompany.jfrog.io/docker-local/amplify-qea-grid:latest
 ```
 
 ### Step 8: Deploy All Resources
@@ -168,52 +168,54 @@ oc apply -f opns/amplify-route.yaml
 oc apply -f opns/amplify-deployment.yaml
 
 # Wait for rollout
-oc rollout status deployment/amplify-qea --timeout=120s
+oc rollout status deployment/amplify-qea-grid --timeout=120s
 ```
 
 ### Step 9: Verify Deployment
 
 ```bash
 # Check pod status
-oc get pods -l app=amplify-qea
+oc get pods -l app=amplify-qea-grid
 
 # Expected output:
 # NAME                           READY   STATUS    RESTARTS   AGE
-# amplify-qea-xxxxx-yyyyy        1/1     Running   0          30s
+# amplify-qea-grid-xxxxx-yyyyy        1/1     Running   0          30s
 
 # Get the route URL
-oc get route amplify-qea -o jsonpath='{.spec.host}'
+oc get route amplify-qea-grid -o jsonpath='{.spec.host}'
 
 # Check logs
-oc logs -f deployment/amplify-qea
+oc logs -f deployment/amplify-qea-grid
 
 # Open in browser
-open "https://$(oc get route amplify-qea -o jsonpath='{.spec.host}')"
+open "https://$(oc get route amplify-qea-grid -o jsonpath='{.spec.host}')"
 ```
 
-### Jira Insights (its own pod, at `/jira-insights`)
+### Jira Hub (its own pod, at `/jira-hub`)
 
-Jira Insights runs in its own pod (`amplify-insights`, Streamlit on port 8501) and is reached on QEA's own host at **`https://<amplify-qea host>/jira-insights`**: the `amplify-insights` route claims the path `/jira-insights` of that host, the `amplify-qea` route keeps everything else. `amplify-jfrog-deploy.sh` builds and deploys both; by hand:
+Jira Hub runs in its own pod (`jira-hub`, Streamlit on port 8501) and is reached on QEA's own host at **`https://<amplify-qea-grid host>/jira-hub`**: the `jira-hub` route claims the path `/jira-hub` of that host, the `amplify-qea-grid` route keeps everything else. `amplify-jfrog-deploy.sh` builds and deploys both; by hand:
 
 ```bash
 oc apply -f opns/amplify-deployment-insights.yaml            # Deployment + Service (set the image first)
-HOST=$(oc get route amplify-qea -o jsonpath='{.spec.host}')
+HOST=$(oc get route amplify-qea-grid -o jsonpath='{.spec.host}')
 sed "s|AMPLIFY_HOST|$HOST|" opns/amplify-route-insights.yaml | oc apply -f -
-oc delete route amplify-qea-insights --ignore-not-found       # the side-car route of older versions
+oc delete route amplify-qea-insights --ignore-not-found       # legacy side-car routes
+oc delete route amplify-qea-grid-insights --ignore-not-found
+oc delete route amplify-insights --ignore-not-found
 ```
 
 What makes it one app to users:
 
 | | Setting | Where |
 |---|---|---|
-| Served under the path | `STREAMLIT_SERVER_BASE_URL_PATH=jira-insights` (probes on `/jira-insights/_stcore/health`) | `amplify-deployment-insights.yaml` |
-| Where browsers go | `INSIGHTS_PUBLIC_URL=/jira-insights` | `amplify-deployment.yaml` |
-| Where QEA checks it (and never starts its own Streamlit) | `INSIGHTS_INTERNAL_URL=http://amplify-insights:8501/jira-insights` | `amplify-deployment.yaml` |
-| Same sign-in | the same `JWT_SECRET_KEY` (both read `amplify-secrets`): QEA hands Insights a 60-second single-use token for the logged-in user; Insights' own sign-in form goes through `QEA_API_URL=http://amplify-qea:8080` | both deployments |
+| Served under the path | `STREAMLIT_SERVER_BASE_URL_PATH=jira-hub` (probes on `/jira-hub/_stcore/health`) | `amplify-deployment-insights.yaml` |
+| Where browsers go | `INSIGHTS_PUBLIC_URL=/jira-hub` | `amplify-deployment.yaml` |
+| Where QEA checks it (and never starts its own Streamlit) | `INSIGHTS_INTERNAL_URL=http://jira-hub:8501/jira-hub` | `amplify-deployment.yaml` |
+| Same sign-in | the same `JWT_SECRET_KEY` (both read `amplify-secrets`): QEA hands Insights a 60-second single-use token for the logged-in user; Insights' own sign-in form goes through `QEA_API_URL=http://amplify-qea-grid:8080` | both deployments |
 | Same users and workspaces | both mount `amplify-data-pvc` at `/app/data` (`workspaces/<user id>/jira_insights`); the PVC is ReadWriteOnce, so the Insights pod has a pod affinity to the QEA pod's node (drop it with a ReadWriteMany class) | both deployments |
 | WebSockets | `haproxy.router.openshift.io/timeout: 3600s` on the route | `amplify-route-insights.yaml` |
 
-Users always enter through QEA (**Jira Insights** tab, or **↗ New tab**), already signed in as themselves.
+Users always enter through QEA (**Jira Hub** tab, or **↗ New tab**), already signed in as themselves.
 
 ### Distributed Grid
 
@@ -270,7 +272,7 @@ oc process -f opns/grid-04-keda-scaledjob.yaml \
 ```bash
 # 1. Register at https://<route-url>/register
 # 2. Promote to admin:
-oc exec deployment/amplify-qea -- \
+oc exec deployment/amplify-qea-grid -- \
   sqlite3 /app/data/amplify.db \
   "UPDATE users SET is_admin = 1 WHERE username = 'your-admin-username';"
 ```
@@ -289,7 +291,7 @@ JFROG_PASSWORD=your-api-key \
 ./opns/amplify-jfrog-deploy.sh
 ```
 
-The script handles all steps: build, tag, and push Amplify, Jira Insights, Coordinator, and runner images; create secrets; deploy Amplify, Grid, and verify rollouts.
+The script handles all steps: build, tag, and push Amplify, Jira Hub, Coordinator, and runner images; create secrets; deploy Amplify, Grid, and verify rollouts.
 
 ---
 
@@ -299,27 +301,27 @@ When you make code changes and need to redeploy:
 
 ```bash
 # 1. Rebuild
-docker build -t amplify-qea:latest .
-docker tag amplify-qea:latest yourcompany.jfrog.io/docker-local/amplify-qea:latest
+docker build -t amplify-qea-grid:latest .
+docker tag amplify-qea-grid:latest yourcompany.jfrog.io/docker-local/amplify-qea-grid:latest
 
 # 2. Push new image
-docker push yourcompany.jfrog.io/docker-local/amplify-qea:latest
+docker push yourcompany.jfrog.io/docker-local/amplify-qea-grid:latest
 
 # 3. Restart the deployment to pull the new image
-oc rollout restart deployment/amplify-qea
+oc rollout restart deployment/amplify-qea-grid
 
 # 4. Watch rollout
-oc rollout status deployment/amplify-qea
+oc rollout status deployment/amplify-qea-grid
 ```
 
 For versioned releases, use tags:
 ```bash
-docker tag amplify-qea:latest yourcompany.jfrog.io/docker-local/amplify-qea:v1.2.0
-docker push yourcompany.jfrog.io/docker-local/amplify-qea:v1.2.0
+docker tag amplify-qea-grid:latest yourcompany.jfrog.io/docker-local/amplify-qea-grid:v1.2.0
+docker push yourcompany.jfrog.io/docker-local/amplify-qea-grid:v1.2.0
 
 # Update deployment to use the new tag
-oc set image deployment/amplify-qea \
-  amplify-qea=yourcompany.jfrog.io/docker-local/amplify-qea:v1.2.0
+oc set image deployment/amplify-qea-grid \
+  amplify-qea-grid=yourcompany.jfrog.io/docker-local/amplify-qea-grid:v1.2.0
 ```
 
 ---
@@ -328,11 +330,11 @@ oc set image deployment/amplify-qea \
 
 ```
 ┌──────────────────────────────────────────────────────┐
-│  OpenShift Project: amplify-qea                      │
+│  OpenShift Project: amplify-qea-grid                      │
 │                                                      │
 │  ┌───────────────────────────────────────────────┐   │
-│  │  Pod: amplify-qea                             │   │
-│  │  Image: jfrog.io/docker-local/amplify-qea     │   │
+│  │  Pod: amplify-qea-grid                             │   │
+│  │  Image: jfrog.io/docker-local/amplify-qea-grid     │   │
 │  │                                               │   │
 │  │  Flask (gunicorn) ──── port 8080              │   │
 │  │  Streamlit ─────────── port 8501              │   │
@@ -354,8 +356,8 @@ oc set image deployment/amplify-qea \
 │    amplify-secrets   (JWT key, Jira/Zephyr creds)    │
 │    jfrog-pull-secret (Docker registry auth)          │
 │                                                      │
-│  Service:  amplify-qea (ports 8080, 8501)            │
-│  Route:    amplify-qea (HTTPS, edge TLS)             │
+│  Service:  amplify-qea-grid (ports 8080, 8501)            │
+│  Route:    amplify-qea-grid (HTTPS, edge TLS)             │
 │  PVC:      amplify-data-pvc (10Gi ReadWriteOnce)     │
 └──────────────────────────────────────────────────────┘
 ```
@@ -364,7 +366,7 @@ oc set image deployment/amplify-qea \
 
 ## Manifest Files Reference
 
-Files are named `<system>-<resource>`: `amplify-*` for Amplify QEA and Jira Insights, `grid-NN-*` for the Grid backend (`NN` is the apply order). The object names inside the manifests (`amplify-qea`, `central-coordinator`, `coordinator-data`, ...) are deployed identifiers and are not tied to the file names.
+Files are named `<system>-<resource>`: `amplify-*` for Amplify QEA and Jira Hub, `grid-NN-*` for the Grid backend (`NN` is the apply order). The object names inside the manifests (`amplify-qea-grid`, `central-coordinator`, `coordinator-data`, ...) are deployed identifiers and are not tied to the file names.
 
 | File | Resource | Purpose |
 |------|----------|---------|
@@ -373,9 +375,9 @@ Files are named `<system>-<resource>`: `amplify-*` for Amplify QEA and Jira Insi
 | `amplify-route.yaml` | Route | HTTPS route with edge TLS termination |
 | `amplify-pvc.yaml` | PersistentVolumeClaim | 10Gi storage for database and user workspaces |
 | `amplify-secrets.yaml` | Secret (template) | Template for JWT key and Jira/Zephyr credentials |
-| `amplify-deployment-insights.yaml` | Deployment + Service | Jira Insights in its own pod (port 8501, served under `/jira-insights`), same PVC and `JWT_SECRET_KEY` as QEA |
-| `amplify-route-insights.yaml` | Route | The path `/jira-insights` of QEA's host → the `amplify-insights` Service |
-| `amplify-jfrog-deploy.sh` | Script | Automated build, push, and deploy of Amplify QEA, Jira Insights, Coordinator, and runner images |
+| `amplify-deployment-insights.yaml` | Deployment + Service | Jira Hub in its own pod (port 8501, served under `/jira-hub`), same PVC and `JWT_SECRET_KEY` as QEA |
+| `amplify-route-insights.yaml` | Route | The path `/jira-hub` of QEA's host → the `jira-hub` Service |
+| `amplify-jfrog-deploy.sh` | Script | Automated build, push, and deploy of Amplify QEA, Jira Hub, Coordinator, and runner images |
 | `grid-secrets.example.yaml` | Secret template | PostgreSQL and Grid API credentials; create it before applying Grid manifests |
 | `grid-01-postgres.yaml` | PVC + Deployment + Service | Optional in-cluster PostgreSQL storage and service |
 | `grid-02-coordinator.yaml` | ServiceAccount, Role, RoleBinding, PVC, Deployment, Service | Grid coordinator API and queue, its data volume, and read access to runner pods |
@@ -408,27 +410,27 @@ Files are named `<system>-<resource>`: `amplify-*` for Amplify QEA and Jira Insi
 ### View Logs
 
 ```bash
-oc logs -f deployment/amplify-qea
+oc logs -f deployment/amplify-qea-grid
 ```
 
 ### Check Database
 
 ```bash
-oc exec deployment/amplify-qea -- \
+oc exec deployment/amplify-qea-grid -- \
   sqlite3 /app/data/amplify.db "SELECT id, username, is_admin FROM users;"
 ```
 
 ### Backup Data
 
 ```bash
-oc rsync $(oc get pod -l app=amplify-qea -o name):/app/data/ ./amplify-backup/
+oc rsync $(oc get pod -l app=amplify-qea-grid -o name):/app/data/ ./amplify-backup/
 ```
 
 ### Restore Data
 
 ```bash
-oc rsync ./amplify-backup/ $(oc get pod -l app=amplify-qea -o name):/app/data/
-oc rollout restart deployment/amplify-qea
+oc rsync ./amplify-backup/ $(oc get pod -l app=amplify-qea-grid -o name):/app/data/
+oc rollout restart deployment/amplify-qea-grid
 ```
 
 ### Update Secrets
@@ -439,7 +441,7 @@ oc patch secret amplify-secrets -p \
   '{"stringData":{"jira-api-token":"NEW_TOKEN_VALUE"}}'
 
 # Restart to pick up changes
-oc rollout restart deployment/amplify-qea
+oc rollout restart deployment/amplify-qea-grid
 ```
 
 ### Update JFrog Pull Secret
@@ -456,7 +458,7 @@ oc secrets link default jfrog-pull-secret --for=pull
 ### Delete Everything
 
 ```bash
-oc delete deployment,service,route,pvc,secret -l app=amplify-qea
+oc delete deployment,service,route,pvc,secret -l app=amplify-qea-grid
 oc delete secret jfrog-pull-secret
 ```
 
@@ -467,17 +469,17 @@ oc delete secret jfrog-pull-secret
 ### ImagePullBackOff
 
 ```bash
-oc describe pod -l app=amplify-qea | grep -A5 "Events"
+oc describe pod -l app=amplify-qea-grid | grep -A5 "Events"
 ```
 - Check JFrog pull secret exists: `oc get secret jfrog-pull-secret`
 - Check it's linked: `oc describe sa default | grep pull`
-- Verify image path matches JFrog: `oc get deployment amplify-qea -o jsonpath='{.spec.template.spec.containers[0].image}'`
-- Test pull manually: `docker pull yourcompany.jfrog.io/docker-local/amplify-qea:latest`
+- Verify image path matches JFrog: `oc get deployment amplify-qea-grid -o jsonpath='{.spec.template.spec.containers[0].image}'`
+- Test pull manually: `docker pull yourcompany.jfrog.io/docker-local/amplify-qea-grid:latest`
 
 ### CrashLoopBackOff
 
 ```bash
-oc logs deployment/amplify-qea --previous
+oc logs deployment/amplify-qea-grid --previous
 ```
 - Usually a Python import error or missing dependency
 - Check the Dockerfile built correctly
@@ -495,13 +497,13 @@ oc get sc   # list available storage classes
 OpenShift runs containers as a random non-root UID (GID 0). The Dockerfile handles this with `chmod g=u` and `chmod 777` on data directories.
 
 ```bash
-oc exec deployment/amplify-qea -- ls -la /app/data/
+oc exec deployment/amplify-qea-grid -- ls -la /app/data/
 ```
 
 ### Route Not Accessible
 
 ```bash
-oc get route amplify-qea -o yaml
+oc get route amplify-qea-grid -o yaml
 ```
 - Check TLS termination matches your cluster configuration
 - Try `insecureEdgeTerminationPolicy: Allow` for debugging
@@ -509,7 +511,7 @@ oc get route amplify-qea -o yaml
 ### Database Locked
 
 SQLite under heavy concurrent writes. Solutions:
-1. `oc rollout restart deployment/amplify-qea`
+1. `oc rollout restart deployment/amplify-qea-grid`
 2. For high concurrency, migrate to PostgreSQL
 
 ---

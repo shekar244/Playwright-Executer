@@ -1,12 +1,12 @@
-# ── Amplify Insights — Standalone Streamlit App ───────────────────────────────
+# ── Jira Hub — Standalone Streamlit App ─────────────────────────────────────
 #
-# Build:   docker build -f Dockerfile.insights -t amplify-insights .
+# Build:   docker build -f Dockerfile.insights -t jira-hub .
 # Run:     docker run -p 8501:8501 -v amplify-data:/app/data \
-#            -e JWT_SECRET_KEY=<the same value QEA uses> amplify-insights
+#            -e JWT_SECRET_KEY=<the same value QEA uses> jira-hub
 #          (Insights accepts sign-in links from QEA only when both use the same JWT_SECRET_KEY.
 #           Sharing the /app/data volume with QEA is enough if neither sets it.)
-# Under a path of QEA's host (OpenShift/Kubernetes: /jira-insights): -e STREAMLIT_SERVER_BASE_URL_PATH=jira-insights
-# (pages, assets, WebSocket and the health check then live under /jira-insights/).
+# Under a path of QEA's host (OpenShift/Kubernetes: /jira-hub): -e STREAMLIT_SERVER_BASE_URL_PATH=jira-hub
+# (pages, assets, WebSocket and the health check then live under /jira-hub/).
 # ─────────────────────────────────────────────────────────────────────────────
 
 ARG BASE_REGISTRY=
@@ -35,7 +35,7 @@ EXPOSE 8501
 HEALTHCHECK --interval=30s --timeout=10s --start-period=20s --retries=3 \
     CMD python -c "import os, urllib.request; p = os.environ.get('STREAMLIT_SERVER_BASE_URL_PATH', '').strip('/'); urllib.request.urlopen('http://localhost:8501/' + (p + '/' if p else '') + '_stcore/health', timeout=5)" || exit 1
 
-# Streamlit runs from the standalone Jira Insights package.
+# Streamlit runs from the standalone Jira Hub package.
 WORKDIR /app/src/jira_insights
 CMD ["streamlit", "run", "app.py", \
      "--server.port", "8501", \

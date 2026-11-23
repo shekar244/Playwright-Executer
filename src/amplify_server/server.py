@@ -39,7 +39,7 @@ from amplify_server.models.user import User
 from amplify_server.config import settings
 
 app = Flask(__name__, static_folder=str(_PKG / "static"), template_folder=str(_PKG / "templates"))
-app.secret_key = os.environ.get("AMPLIFY_SECRET_KEY") or "amplify-qea-local-secret-change-me"
+app.secret_key = os.environ.get("AMPLIFY_SECRET_KEY") or "amplify-qea-grid-local-secret-change-me"
 
 app.register_blueprint(executor_bp)
 app.register_blueprint(config_bp)
@@ -112,7 +112,7 @@ def static_files(path):
 
 # ── Hostname / port setup ──────────────────────────────────────────────────────
 
-HOSTNAME   = "amplify-qea"
+HOSTNAME   = "amplify-qea-grid"
 PORT       = int(os.environ.get("PORT", 7777))          # 8080 in container, 7777 locally
 _CONTAINER = os.environ.get("CONTAINER", "0") == "1"    # set to "1" in Dockerfile
 APP_URL    = f"http://{HOSTNAME}:{PORT}"

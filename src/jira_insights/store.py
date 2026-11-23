@@ -1,5 +1,5 @@
 """
-Workspace persistence for Jira Insights (location: settings.workspace_dir()).
+Workspace persistence for Jira Hub (location: settings.workspace_dir()).
 
   datasets/<slug>.parquet   — pulled / uploaded issues
   datasets/<slug>.json      — metadata: name, JQL, source, fetched_at, multi-value columns

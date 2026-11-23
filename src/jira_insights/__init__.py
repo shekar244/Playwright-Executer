@@ -1,5 +1,5 @@
 """
-Jira Insights — JQL-driven Jira reporting for Amplify QEA.
+Jira Hub — JQL-driven Jira reporting for Amplify QEA Grid.
 
 A Streamlit side-car app (app.py) that pulls Jira issues with JQL or from a
 Jira CSV/Excel export and lets users build pivot reports and charts from the

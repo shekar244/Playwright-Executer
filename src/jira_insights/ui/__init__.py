@@ -1,1 +1,1 @@
-"""Streamlit views for Jira Insights (sidebar data source, dashboard, builder, explorer, data)."""
+"""Streamlit views for Jira Hub (sidebar data source, dashboard, builder, explorer, data)."""

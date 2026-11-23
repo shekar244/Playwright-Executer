@@ -1,5 +1,5 @@
 """
-Blueprint: Jira Insights launcher
+Blueprint: Jira Hub launcher
   GET  /api/insights/status  — side-car state (running / healthy / port / public URL)
   POST /api/insights/start   — launch the Streamlit app if it isn't up yet
   POST /api/insights/stop    — stop the Streamlit process started by this server
@@ -9,8 +9,8 @@ Blueprint: Jira Insights launcher
 Two ways to run it (see src/jira_insights/launcher.py):
   * a side-car process of this server, on its own port (local runs, local Docker: -p 8501:8501);
   * its own pod/service (OpenShift, Kubernetes): INSIGHTS_INTERNAL_URL is where QEA checks it, and
-    INSIGHTS_PUBLIC_URL where browsers reach it — e.g. /jira-insights on QEA's own host, sent to the
-    Insights service by a route/ingress path (Streamlit started with STREAMLIT_SERVER_BASE_URL_PATH=jira-insights).
+    INSIGHTS_PUBLIC_URL where browsers reach it — e.g. /jira-hub on QEA's own host, sent to the
+    Insights service by a route/ingress path (Streamlit started with STREAMLIT_SERVER_BASE_URL_PATH=jira-hub).
 Either way users get there through /api/insights/open, signed in as their QEA user.
 """
 from __future__ import annotations
@@ -87,7 +87,7 @@ def _login_page_for_new_tabs(view):
 @_login_page_for_new_tabs
 @require_auth
 def insights_open():
-    """Send the browser to Jira Insights already signed in as the current user.
+    """Send the browser to Jira Hub already signed in as the current user.
 
     The embedded view and the "New tab" button both come through here, so every load gets a
     fresh single-use token (reload and theme changes included) and nothing about the user

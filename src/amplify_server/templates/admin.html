@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Amplify QEA — Admin</title>
+  <title>Amplify QEA Grid — Admin</title>
   <link rel="stylesheet" href="/static/css/amplify.css">
   <style>
     body { overflow: auto; flex-direction: column; }
@@ -204,7 +204,7 @@
     <button type="button" class="admin-tab" data-admin-tab="server">Server Config</button>
     <button type="button" class="admin-tab" data-admin-tab="grid">Grid</button>
     <button type="button" class="admin-tab" data-admin-tab="tabs">Tab Visibility</button>
-    <button type="button" class="admin-tab" data-admin-tab="insights">Jira Insights</button>
+    <button type="button" class="admin-tab" data-admin-tab="insights">Jira Hub</button>
     <button type="button" class="admin-tab" data-admin-tab="activity">Activity</button>
   </nav>
 
@@ -338,9 +338,9 @@
 
   <div class="admin-tab-pane" id="admin-pane-insights">
   <div class="admin-section">
-    <div class="admin-section-header">Jira Insights Options — all users</div>
+    <div class="admin-section-header">Jira Hub Options — all users</div>
     <div style="padding:16px 18px;display:flex;flex-direction:column;gap:14px;">
-      <div class="hint">Choose which options appear inside Jira Insights. Unticked options are not shown to anyone. At least one way to create a dataset and one view must stay enabled.</div>
+      <div class="hint">Choose which options appear inside Jira Hub. Unticked options are not shown to anyone. At least one way to create a dataset and one view must stay enabled.</div>
       <div class="tabvis-grid">
         <div>
           <div class="tabvis-title">Sidebar options</div>
@@ -352,7 +352,7 @@
         </div>
       </div>
       <div class="action-row">
-        <button class="btn btn-accent" onclick="saveFlags('insights')">Save Jira Insights Options</button>
+        <button class="btn btn-accent" onclick="saveFlags('insights')">Save Jira Hub Options</button>
         <span id="insOptsStatus" class="hint" style="display:none;"></span>
       </div>
     </div>
@@ -765,7 +765,7 @@ async function saveGridArgs() {
   loadActivity();
 }
 
-// Tab Visibility and Jira Insights Options are both {key: bool} maps rendered from a
+// Tab Visibility and Jira Hub Options are both {key: bool} maps rendered from a
 // server-side catalog, so the checkboxes can never drift from what the server accepts.
 const _flagSets = {
   tabs:     { url: '/api/admin/ui-tabs',          body: 'ui_tabs',
@@ -775,7 +775,7 @@ const _flagSets = {
               extra: () => ({ default_tab: document.getElementById('uiLandingTab').value }) },
   insights: { url: '/api/admin/insights-options', body: 'insights_options',
               groups: { sidebar: 'insOptsSidebar', views: 'insOptsViews' },
-              status: 'insOptsStatus', saved: 'Saved — Jira Insights picks it up within about 15 seconds', catalog: [] },
+              status: 'insOptsStatus', saved: 'Saved — Jira Hub picks it up within about 15 seconds', catalog: [] },
 };
 
 async function loadFlags(name) {

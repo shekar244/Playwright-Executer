@@ -16,7 +16,7 @@ import pandas as pd
 
 from .transform import MULTI_SEP, normalise_types
 
-# Zephyr's built-in status ids (Amplify QEA STATUS_MAP) for payloads that only carry an id.
+# Zephyr's built-in status ids (Amplify QEA Grid STATUS_MAP) for payloads that only carry an id.
 STATUS_NAMES = {1: "Pass", 2: "Fail", 3: "WIP", 4: "Blocked", -1: "Unexecuted"}
 NOT_EXECUTED = {"unexecuted", "not executed", "not run", "no run"}
 RESULT_ORDER = ("Passed", "Failed", "Blocked", "In progress", "Not run", "Other")

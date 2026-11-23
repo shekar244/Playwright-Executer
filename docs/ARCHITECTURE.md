@@ -42,7 +42,7 @@ GET    /api/auth/me              — Get current user info
 
 **Structure:**
 ```
-~/.amplify-qea/
+~/.amplify-qea-grid/
   amplify.db                    # SQLite database (local dev)
   workspaces/
     1/                          # User ID 1
@@ -140,7 +140,7 @@ python3 -m amplify_server.models.db    # Initialize database
 python3 src/amplify_server/server.py        # Run server
 ```
 
-Database stored in `~/.amplify-qea/amplify.db`, workspaces in `~/.amplify-qea/workspaces/`
+Database stored in `~/.amplify-qea-grid/amplify.db`, workspaces in `~/.amplify-qea-grid/workspaces/`
 
 **Docker / OpenShift:**
 ```dockerfile
@@ -365,16 +365,16 @@ spec:
 EOF
 
 # Build and deploy
-oc new-build --binary --name amplify-qea --strategy=docker
-oc start-build amplify-qea --from-dir=. --follow
-oc new-app amplify-qea \
+oc new-build --binary --name amplify-qea-grid --strategy=docker
+oc start-build amplify-qea-grid --from-dir=. --follow
+oc new-app amplify-qea-grid \
   -e DATABASE_URL="sqlite:////app/data/amplify.db" \
   -e JWT_SECRET_KEY="$(openssl rand -base64 32)" \
   -e CONTAINER=1 \
   -p PORT=8080
-oc set volume deployment/amplify-qea \
+oc set volume deployment/amplify-qea-grid \
   --add --type=pvc --claim-name=amplify-data-pvc -m /app/data
-oc expose service/amplify-qea
+oc expose service/amplify-qea-grid
 ```
 
 ---

@@ -1,4 +1,4 @@
-FROM amplify-qea:local
+FROM amplify-qea-grid-grid:local
 
 ENV PLAYWRIGHT_BROWSERS_PATH=/opt/playwright-browsers
 

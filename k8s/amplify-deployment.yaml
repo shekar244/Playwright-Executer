@@ -2,27 +2,27 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: amplify-qea
+  name: amplify-qea-grid
   labels:
-    app: amplify-qea
+    app: amplify-qea-grid
 spec:
   replicas: 1                 # SQLite + in-process run state: keep at 1
   strategy:
     type: Recreate            # never two pods writing the same SQLite file during a rollout
   selector:
     matchLabels:
-      app: amplify-qea
+      app: amplify-qea-grid
   template:
     metadata:
       labels:
-        app: amplify-qea
+        app: amplify-qea-grid
     spec:
       # Private registry (e.g. JFrog)? Create the pull secret (see README) and uncomment:
       # imagePullSecrets:
       #   - name: registry-pull-secret
       containers:
-        - name: amplify-qea
-          image: amplify-qea:latest           # real registry path comes from kustomization.yaml
+        - name: amplify-qea-grid
+          image: amplify-qea-grid:latest           # real registry path comes from kustomization.yaml
           ports:
             - containerPort: 8080
               name: http
@@ -31,13 +31,13 @@ spec:
               value: "1"
             - name: PORT
               value: "8080"
-            # Jira Insights runs in its own pod (amplify-deployment-insights.yaml). Browsers reach it at /jira-insights on
+            # Jira Hub runs in its own pod (amplify-deployment-insights.yaml). Browsers reach it at /jira-hub on
             # this app's own host (amplify-ingress.yaml); QEA checks its health on the service and never starts a
             # Streamlit process of its own. Users enter through /api/insights/open, signed in as their QEA user.
             - name: INSIGHTS_PUBLIC_URL
-              value: "/jira-insights"
+              value: "/jira-hub"
             - name: INSIGHTS_INTERNAL_URL
-              value: "http://amplify-insights:8501/jira-insights"
+              value: "http://jira-hub:8501/jira-hub"
             - name: GRID_COORDINATOR_URL
               valueFrom:
                 secretKeyRef: { name: amplify-secrets, key: grid-coordinator-url, optional: true }

@@ -1,6 +1,6 @@
-"""Short-lived sign-in hand-off from Amplify QEA to Jira Insights.
+"""Short-lived sign-in hand-off from Amplify QEA to Jira Hub.
 
-Insights is a separate Streamlit app (its own port, and in some deployments its own host),
+Jira Hub is a separate Streamlit app (its own port, and in some deployments its own host),
 so the browser's QEA session cookie can't be relied on to reach it. Instead QEA mints a signed
 token for the logged-in user and sends the browser to Insights with it:
 

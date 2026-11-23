@@ -534,7 +534,7 @@ async function dashCopyLogs() {
   const text = L.tab === 'tests' ? JSON.stringify(L.tests, null, 2) : (L[L.tab || 'stdout'] || '');
   let ok = false;
   try { await navigator.clipboard.writeText(text); ok = true; } catch (e) { /* not a secure origin (plain http) */ }
-  if (!ok) {                                          // http://amplify-qea has no clipboard API: use the old way
+  if (!ok) {                                          // http://amplify-qea-grid has no clipboard API: use the old way
     const box = document.createElement('textarea');
     box.value = text; box.style.cssText = 'position:fixed;opacity:0;top:0;left:0;';
     document.body.appendChild(box); box.select();

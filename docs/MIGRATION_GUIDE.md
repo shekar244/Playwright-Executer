@@ -176,7 +176,7 @@ curl -X GET http://localhost:7777/api/config \
   -H "Authorization: Bearer $TOKEN"
 
 # 4. Verify config is user-scoped
-ls ~/.amplify-qea/workspaces/1/config/config.json  # should exist
+ls ~/.amplify-qea-grid/workspaces/1/config/config.json  # should exist
 
 # 5. Register another user and verify isolation
 curl -X POST http://localhost:7777/api/auth/register \
@@ -184,7 +184,7 @@ curl -X POST http://localhost:7777/api/auth/register \
   -d '{"username":"user2","password":"pass456789"}'
 
 # 6. Verify user 2's config is separate
-ls ~/.amplify-qea/workspaces/2/config/config.json  # should be different
+ls ~/.amplify-qea-grid/workspaces/2/config/config.json  # should be different
 ```
 
 ---

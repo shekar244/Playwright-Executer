@@ -1,5 +1,5 @@
 <!-- ══════════════════════════════════════════════════════════════
-     Jira Insights Tab  (#page-insights)
+     Jira Hub Tab  (#page-insights)
      Embeds the Streamlit reporting app (jira_insights/app.py), which runs
      side-by-side with Flask on its own port (INSIGHTS_PORT, default 8501).
      Started on first visit; the iframe stays loaded across tab switches.
@@ -17,11 +17,11 @@
 <div id="page-insights">
   <div class="insights-bar">
     <span class="connect-dot" id="insightsDot"></span>
-    <span class="log-title">Jira Insights</span>
+    <span class="log-title">Jira Hub</span>
     <span class="hint" id="insightsStatus">Not started</span>
     <div class="insights-actions">
       <button type="button" class="btn-sm" onclick="insightsReload()" title="Reload the embedded app">↺ Reload</button>
-      <button type="button" class="btn-sm" onclick="insightsOpenNewTab()" title="Open Jira Insights in a new browser tab">↗ New tab</button>
+      <button type="button" class="btn-sm" onclick="insightsOpenNewTab()" title="Open Jira Hub in a new browser tab">↗ New tab</button>
       <button type="button" class="btn-sm" id="insightsStopBtn" onclick="insightsStop()" title="Stop the Streamlit process">■ Stop</button>
     </div>
   </div>
@@ -30,9 +30,9 @@
     <div class="empty-state-icon">📈</div>
     <div id="insightsEmptyMsg">Pull Jira issues with JQL and build pivot reports and charts — no code per chart.</div>
     <pre class="insights-log" id="insightsLog"></pre>
-    <button type="button" class="btn btn-accent" id="insightsStartBtn" onclick="insightsStart()">▶ Start Jira Insights</button>
+    <button type="button" class="btn btn-accent" id="insightsStartBtn" onclick="insightsStart()">▶ Start Jira Hub</button>
     <div class="hint">Uses the Jira connection your admin set up (Admin Panel → Server Secrets).</div>
   </div>
 
-  <iframe id="insightsFrame" class="insights-frame" title="Jira Insights"></iframe>
+  <iframe id="insightsFrame" class="insights-frame" title="Jira Hub"></iframe>
 </div>

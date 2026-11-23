@@ -51,7 +51,7 @@ if kubectl -n "$NAMESPACE" get secret amplify-secrets >/dev/null 2>&1; then
   COORDINATOR_URL="http://central-coordinator-svc.${NAMESPACE}.svc.cluster.local:8000"
   kubectl -n "$NAMESPACE" patch secret amplify-secrets --type merge \
     -p "{\"stringData\":{\"grid-coordinator-url\":\"${COORDINATOR_URL}\",\"grid-api-token\":\"${API_TOKEN}\"}}" >/dev/null
-  kubectl -n "$NAMESPACE" rollout restart deployment/amplify-qea >/dev/null 2>&1 || true
+  kubectl -n "$NAMESPACE" rollout restart deployment/amplify-qea-grid >/dev/null 2>&1 || true
 fi
 
 if kubectl api-resources --api-group=keda.sh >/dev/null 2>&1; then

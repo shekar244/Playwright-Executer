@@ -1,13 +1,13 @@
 apiVersion: route.openshift.io/v1
 kind: Route
 metadata:
-  name: amplify-qea
+  name: amplify-qea-grid
   labels:
-    app: amplify-qea
+    app: amplify-qea-grid
 spec:
   to:
     kind: Service
-    name: amplify-qea
+    name: amplify-qea-grid
   port:
     targetPort: http
   tls:
